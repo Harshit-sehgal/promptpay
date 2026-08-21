@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -51,7 +51,7 @@ describe('Auth logout / refresh controller integration (P0.2/P0.3)', () => {
     const passwordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'logout-controller@waitlayer.com',
+        email: 'logout-controller@ateva.com',
         passwordHash,
         name: 'Logout Controller Test',
         role: UserRole.DEVELOPER,
@@ -69,7 +69,7 @@ describe('Auth logout / refresh controller integration (P0.2/P0.3)', () => {
   it('POST /auth/refresh rejects an access token (P0.2)', async () => {
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'logout-controller@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'logout-controller@ateva.com', password: 'Password123!' })
       .expect(200);
 
     const accessToken = loginRes.body.accessToken;
@@ -83,7 +83,7 @@ describe('Auth logout / refresh controller integration (P0.2/P0.3)', () => {
   it('POST /auth/logout revokes the access-token session (P0.3)', async () => {
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'logout-controller@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'logout-controller@ateva.com', password: 'Password123!' })
       .expect(200);
 
     const accessToken = loginRes.body.accessToken;
@@ -103,7 +103,7 @@ describe('Auth logout / refresh controller integration (P0.2/P0.3)', () => {
   it('POST /auth/logout/refresh revokes the refresh-token session (P0.3)', async () => {
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'logout-controller@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'logout-controller@ateva.com', password: 'Password123!' })
       .expect(200);
 
     const refreshToken = loginRes.body.refreshToken;

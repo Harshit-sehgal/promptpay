@@ -1,6 +1,6 @@
 import { expect, Page, test } from '@playwright/test';
 
-import { generateTotp } from '@waitlayer/shared';
+import { generateTotp } from '@ateva/shared';
 
 import {
   assertTestUserCannotLogin,
@@ -170,7 +170,7 @@ test.describe('production sensitive developer journey', () => {
     await completeStepUp(page, totpSecret!, /add or remove a payout account/i);
     await expectResponseOk(addStepUpResponse, 'payout-method add step-up');
     await expectResponseOk(addPayoutResponse, 'payout-method add');
-    await expect(page.getByText('pay***@waitlayer.test')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('pay***@ateva.test')).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole('button', { name: 'Remove' }).click();
     await page.getByRole('button', { name: 'Confirm removal' }).click();

@@ -126,7 +126,7 @@ start on Dodo credentials-dependent work until §8 items 1–3 are answered.
   **`dodo_payments` are `StubPayoutProvider`s** (`:50`).
 - Registration of stub/non-payable providers is **blocked** in
   `PayoutMethodTrait` (`apps/api/src/payout/payout-method.trait.ts`) even if
-  `WAITLAYER_PAYOUT_PROVIDER_STATUS` marks them available.
+  `ATEVA_PAYOUT_PROVIDER_STATUS` marks them available.
 - Provider contract: `PayoutProviderHandler`
   (`apps/api/src/payout/payout/constants.ts:26`) —
   `readiness?()`, `initiate({payoutRequestId, destination, amountMinor,
@@ -134,7 +134,7 @@ currency}) → {providerTxId, providerFundingTxId?, status}`,
   `checkStatus(providerTxId, ctx?)`, optional `reconcileByReference`.
 - Catalogue: `packages/shared/src/payout-providers.ts:73` lists
   `dodo_payments: 'coming_soon'`. Runtime availability comes from
-  `WAITLAYER_PAYOUT_PROVIDER_STATUS` (+ the build-time
+  `ATEVA_PAYOUT_PROVIDER_STATUS` (+ the build-time
   `NEXT_PUBLIC_` twin consumed by the payouts UI, `.env.example:168-171`).
 - Reference implementations to copy: `providers/paypal-payouts.provider.ts`,
   `providers/wise.provider.ts` (smallest), `providers/stripe.provider.ts`.
@@ -162,7 +162,7 @@ the same correctness properties the Stripe path earned (A-062/A-063/A-107).
 idempotencyKey } → { sessionId, url }` contract) and make the advertiser
   controller resolve the **configured processor** instead of `this.stripe`.
 - Selection: `DEPOSIT_PROCESSOR=dodo` (env, validated by
-  `@waitlayer/config`). Default when unset: **fail closed** — the endpoint
+  `@ateva/config`). Default when unset: **fail closed** — the endpoint
   returns the existing "Deposits are temporarily disabled"/not-configured
   refusal, never a 500 (parity with the `WEB_BASE_URL` guard at
   `advertiser.controller.ts:309-311`).
@@ -244,7 +244,7 @@ Dodo's docs and API index: Dodo's payout surface is read-only and settles
 **our** earnings to **our** verified bank account. It cannot pay our
 developers, by API or at all. The operator's "use Dodo for payouts too"
 intent is therefore satisfied only in the treasury sense: Dodo deposits
-accumulate in the WaitLayer wallet (USD/GBP/EUR) and settle to the platform
+accumulate in the Ateva wallet (USD/GBP/EUR) and settle to the platform
 bank on the configured cycle; developer payouts are then issued from
 platform rails.
 
@@ -313,7 +313,7 @@ launch. Order matters — the cold-start sequence is documented in
 `docs/ops/deployment-checklist.md` (migrate → env-marker → admin).
 
 1. **Deployment** (open item #3): web on Vercel, API on a container host,
-   `api.waitlayer.com` DNS, `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as
+   `api.ateva.com` DNS, `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as
    Vercel **build** variables (A-083). Requires §8.7.
 2. **Release secrets** (open item #2): `CONTAINER_REGISTRY` + creds,
    staging/production host values, remote Compose `.env`.
@@ -370,11 +370,11 @@ launch. Order matters — the cold-start sequence is documented in
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
 | 1   | **Dodo credentials**: ✅ test API key received 2026-08-17 (stored in gitignored envs, `DODO_BASE_URL` set to test). **Still needed:** live API key, and the **webhook signing secret** (Developer → Webhooks in the dashboard) — without it no webhook can be verified (W1.3). Who owns the dashboard?                                                                                                                                                                                                                                                                                                                  | W1.3, launch           |
 | 2   | ~~Does Dodo support third-party payouts?~~ **Answered 2026-08-17: no** (D4). **Answered 2026-08-19 by operator (D5):** defer developer payouts until a later automated rail; keep `payouts.requests`/`payouts.auto` OFF at launch. `manual`/`paypal_email` remain available in code but are not the launch operation.                                                                                                                                                                                                                                                                                                   | W2 (closed → deferred) |
-| 3   | **Launch countries + currencies** — must be intersected with Dodo's supported set and with `CURRENCY_POLICY` (deposits and campaign budgets are per-currency). Also: create the WaitLayer "wallet top-up" **product** in the Dodo dashboard (test + live) — Dodo checkout is product-based.                                                                                                                                                                                                                                                                                                                             | W1, config             |
+| 3   | **Launch countries + currencies** — must be intersected with Dodo's supported set and with `CURRENCY_POLICY` (deposits and campaign budgets are per-currency). Also: create the Ateva "wallet top-up" **product** in the Dodo dashboard (test + live) — Dodo checkout is product-based.                                                                                                                                                                                                                                                                                                                                 | W1, config             |
 | 4   | **wait.earnings**: defer (recommended — no attestation operator exists) or is sourcing one in flight?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | W4.3 scope             |
 | 5   | **MoR fee treatment**: platform absorbs Dodo fees/taxes as COGS (recommended) or advertiser credited net? Dodo deducts taxes + platform fees before settlement — the advertiser ledger must credit one consistent figure.                                                                                                                                                                                                                                                                                                                                                                                               | W1.3 ledger semantics  |
 | 6   | **Stripe dashboard**: any live webhook endpoints/webhooks to disable? Confirm "inactive, not deleted" (D2).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | W3                     |
-| 7   | **Infra**: where does the API run (host/provider), and who controls DNS for `api.waitlayer.com`? Container registry choice?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | W4.1–4.2               |
+| 7   | **Infra**: where does the API run (host/provider), and who controls DNS for `api.ateva.com`? Container registry choice?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | W4.1–4.2               |
 | 8   | **Google OAuth**: **answered 2026-08-19 — enable at launch**. Provision matching `GOOGLE_CLIENT_ID` (API) and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web/Vercel build); mock Google remains prohibited in production.                                                                                                                                                                                                                                                                                                                                                                                                          | W4.6 credentials       |
 | 9   | **Who operates the admin console** (campaign approvals, money switches, manual payout processing — now definitely required per D4)?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | W2.B, W4.5             |
 | 10  | **Legal review** of terms/DPA/payout-policy once Dodo copy exists; refund policy decision.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | W5                     |

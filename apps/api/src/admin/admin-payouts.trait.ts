@@ -5,8 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { highValueFenceReleaseMinor, isSupportedCurrency } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { highValueFenceReleaseMinor, isSupportedCurrency } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { safeDisplayDestination, safeDisplayEmail } from '../common/utils/payout-encryption';

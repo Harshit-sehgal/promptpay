@@ -9,7 +9,7 @@ import type { Metadata } from 'next';
  * bookmark and shared link read the same string.
  */
 export const metadata: Metadata = {
-  title: 'Feedback — WaitLayer',
+  title: 'Feedback — Ateva',
   description:
     'Send feedback, report a problem, or request a feature. Every message reaches the team directly.',
 };

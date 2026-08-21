@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reliability_tester",
   "environment": "sandbox",
-  "seed": "waitlayer-clock-skew-v1",
+  "seed": "ateva-clock-skew-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

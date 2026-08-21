@@ -10,7 +10,7 @@ import { AdvertiserService, buildReportsDateFilter } from './advertiser.service'
 
 function makePrisma() {
   // $transaction must receive the MOCK object — NOT the real PrismaClient
-  // singleton imported from @waitlayer/db (which opens a real database).
+  // singleton imported from @ateva/db (which opens a real database).
   // The inline `return {...}` pattern had no local variable to capture, so
   // `cb(prisma)` resolved to the outer-scope real client → actual DB queries
   // returned {count:0} for updateMany and null for findUnique, breaking the
@@ -238,7 +238,7 @@ describe('AdvertiserService.deleteAccount financial preflight and erasure', () =
     expect(prisma.advertiser.update).toHaveBeenCalledWith({
       where: { id: 'adv-1' },
       data: expect.objectContaining({
-        billingEmail: 'deleted-user-1@waitlayer.com',
+        billingEmail: 'deleted-user-1@ateva.com',
         stripeCustomerId: null,
       }),
     });

@@ -1,7 +1,7 @@
 import { IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { ToolType } from '@waitlayer/shared';
+import { ToolType } from '@ateva/shared';
 
 export class RegisterDeviceDto {
   @ApiProperty()

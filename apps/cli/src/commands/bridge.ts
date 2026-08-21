@@ -24,7 +24,7 @@ export async function runBridge(options: { action?: string } = {}) {
 
   const creds = await getCredentials();
   if (!creds) {
-    throw new Error('Not logged in. Run `waitlayer auth` first.');
+    throw new Error('Not logged in. Run `ateva auth` first.');
   }
 
   if (action === 'flush') {
@@ -46,9 +46,9 @@ export async function runBridge(options: { action?: string } = {}) {
     const bridge = await startAgentBridge({
       credentials: creds,
       paths,
-      onError: (error) => console.warn(chalk.yellow(`WaitLayer bridge: ${String(error)}`)),
+      onError: (error) => console.warn(chalk.yellow(`Ateva bridge: ${String(error)}`)),
     });
-    console.log(chalk.green(`✓ WaitLayer bridge listening on ${paths.bridgeSocket}`));
+    console.log(chalk.green(`✓ Ateva bridge listening on ${paths.bridgeSocket}`));
     console.log(chalk.dim('Press Ctrl-C to stop.'));
     await new Promise<void>((resolve) => {
       const stop = () => {
@@ -67,7 +67,7 @@ export async function runBridge(options: { action?: string } = {}) {
 }
 
 function printStatus(status: Awaited<ReturnType<typeof getBridgeStatus>>) {
-  console.log(chalk.bold.cyan('WaitLayer Local Bridge'));
+  console.log(chalk.bold.cyan('Ateva Local Bridge'));
   console.log(
     `  ${chalk.dim('Running:')} ${status.running ? chalk.green('yes') : chalk.yellow('no')}`,
   );

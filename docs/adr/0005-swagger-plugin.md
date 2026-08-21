@@ -1,7 +1,7 @@
 # ADR 0005: NestJS Swagger Compiler Plugin for API Documentation
 
 - **Status:** Accepted (2026)
-- **Deciders:** WaitLayer engineering
+- **Deciders:** Ateva engineering
 
 ## Context
 

@@ -21,7 +21,7 @@ export type DetectorSource = (typeof KNOWN_DETECTOR_SOURCES)[number];
  */
 export function hashToBucket(id: string): number {
   if (!id) return 0;
-  const digest = crypto.createHash('sha256').update(`waitlayer-detector:${id}`).digest();
+  const digest = crypto.createHash('sha256').update(`ateva-detector:${id}`).digest();
   return digest.readUInt32LE(0) % 100;
 }
 

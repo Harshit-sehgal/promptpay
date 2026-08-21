@@ -9,7 +9,7 @@ import {
   parseMinor,
   signEvidence,
   signPayload,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
@@ -17,12 +17,12 @@ import type { WaitSignal } from './wait-detector';
 
 // Real extension version from the packaged manifest instead of a hardcoded
 // constant, so device registration always reports the actual shipped build.
-// The bundle script injects `WAITLAYER_EXTENSION_VERSION` via esbuild `define`
+// The bundle script injects `ATEVA_EXTENSION_VERSION` via esbuild `define`
 // (esbuild refuses to bundle `require('package.json')` — it always leaves it
 // external, which the VSIX verification step rejects). Dev/test imports of
 // the raw source fall back to the declared baseline version.
 function readManifestVersion(): string {
-  const injected = process.env.WAITLAYER_EXTENSION_VERSION;
+  const injected = process.env.ATEVA_EXTENSION_VERSION;
   if (injected && injected !== '0.0.0') return injected;
   return '0.0.1';
 }
@@ -135,7 +135,7 @@ export class ApiClient {
     await this._initialized;
     if (!this.deviceEventSecret) {
       throw new Error(
-        'WaitLayer device is not registered with an event secret. Re-run device registration.',
+        'Ateva device is not registered with an event secret. Re-run device registration.',
       );
     }
     return signPayload(payload, this.deviceEventSecret);
@@ -208,7 +208,7 @@ export class ApiClient {
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[WaitLayer] Failed to read stored device UUID/secret: ${msg}`);
+      console.warn(`[Ateva] Failed to read stored device UUID/secret: ${msg}`);
     }
 
     const fingerprint = await this.config.getDeviceFingerprint();
@@ -228,8 +228,8 @@ export class ApiClient {
     } catch (err: unknown) {
       if (!isDeviceRecoveryError(err)) throw err;
       const recoverySupportToken = await vscode.window.showInputBox({
-        prompt: 'WaitLayer device recovery token',
-        placeHolder: 'Paste the one-time token issued by WaitLayer support',
+        prompt: 'Ateva device recovery token',
+        placeHolder: 'Paste the one-time token issued by Ateva support',
         password: true,
         ignoreFocusOut: true,
       });
@@ -255,7 +255,7 @@ export class ApiClient {
         await this.config.storeDeviceUserId(res.userId);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[WaitLayer] Failed to persist device registration: ${msg}`);
+        console.warn(`[Ateva] Failed to persist device registration: ${msg}`);
       }
       return res.id;
     }
@@ -279,7 +279,7 @@ export class ApiClient {
     if (input.evidence) {
       const secret = this.deviceEventSecret ?? (await this.config.getDeviceEventSecret());
       if (!secret) {
-        throw new Error('WaitLayer device is not registered with an event secret.');
+        throw new Error('Ateva device is not registered with an event secret.');
       }
       for (const item of input.evidence) {
         const signed: Omit<DetectorEvidence, 'signature'> = {
@@ -537,7 +537,7 @@ export class ApiClient {
           ignoreFocusOut: true,
         });
         if (!twoFactorToken) {
-          vscode.window.showWarningMessage('WaitLayer: login cancelled — 2FA code required');
+          vscode.window.showWarningMessage('Ateva: login cancelled — 2FA code required');
           return false;
         }
         try {
@@ -549,13 +549,11 @@ export class ApiClient {
           await this.handleLoginSuccess(res);
           return true;
         } catch (err2: unknown) {
-          vscode.window.showErrorMessage(
-            `WaitLayer: login failed — ${getRequestErrorMessage(err2)}`,
-          );
+          vscode.window.showErrorMessage(`Ateva: login failed — ${getRequestErrorMessage(err2)}`);
           return false;
         }
       } else {
-        vscode.window.showErrorMessage(`WaitLayer: login failed — ${getRequestErrorMessage(err)}`);
+        vscode.window.showErrorMessage(`Ateva: login failed — ${getRequestErrorMessage(err)}`);
         return false;
       }
     }
@@ -595,7 +593,7 @@ export class ApiClient {
     // Persist before making the new credentials available to request callers.
     await this.config.storeTokens(tokens);
     this.currentTokens = tokens;
-    vscode.window.showInformationMessage('WaitLayer: logged in');
+    vscode.window.showInformationMessage('Ateva: logged in');
   }
 
   async logout(): Promise<void> {
@@ -612,7 +610,7 @@ export class ApiClient {
       // userId mismatch and clears the stale registration then.
       await this.config.clearTokens();
     }
-    vscode.window.showInformationMessage('WaitLayer: logged out');
+    vscode.window.showInformationMessage('Ateva: logged out');
   }
 
   // ── HTTP ──
@@ -842,7 +840,7 @@ export class ApiClient {
     // ad serving until the user restarts VS Code unless we surface the
     // failure. Mirror the CLI's behavior with a 30s wall-clock cap.
     req.setTimeout(30_000, () => {
-      req.destroy(new Error('WaitLayer request timed out after 30s (no response from server)'));
+      req.destroy(new Error('Ateva request timed out after 30s (no response from server)'));
     });
     req.on('error', reject);
     if (body) req.write(body);
@@ -894,7 +892,7 @@ function isRetryableError(err: unknown): boolean {
       return true;
     }
     // The 30s wall-clock timeout surfaces an Error with a recognizable message
-    // ('WaitLayer request timed out after 30s...'). Retry once on a fresh socket.
+    // ('Ateva request timed out after 30s...'). Retry once on a fresh socket.
     if (err.message && err.message.toLowerCase().includes('timed out')) return true;
     return false;
   }

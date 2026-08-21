@@ -1,2 +1,2 @@
-const config = require('@waitlayer/eslint-config');
+const config = require('@ateva/eslint-config');
 module.exports = config;

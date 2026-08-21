@@ -6,7 +6,7 @@
 
 ## 1. Objectives
 
-This runbook defines the steps to recover WaitLayer services after a disaster. It covers failover, data restoration, verification, and communication.
+This runbook defines the steps to recover Ateva services after a disaster. It covers failover, data restoration, verification, and communication.
 
 ## 2. Recovery Time / Point Objectives
 
@@ -24,7 +24,7 @@ This runbook defines the steps to recover WaitLayer services after a disaster. I
 2. Promote the read replica or restore from the latest backup to a new primary.
 3. Update the `DATABASE_URL` environment variable in the application.
 4. Restart API pods.
-5. Verify with `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism`.
+5. Verify with `pnpm --filter ateva-api exec vitest run --no-file-parallelism`.
 
 ### 3.2 Database corruption
 

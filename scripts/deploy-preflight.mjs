@@ -99,9 +99,9 @@ function checkEnvironment(env) {
   // boot-time requirements.
   try {
     const require = createRequire(join(ROOT, 'apps', 'api', 'package.json'));
-    const { loadEnv } = require('@waitlayer/config');
+    const { loadEnv } = require('@ateva/config');
     loadEnv(env);
-    ok('config-schema', '@waitlayer/config accepted the environment');
+    ok('config-schema', '@ateva/config accepted the environment');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     fail('config-schema', message.split('\n').slice(0, 12).join('\n        '));
@@ -151,7 +151,7 @@ function checkAttestation(env) {
     ok('attestation', 'no issuer configured — settlement stays fail-closed (expected pre-launch)');
     return;
   }
-  if (/waitlayer-stub-bridge|stub-v1/i.test(issuers)) {
+  if (/ateva-stub-bridge|stub-v1/i.test(issuers)) {
     fail(
       'attestation',
       'WAIT_ATTESTATION_ISSUERS references the reference/stub bridge. It is prohibited for ' +
@@ -227,7 +227,7 @@ function checkPayments(env) {
 // ── 5. Live infrastructure + operator readiness ─────────────────────────────
 async function checkDatabase(env) {
   const require = createRequire(join(ROOT, 'apps', 'api', 'package.json'));
-  const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+  const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   try {
     await prisma.$queryRaw`SELECT 1`;

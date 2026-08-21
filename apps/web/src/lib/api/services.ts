@@ -10,7 +10,7 @@ import {
   PayoutRequestResponse,
   RemovePayoutMethodResponse,
   StripeConnectOnboardingResponse,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import api from './client';
 

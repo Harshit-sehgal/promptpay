@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { PayoutStatus } from '@waitlayer/shared';
+import { PayoutStatus } from '@ateva/shared';
 
 /**
  * Declarative PayoutRequest lifecycle.

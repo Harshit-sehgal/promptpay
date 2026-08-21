@@ -19,7 +19,7 @@ function machine() {
 }
 
 describe('AttentionStateMachine (WL-051)', () => {
-  it('requires both focus and a visible WaitLayer surface for foreground attention', () => {
+  it('requires both focus and a visible Ateva surface for foreground attention', () => {
     const { state } = machine();
 
     expect(state.getState()).toBe('unknown');

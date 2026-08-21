@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "terminal_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-terminal-subprocess-v1",
+  "seed": "ateva-terminal-subprocess-v1",
   "reporting": {
     "deterministic": true,
     "severity": "medium",

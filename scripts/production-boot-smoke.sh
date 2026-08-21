@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PORT="${SMOKE_PORT:-4105}"
-DB="${SMOKE_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
+DB="${SMOKE_DATABASE_URL:-postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public}"
 # Own Redis database index. Throttle and brute-force counters live in Redis, so
 # sharing db 0 with dev/e2e means a preceding suite can exhaust the auth
 # throttle and make this smoke report a false failure (observed 2026-08-07:
@@ -32,18 +32,18 @@ REDIS_URL="${SMOKE_REDIS_URL:-redis://localhost:6379/${REDIS_DB}}"
 # wrong-database interlock is preserved.
 #
 # Build the workspace packages FIRST. `read-environment-marker.mjs` requires
-# `@waitlayer/db`, whose package `main` is `./dist/index.js` — produced by
+# `@ateva/db`, whose package `main` is `./dist/index.js` — produced by
 # `tsc`, not by `prisma generate`. On a clean checkout that read failed with
 # MODULE_NOT_FOUND, was swallowed by `|| true`, and the harness then silently
 # fell back to `local-production-harness` — which collides with the marker
 # `e2e:production` leaves behind and aborts with "REFUSING TO OVERWRITE". The
 # interlock was right; the detection was blind because the package was unbuilt.
 echo "→ building workspace packages"
-pnpm --filter "@waitlayer/db..." build > /dev/null
+pnpm --filter "@ateva/db..." build > /dev/null
 
 DETECTED_ENV_ID="$(DATABASE_URL="$DB" node scripts/read-environment-marker.mjs 2>/dev/null || true)"
 ENV_ID="${SMOKE_ENVIRONMENT_ID:-${DETECTED_ENV_ID:-local-production-harness}}"
-ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@waitlayer.test}"
+ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@ateva.test}"
 ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-Str0ng!Passw0rd#2026}"
 WORK="$(mktemp -d)"
 # Kill the whole process group: the API is launched through a Node spawn helper,
@@ -73,15 +73,15 @@ esac
 
 cat > "$WORK/env" <<ENVEOF
 NODE_ENV=production
-WAITLAYER_ENVIRONMENT_KIND=production
-WAITLAYER_ENVIRONMENT_ID=${ENV_ID}
+ATEVA_ENVIRONMENT_KIND=production
+ATEVA_ENVIRONMENT_ID=${ENV_ID}
 DATABASE_URL=${DB}
 REDIS_URL=${REDIS_URL}
 API_PORT=${PORT}
-API_BASE_URL=https://api.waitlayer.test
-WEB_BASE_URL=https://www.waitlayer.test
-JWT_ISSUER=waitlayer
-JWT_AUDIENCE=waitlayer-client
+API_BASE_URL=https://api.ateva.test
+WEB_BASE_URL=https://www.ateva.test
+JWT_ISSUER=ateva
+JWT_AUDIENCE=ateva-client
 JWT_PRIVATE_KEY=${PRIV}
 JWT_PUBLIC_KEY=${PUB}
 JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
@@ -98,9 +98,9 @@ ALLOWED_COUNTRIES=US,GB
 ALLOWED_CURRENCIES=USD,GBP
 COOKIE_SECURE=true
 EMAIL_DRIVER=resend
-EMAIL_FROM=noreply@waitlayer.test
+EMAIL_FROM=noreply@ateva.test
 RESEND_API_KEY=re_local_placeholder_never_sends
-OPS_ALERT_EMAIL=ops@waitlayer.test
+OPS_ALERT_EMAIL=ops@ateva.test
 ENVEOF
 
 # Spawn helper: bash cannot `source` a file containing escaped PEMs without
@@ -118,11 +118,11 @@ spawn(cmd[0], cmd.slice(1), { env, cwd, stdio: 'inherit' }).on('exit', (c) => pr
 SPAWNEOF
 
 echo "→ building API"
-pnpm --filter "waitlayer-api..." build > /dev/null
+pnpm --filter "ateva-api..." build > /dev/null
 
 echo "→ migrating + stamping marker + bootstrapping admin (cold-start order)"
 (cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)
-DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_ID="$ENV_ID" \
+DATABASE_URL="$DB" ATEVA_ENVIRONMENT_KIND=production ATEVA_ENVIRONMENT_ID="$ENV_ID" \
   node scripts/bootstrap-environment-marker.mjs --confirm-stamp
 DATABASE_URL="$DB" ADMIN_BOOTSTRAP_TOKEN=local-smoke-bootstrap-token \
   node scripts/bootstrap-admin.mjs --token local-smoke-bootstrap-token \
@@ -130,7 +130,7 @@ DATABASE_URL="$DB" ADMIN_BOOTSTRAP_TOKEN=local-smoke-bootstrap-token \
 
 # The money-switch assertion below is a REAL deployment gate, so it must never
 # be relaxed — but it must also never fire for a reason that has nothing to do
-# with the build. The default target is the SHARED `waitlayer_test` database,
+# with the build. The default target is the SHARED `ateva_test` database,
 # and the integration suites deliberately enable `ads.global`,
 # `wait.earnings`, `payouts.requests`, `payouts.auto` and `deposits.global` in
 # their `beforeAll`. Running this smoke straight after `vitest run src/integration`
@@ -146,7 +146,7 @@ if [ -n "$LEFTOVER_SWITCHES" ]; then
   echo "This is leftover state from the integration suites (they enable these in"
   echo "beforeAll), NOT a defect in the build. A production database seeds them"
   echo "disabled. Clear them, or point the smoke at its own database:"
-  echo "  SMOKE_DATABASE_URL=postgresql://.../waitlayer_smoke pnpm smoke:production"
+  echo "  SMOKE_DATABASE_URL=postgresql://.../ateva_smoke pnpm smoke:production"
   exit 2
 fi
 

@@ -1,4 +1,4 @@
-# WaitLayer Implementation Blueprint
+# Ateva Implementation Blueprint
 
 ## Sandbox-to-Beta Product, Architecture, Security, Testing, and Delivery Strategy
 
@@ -25,7 +25,7 @@
 
 ## 1. Purpose of this document
 
-This document converts the current WaitLayer codebase and the product decisions made so far into an implementation-ready delivery strategy.
+This document converts the current Ateva codebase and the product decisions made so far into an implementation-ready delivery strategy.
 
 Its purpose is not to decide every future business question before development starts. Its purpose is to:
 
@@ -39,7 +39,7 @@ Its purpose is not to decide every future business question before development s
 
 The immediate objective is:
 
-> Build a complete, production-shaped WaitLayer sandbox in which real coding agents can use WaitLayer through VS Code and terminal workflows, see test advertising placements, accumulate unmistakably simulated rewards, exercise simulated advertiser and operator flows, and generate reproducible quality, fraud, reliability, and accounting evidence.
+> Build a complete, production-shaped Ateva sandbox in which real coding agents can use Ateva through VS Code and terminal workflows, see test advertising placements, accumulate unmistakably simulated rewards, exercise simulated advertiser and operator flows, and generate reproducible quality, fraud, reliability, and accounting evidence.
 
 The sandbox is not a public paid product. It is the instrument through which the product will be discovered and validated.
 
@@ -90,7 +90,7 @@ The repository already contains a substantial foundation:
 - runtime kill switches for ads, earnings, deposits, payout requests, and automated payouts;
 - independently verifiable wait-attestation session and assertion models;
 - Docker, migration, browser E2E, package, backup/restore, security, and financial coverage gates;
-- a working terminal wrapper (`waitlayer run -- ...`);
+- a working terminal wrapper (`ateva run -- ...`);
 - a working VS Code extension with telemetry consent, false-positive feedback, experiment assignment, and heuristic wait detection.
 
 This is valuable. The project does not need to be rewritten.
@@ -124,9 +124,9 @@ The following decisions should be treated as current product directives.
 
 ### 3.1 Brand
 
-The working product name is **WaitLayer**.
+The working product name is **Ateva**.
 
-The repository may remain named `promptpay` temporarily, but all newly built product surfaces, protocol names, events, packages, and documentation should use WaitLayer.
+The repository may remain named `promptpay` temporarily, but all newly built product surfaces, protocol names, events, packages, and documentation should use Ateva.
 
 ### 3.2 Release philosophy
 
@@ -148,7 +148,7 @@ This does not mean supporting every IDE and every agent immediately. It means su
 The integration priority is:
 
 1. native provider hooks or plugins;
-2. a generic WaitLayer wrapper where native lifecycle events are unavailable;
+2. a generic Ateva wrapper where native lifecycle events are unavailable;
 3. optional process discovery only for setup suggestions and diagnostics.
 
 Process scanning is never a sufficient source of truth for reward-bearing activity.
@@ -189,7 +189,7 @@ Only whitelisted lifecycle metadata may leave the device.
 The existing standard split remains:
 
 - 60% developer;
-- 30% WaitLayer;
+- 30% Ateva;
 - 10% fraud/payment reserve.
 
 In Release 0.x, the split is simulated only.
@@ -204,7 +204,7 @@ Real earnings remain blocked until an independently verifiable attestation path 
 
 ## 4. Strategic product model
 
-WaitLayer should not define its product as “pay users for every second an AI process exists.”
+Ateva should not define its product as “pay users for every second an AI process exists.”
 
 The product should be modeled as four related layers.
 
@@ -224,7 +224,7 @@ This layer powers productivity analytics.
 
 This answers:
 
-- Is a WaitLayer-capable surface actually visible?
+- Is a Ateva-capable surface actually visible?
 - Is the user in the foreground?
 - Did the user return after a completion or permission request?
 - Is there one or more competing windows?
@@ -329,7 +329,7 @@ Deliverables:
 - hook installer, status, repair, and uninstaller;
 - Claude Code adapter;
 - Codex adapter;
-- generic `waitlayer run` compatibility adapter;
+- generic `ateva run` compatibility adapter;
 - local event spool/bridge;
 - capability/version reporting;
 - terminal completion experience that does not corrupt agent stdout.
@@ -535,7 +535,7 @@ It is useful as shadow telemetry. It must not become the core agent model.
 
 #### Terminal wrapper
 
-`waitlayer run -- ...` reliably observes process start and exit, but it cannot understand rich internal agent lifecycle state without parsing unstable terminal output.
+`ateva run -- ...` reliably observes process start and exit, but it cannot understand rich internal agent lifecycle state without parsing unstable terminal output.
 
 It is a strong fallback, not the ideal primary integration.
 
@@ -618,7 +618,7 @@ Priority definitions:
 **Resolution:**
 
 - use a separate database, Redis namespace/instance, object storage prefix, email domain/driver, and deployment environment;
-- add `WAITLAYER_ENVIRONMENT_KIND=development|test|sandbox|staging|production`;
+- add `ATEVA_ENVIRONMENT_KIND=development|test|sandbox|staging|production`;
 - reject `sandbox` provider/faucet/test-currency configuration outside `sandbox` or `test`;
 - reject production provider credentials in sandbox where possible;
 - display a persistent sandbox badge;
@@ -650,7 +650,7 @@ Priority definitions:
 
 **Resolution:**
 
-- hooks invoke a local WaitLayer sanitizer;
+- hooks invoke a local Ateva sanitizer;
 - sanitizer uses an allowlist, not a blacklist;
 - network upload never occurs with raw provider payloads;
 - prompt text, tool input, commands, outputs, transcript paths, and raw CWD are discarded;
@@ -794,7 +794,7 @@ Command hooks may block an agent if slow, malformed, or configured incorrectly.
 - no API request in the synchronous hook path;
 - strict timeout;
 - empty success response/exit 0;
-- WaitLayer never returns permission decisions;
+- Ateva never returns permission decisions;
 - failures are non-blocking;
 - performance metric for p50/p95/p99 handler latency;
 - kill switch and uninstall command.
@@ -996,7 +996,7 @@ These do not block the internal sandbox but block human/public beta.
 - real, monitored support/privacy/security mailboxes;
 - owned domain and DNS;
 - accurate legal entity naming;
-- removal of `WaitLayer, Inc.` unless that entity exists;
+- removal of `Ateva, Inc.` unless that entity exists;
 - consistent privacy contact domain;
 - corrected payout hold wording;
 - finalized telemetry notice and consent version;
@@ -1139,7 +1139,7 @@ Use namespaced canonical events.
 - `permission.allowed`
 - `permission.denied`
 
-WaitLayer should observe these events; it should never make the permission decision in Release 0.x.
+Ateva should observe these events; it should never make the permission decision in Release 0.x.
 
 #### Subagent/task
 
@@ -1335,27 +1335,27 @@ Use an additive migration:
 
 ### 9.1 Recommended first implementation
 
-Do not send provider hook payloads directly to the WaitLayer API.
+Do not send provider hook payloads directly to the Ateva API.
 
 Add CLI commands:
 
 ```bash
-waitlayer integrations install claude-code
-waitlayer integrations install codex
-waitlayer integrations status
-waitlayer integrations repair
-waitlayer integrations uninstall claude-code
-waitlayer hooks ingest --provider claude-code --event SessionStart
-waitlayer bridge start
-waitlayer bridge status
-waitlayer bridge flush
+ateva integrations install claude-code
+ateva integrations install codex
+ateva integrations status
+ateva integrations repair
+ateva integrations uninstall claude-code
+ateva hooks ingest --provider claude-code --event SessionStart
+ateva bridge start
+ateva bridge status
+ateva bridge flush
 ```
 
 ### 9.2 Hot path
 
 A provider command hook should:
 
-1. invoke `waitlayer hooks ingest`;
+1. invoke `ateva hooks ingest`;
 2. read JSON from stdin;
 3. identify provider/event;
 4. sanitize using an allowlist;
@@ -1466,7 +1466,7 @@ Codex requires hook trust for non-managed hooks. The installer must explain this
 
 #### Generic wrapper
 
-Retain `waitlayer run -- ...`.
+Retain `ateva run -- ...`.
 
 Enhance it to emit:
 
@@ -1485,11 +1485,11 @@ The integration manager must:
 
 - back up modified hook files;
 - merge rather than overwrite;
-- use a stable WaitLayer-owned marker/id;
+- use a stable Ateva-owned marker/id;
 - detect manual edits;
 - show diff before install where feasible;
 - re-run trust/setup instructions;
-- uninstall only WaitLayer-owned entries;
+- uninstall only Ateva-owned entries;
 - support provider minimum versions;
 - report degraded capability rather than silently guessing.
 
@@ -1504,7 +1504,7 @@ After native integrations exist, the VS Code extension should primarily provide:
 - user consent;
 - installation/session correlation;
 - foreground/background and window state;
-- visible WaitLayer surfaces;
+- visible Ateva surfaces;
 - task and shell corroboration;
 - completion/permission notifications;
 - sandbox ad presentation;
@@ -1579,8 +1579,8 @@ Never inject advertising into a coding agent’s stdout stream.
 
 For terminal users, use one of:
 
-- a WaitLayer sidecar/TUI pane;
-- desktop notification leading to a WaitLayer summary;
+- a Ateva sidecar/TUI pane;
+- desktop notification leading to a Ateva summary;
 - completion summary printed only after the agent exits and clearly separated;
 - web dashboard;
 - VS Code panel when terminal is integrated.
@@ -1593,7 +1593,7 @@ For terminal users, use one of:
 
 #### Foreground wait
 
-User is present and a WaitLayer surface is visible while an agent is processing.
+User is present and a Ateva surface is visible while an agent is processing.
 
 First external candidate.
 
@@ -1621,7 +1621,7 @@ Potentially relevant but psychologically sensitive. Do not implement beyond sand
 
 #### Dashboard native
 
-Conventional placement inside WaitLayer analytics.
+Conventional placement inside Ateva analytics.
 
 Lower technical risk and useful as a control group.
 
@@ -1727,9 +1727,9 @@ Use safe destinations under a sandbox domain or local fixtures. No external affi
 Recommended hostnames:
 
 ```text
-sandbox.waitlayer.<owned-domain>
-api.sandbox.waitlayer.<owned-domain>
-status.sandbox.waitlayer.<owned-domain>
+sandbox.ateva.<owned-domain>
+api.sandbox.ateva.<owned-domain>
+status.sandbox.ateva.<owned-domain>
 ```
 
 Until a domain is secured, use internal endpoints and do not ship public clients with speculative production domains.
@@ -1788,7 +1788,7 @@ Capabilities:
 - timeout;
 - idempotent replay.
 
-It must be impossible to instantiate when `NODE_ENV=production` or `WAITLAYER_ENVIRONMENT_KIND=production`.
+It must be impossible to instantiate when `NODE_ENV=production` or `ATEVA_ENVIRONMENT_KIND=production`.
 
 ### 12.5 Sandbox payout provider
 
@@ -1975,7 +1975,7 @@ actions:
   - start_task: fix_validation
   - background_after_seconds: 10
   - return_on_completion
-  - open_waitlayer_summary
+  - open_ateva_summary
 expected:
   sessions: 1
   work_units_min: 1
@@ -2211,7 +2211,7 @@ Provider hooks run with user permissions.
 
 Controls:
 
-- absolute path to signed/verified WaitLayer executable;
+- absolute path to signed/verified Ateva executable;
 - no shell interpolation of event data;
 - JSON via stdin;
 - no dynamic command construction;
@@ -2285,7 +2285,7 @@ Users must be able to:
 
 Recommended steps:
 
-1. explain WaitLayer’s purpose;
+1. explain Ateva’s purpose;
 2. state clearly that Release 0.x uses test credits;
 3. request account consent;
 4. install CLI/VSIX;
@@ -2535,7 +2535,7 @@ Generate JSON containing:
 
 ### Epic B — Environment isolation
 
-#### WL-010 — `WAITLAYER_ENVIRONMENT_KIND` (M)
+#### WL-010 — `ATEVA_ENVIRONMENT_KIND` (M)
 
 Add config validation and expose read-only health metadata.
 
@@ -2557,7 +2557,7 @@ Store environment marker and assert on startup.
 
 ### Epic C — Protocol
 
-#### WL-020 — `@waitlayer/agent-protocol` (L)
+#### WL-020 — `@ateva/agent-protocol` (L)
 
 Schemas, enums, sanitizer, versions.
 
@@ -2831,7 +2831,7 @@ For exploratory/live agent runs, collect distributions before setting hard publi
 
 ### 20.5 Reliability
 
-- local hook blocks agent because WaitLayer is offline: 0;
+- local hook blocks agent because Ateva is offline: 0;
 - acknowledged event lost after restart: 0;
 - unbounded queue growth: 0;
 - poisoned event blocks queue: 0;
@@ -2929,15 +2929,15 @@ Fix the page before any external tester.
 
 ### 23.2 Legal entity
 
-`docs/legal/gdpr-dpa.md` identifies `WaitLayer, Inc.`.
+`docs/legal/gdpr-dpa.md` identifies `Ateva, Inc.`.
 
 Do not publish this unless that legal entity exists.
 
 ### 23.3 Contact domain
 
-- contact page uses `@waitlayer.com`;
-- DPA uses `privacy@waitlayer.dev`;
-- clients hardcode `api.waitlayer.com`.
+- contact page uses `@ateva.com`;
+- DPA uses `privacy@ateva.dev`;
+- clients hardcode `api.ateva.com`.
 
 Centralize these values and use verified owned domains.
 
@@ -3084,7 +3084,7 @@ This architecture supports the broader vision without forcing premature decision
 
 It also closes the most dangerous conceptual gap:
 
-> WaitLayer can respect autonomous background work while refusing to misrepresent unattended processing as continuous human attention.
+> Ateva can respect autonomous background work while refusing to misrepresent unattended processing as continuous human attention.
 
 The next action should be to open the Release 0.1 and Release 0.2 issues and execute the first implementation batch in Section 19.
 
@@ -3395,7 +3395,7 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 
 | Source path                                             | Material finding used in this plan                                                                |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `package.json`                                          | WaitLayer monorepo, Node/pnpm versions, gate scripts                                              |
+| `package.json`                                          | Ateva monorepo, Node/pnpm versions, gate scripts                                                  |
 | `README.md`                                             | telemetry-only beta, no rewards, current CLI wrapper behavior                                     |
 | `AGENTS.md`                                             | previous source-audit closure, gate history, destructive-test warning, remaining external work    |
 | `docs/ops/deployment-checklist.md`                      | cold-start, bootstrap, migration, health, and rollback deployment procedure                       |

@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { LegalDocument, LegalHeading, LegalTable } from '@/components/legal-document';
 
 export const metadata: Metadata = {
-  title: 'GDPR Data Processing Agreement — WaitLayer',
+  title: 'GDPR Data Processing Agreement — Ateva',
   description:
-    'WaitLayer GDPR DPA — roles, data categories, legal bases, data-subject rights, sub-processors, and retention.',
+    'Ateva GDPR DPA — roles, data categories, legal bases, data-subject rights, sub-processors, and retention.',
 };
 
 const LEGAL_BASIS_ROWS: string[][] = [
@@ -18,17 +18,16 @@ export default function GdprDpaPage() {
   return (
     <LegalDocument title="GDPR Data Processing Agreement" lastUpdated="2026-07-01">
       <p>
-        <strong className="text-surface-900">Controller:</strong> WaitLayer, Inc.
-        (&ldquo;WaitLayer&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;)
+        <strong className="text-surface-900">Controller:</strong> Ateva, Inc. (&ldquo;Ateva&rdquo;,
+        &ldquo;we&rdquo;, &ldquo;us&rdquo;)
         <br />
         <strong className="text-surface-900">Effective for:</strong> all users (developers,
         advertisers, and visitors) in the European Economic Area.
       </p>
       <p>
-        This DPA forms part of, and is incorporated into, the WaitLayer Terms of Service. It
-        explains how WaitLayer processes personal data on behalf of, and in relation to, its users,
-        in compliance with the EU General Data Protection Regulation (GDPR, Regulation (EU)
-        2016/679).
+        This DPA forms part of, and is incorporated into, the Ateva Terms of Service. It explains
+        how Ateva processes personal data on behalf of, and in relation to, its users, in compliance
+        with the EU General Data Protection Regulation (GDPR, Regulation (EU) 2016/679).
       </p>
 
       <LegalHeading>1. Roles of the Parties</LegalHeading>
@@ -39,7 +38,7 @@ export default function GdprDpaPage() {
           <strong className="text-surface-900">controller</strong> of any end-user data they submit.
         </li>
         <li>
-          <strong className="text-surface-900">WaitLayer</strong> — acts as a{' '}
+          <strong className="text-surface-900">Ateva</strong> — acts as a{' '}
           <strong className="text-surface-900">controller</strong> for account, billing, and service
           operational data, and as a <strong className="text-surface-900">processor</strong> when
           handling data on a customer&rsquo;s behalf under a separate written agreement.
@@ -57,8 +56,7 @@ export default function GdprDpaPage() {
           records.
         </li>
         <li>
-          Financial: earnings ledger entries, payout requests (no raw card data is stored by
-          WaitLayer).
+          Financial: earnings ledger entries, payout requests (no raw card data is stored by Ateva).
         </li>
       </ul>
 
@@ -81,12 +79,12 @@ export default function GdprDpaPage() {
           settings.
         </li>
         <li>
-          <strong className="text-surface-900">Erasure</strong> — delete your account; WaitLayer
+          <strong className="text-surface-900">Erasure</strong> — delete your account; Ateva
           anonymizes personal data and revokes active sessions and API keys.
         </li>
         <li>
           <strong className="text-surface-900">Objection / Restriction</strong> — contact{' '}
-          <code>privacy@waitlayer.dev</code>.
+          <code>privacy@ateva.dev</code>.
         </li>
       </ul>
       <p>
@@ -95,7 +93,7 @@ export default function GdprDpaPage() {
       </p>
 
       <LegalHeading>5. Sub-processors</LegalHeading>
-      <p>WaitLayer uses the following categories of sub-processors:</p>
+      <p>Ateva uses the following categories of sub-processors:</p>
       <ul className="list-disc space-y-1 pl-6">
         <li>
           <strong className="text-surface-900">Cloud hosting / database</strong> — PostgreSQL
@@ -121,14 +119,14 @@ export default function GdprDpaPage() {
 
       <LegalHeading>6. International Transfers</LegalHeading>
       <p>
-        Where data is transferred outside the EEA, WaitLayer relies on Standard Contractual Clauses
+        Where data is transferred outside the EEA, Ateva relies on Standard Contractual Clauses
         (SCCs) and the recipient&rsquo;s adequacy status.
       </p>
 
       <LegalHeading>7. Security</LegalHeading>
       <p>
-        WaitLayer applies encryption in transit (TLS), TOTP secrets are encrypted at rest, and
-        access is guarded by role-based authorization and audit logging.
+        Ateva applies encryption in transit (TLS), TOTP secrets are encrypted at rest, and access is
+        guarded by role-based authorization and audit logging.
       </p>
 
       <LegalHeading>8. Retention</LegalHeading>
@@ -141,7 +139,7 @@ export default function GdprDpaPage() {
       <LegalHeading>9. Contact</LegalHeading>
       <p>
         Data Protection Officer / privacy requests:{' '}
-        <strong className="text-surface-900">privacy@waitlayer.dev</strong>
+        <strong className="text-surface-900">privacy@ateva.dev</strong>
       </p>
     </LegalDocument>
   );

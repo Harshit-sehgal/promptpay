@@ -18,7 +18,7 @@ vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ isAuthenticated: false }),
 }));
 
-vi.mock('@waitlayer/ui', () => ({
+vi.mock('@ateva/ui', () => ({
   useToast: () => ({ success: vi.fn() }),
 }));
 

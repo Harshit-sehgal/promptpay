@@ -27,7 +27,7 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.json'));
-const { Prisma, PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
+const { Prisma, PrismaClient, createPrismaAdapter } = apiRequire('@ateva/db');
 
 const SOURCE_URL = process.env.SOURCE_DATABASE_URL;
 const RESTORED_URL = process.env.RESTORED_DATABASE_URL;

@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
  * therefore skipped unless `RUN_LIVE_TESTS=true` is set.
  */
 const RUN_LIVE = process.env.RUN_LIVE_TESTS === 'true';
-const API_URL = process.env.WAITLAYER_API_URL || 'http://localhost:4002/api/v1';
+const API_URL = process.env.ATEVA_API_URL || 'http://localhost:4002/api/v1';
 
 const mockSecrets: Record<string, string> = {};
 const mockConfig: Record<string, unknown> = {
@@ -53,7 +53,7 @@ async function createDeveloper(): Promise<{
   accessToken: string;
   refreshToken: string;
 }> {
-  const email = `vscode-live-${Date.now()}@waitlayer.local`;
+  const email = `vscode-live-${Date.now()}@ateva.local`;
   const password = 'TestPass123!';
   const signupRes = await fetch(`${API_URL}/auth/signup`, {
     method: 'POST',
@@ -82,7 +82,7 @@ async function createDeveloper(): Promise<{
 describe.skipIf(!RUN_LIVE)('ApiClient live smoke against standalone API', () => {
   beforeAll(async () => {
     const tokens = await createDeveloper();
-    mockSecrets['waitlayer.authTokens'] = JSON.stringify({
+    mockSecrets['ateva.authTokens'] = JSON.stringify({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     });

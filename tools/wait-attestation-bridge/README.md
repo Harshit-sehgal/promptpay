@@ -3,15 +3,15 @@
 This is a **reference implementation** of an independent wait-attestation
 provider bridge. It is intentionally small, self-contained, and safe for local
 and staging use. **Do not use it as-is in production:** a real bridge must run
-independently of WaitLayer clients, protect its signing key in an HSM/secret
+independently of Ateva clients, protect its signing key in an HSM/secret
 manager, measure waits with its own telemetry, and undergo a security review.
 
 ## What it does
 
-1. Owns an RSA-256 signing key that is **not** available to WaitLayer clients.
+1. Owns an RSA-256 signing key that is **not** available to Ateva clients.
 2. Exposes a single `POST /attest` endpoint.
 3. Verifies a bearer token, validates the request shape, and signs a JWT
-   assertion that the WaitLayer API can verify against
+   assertion that the Ateva API can verify against
    `WAIT_ATTESTATION_ISSUERS` and `VERIFIED_WAIT_ATTESTATION_VERSIONS`.
 
 > **Stub limitation:** this reference implementation always signs a fixed
@@ -46,8 +46,8 @@ Body:
 ```json
 {
   "nonce": "<server-issued nonce>",
-  "attestationSessionId": "<WaitLayer attestation session id>",
-  "userId": "<WaitLayer user id>",
+  "attestationSessionId": "<Ateva attestation session id>",
+  "userId": "<Ateva user id>",
   "deviceId": "<registered device id>",
   "sessionId": "<client session id>",
   "waitStateId": "<wait state id>",
@@ -65,7 +65,7 @@ Response:
 
 | Claim                 | Source        | Notes                                        |
 | --------------------- | ------------- | -------------------------------------------- |
-| `sub`                 | `userId`      | WaitLayer user id                            |
+| `sub`                 | `userId`      | Ateva user id                                |
 | `device_id`           | `deviceId`    | Registered device id                         |
 | `nonce`               | `nonce`       | Server-issued single-use nonce               |
 | `session_id`          | `sessionId`   | Client session id                            |
@@ -88,7 +88,7 @@ Response:
 > `ended_at_ms`, and `duration_ms` from independent observation and reject
 > requests that violate its policy (max duration, idle time, etc.).
 
-## Configuring the WaitLayer API to trust this bridge
+## Configuring the Ateva API to trust this bridge
 
 Set `WAIT_ATTESTATION_ISSUERS` in the API environment to the bridge's public
 key and issuer/audience:
@@ -96,9 +96,9 @@ key and issuer/audience:
 ```json
 [
   {
-    "provider": "waitlayer-stub-bridge",
-    "issuer": "https://waitlayer.local/attestation",
-    "audience": "waitlayer-client",
+    "provider": "ateva-stub-bridge",
+    "issuer": "https://ateva.local/attestation",
+    "audience": "ateva-client",
     "publicKeys": {
       "<kid printed on startup or from .keys/bridge-public.pem>": "-----BEGIN PUBLIC KEY-----\nMIIB...\n-----END PUBLIC KEY-----"
     }
@@ -115,16 +115,16 @@ VERIFIED_WAIT_ATTESTATION_VERSIONS=stub-v1
 ## Configuring the CLI / VS Code extension
 
 ```text
-WAITLAYER_ATTESTATION_PROVIDER=waitlayer-stub-bridge
-WAITLAYER_ATTESTATION_PROVIDER_URL=http://localhost:4003/attest
+ATEVA_ATTESTATION_PROVIDER=ateva-stub-bridge
+ATEVA_ATTESTATION_PROVIDER_URL=http://localhost:4003/attest
 ```
 
 VS Code settings:
 
 ```json
 {
-  "waitlayer.attestationProvider": "waitlayer-stub-bridge",
-  "waitlayer.attestationProviderUrl": "http://localhost:4003/attest"
+  "ateva.attestationProvider": "ateva-stub-bridge",
+  "ateva.attestationProviderUrl": "http://localhost:4003/attest"
 }
 ```
 

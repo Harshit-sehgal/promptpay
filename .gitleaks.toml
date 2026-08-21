@@ -2,7 +2,7 @@
 #
 # EXTENDS the default ruleset — it never replaces it. `useDefault = true` keeps
 # every upstream rule active; this file only adds the one exclusion below.
-title = "WaitLayer secret scanning"
+title = "Ateva secret scanning"
 
 [extend]
 useDefault = true

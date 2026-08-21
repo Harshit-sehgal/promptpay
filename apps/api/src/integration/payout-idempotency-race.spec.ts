@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -79,7 +79,7 @@ describe('Payout idempotency race (DB-backed)', () => {
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin@waitlayer.com',
+        email: 'admin@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -107,7 +107,7 @@ describe('Payout idempotency race (DB-backed)', () => {
     const signupRes = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({
-        email: 'dev-race@waitlayer.com',
+        email: 'dev-race@ateva.com',
         password: 'Password123!',
         role: UserRole.DEVELOPER,
         name: 'Race Developer',
@@ -127,7 +127,7 @@ describe('Payout idempotency race (DB-backed)', () => {
 
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'dev-race@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'dev-race@ateva.com', password: 'Password123!' })
       .expect(200);
     devToken = loginRes.body.accessToken;
 

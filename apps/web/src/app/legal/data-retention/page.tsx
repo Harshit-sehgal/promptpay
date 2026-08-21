@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { LegalDocument, LegalTable } from '@/components/legal-document';
 
 export const metadata: Metadata = {
-  title: 'Data Retention Schedule — WaitLayer',
-  description: 'How long WaitLayer retains each category of personal data, and why.',
+  title: 'Data Retention Schedule — Ateva',
+  description: 'How long Ateva retains each category of personal data, and why.',
 };
 
 const RETENTION_ROWS: string[][] = [
@@ -43,7 +43,7 @@ export default function DataRetentionPage() {
   return (
     <LegalDocument title="Data Retention Schedule" lastUpdated="2026-07-19">
       <p>
-        WaitLayer retains personal data only as long as necessary for the purposes described in the
+        Ateva retains personal data only as long as necessary for the purposes described in the
         Privacy Policy and applicable law.
       </p>
 

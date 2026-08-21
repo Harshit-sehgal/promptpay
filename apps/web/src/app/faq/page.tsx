@@ -10,9 +10,9 @@ interface FAQItem {
 
 const FAQS: FAQItem[] = [
   {
-    question: 'What can I do in the WaitLayer beta?',
+    question: 'What can I do in the Ateva beta?',
     answer:
-      'Sign up as a developer, install the VS Code extension or CLI, and authenticate to help validate wait-state detection. Rewards are currently disabled while WaitLayer completes its independently verifiable attestation integration; the client tells you when rewards are unavailable.',
+      'Sign up as a developer, install the VS Code extension or CLI, and authenticate to help validate wait-state detection. Rewards are currently disabled while Ateva completes its independently verifiable attestation integration; the client tells you when rewards are unavailable.',
   },
   {
     question: 'What payout methods are supported?',
@@ -22,12 +22,12 @@ const FAQS: FAQItem[] = [
   {
     question: 'How is participant compensation determined?',
     answer:
-      'Rewards are disabled in the private beta. If they launch, WaitLayer will publish a reward schedule for verified eligible activity. That rate is set independently by WaitLayer and is not a percentage of any individual advertiser payment: an advertiser transaction settles in full to WaitLayer, and participant compensation is paid separately through an approved fiat payout provider.',
+      'Rewards are disabled in the private beta. If they launch, Ateva will publish a reward schedule for verified eligible activity. That rate is set independently by Ateva and is not a percentage of any individual advertiser payment: an advertiser transaction settles in full to Ateva, and participant compensation is paid separately through an approved fiat payout provider.',
   },
   {
-    question: 'Will WaitLayer collect my code or private information?',
+    question: 'Will Ateva collect my code or private information?',
     answer:
-      'No. WaitLayer is privacy-first by design. Beta telemetry is limited to the information needed to validate wait-state detection; we never read, transmit, or store your code, prompts, completions, or file names.',
+      'No. Ateva is privacy-first by design. Beta telemetry is limited to the information needed to validate wait-state detection; we never read, transmit, or store your code, prompts, completions, or file names.',
   },
   {
     question: 'Can I choose what ads are shown to me?',
@@ -52,7 +52,7 @@ export default function FAQPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <Link
             href="/"
@@ -70,7 +70,7 @@ export default function FAQPage() {
             Frequently Asked Questions
           </h1>
           <p className="text-surface-500 text-sm">
-            Everything you need to know about the WaitLayer beta and future rewards launch.
+            Everything you need to know about the Ateva beta and future rewards launch.
           </p>
         </div>
 

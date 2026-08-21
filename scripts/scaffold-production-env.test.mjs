@@ -70,7 +70,7 @@ test('operator-supplied values are loud, invalid placeholders', () => {
 test('security posture is set to the safe side, not left to chance', () => {
   const env = parse(scaffold());
   assert.equal(env.get('NODE_ENV'), 'production');
-  assert.equal(env.get('WAITLAYER_ENVIRONMENT_KIND'), 'production');
+  assert.equal(env.get('ATEVA_ENVIRONMENT_KIND'), 'production');
   assert.equal(env.get('PAYOUT_REQUIRE_2FA'), 'true');
   assert.equal(env.get('COOKIE_SECURE'), 'true');
   assert.equal(env.get('SWAGGER_ENABLED'), 'false');

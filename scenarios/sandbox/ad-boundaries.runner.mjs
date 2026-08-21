@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const requireVscodeDependency = createRequire(new URL('../../apps/vscode-extension/package.json', import.meta.url));
 const { build } = requireVscodeDependency('esbuild');
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-ad-boundary-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-ad-boundary-'));
 
 function event(eventType, metadata = {}) {
   return { eventId: `scenario-${mode}-${eventType}`, eventType, mode: 'sandbox', financialMode: 'sandbox', hasCashValue: false, metadata };
@@ -28,7 +28,7 @@ async function runDismiss() {
   const { AdPanel } = await import(pathToFileURL(output));
   const panel = new AdPanel({}, { recordClick: async () => undefined, recordImpressionEnd: async () => undefined });
   let completed = null;
-  panel.show({ headline: 'Sandbox', message: 'Test', ctaText: 'Open', ctaUrl: 'https://sandbox.waitlayer.test', impressionToken: 'sandbox-token' }, (clicked) => { completed = clicked; });
+  panel.show({ headline: 'Sandbox', message: 'Test', ctaText: 'Open', ctaUrl: 'https://sandbox.ateva.test', impressionToken: 'sandbox-token' }, (clicked) => { completed = clicked; });
   // A dismissal completes the impression exactly once as NOT clicked (the
   // panel's onDidDispose path) and a stale/repeated hide is a no-op.
   panel.hide();

@@ -7,7 +7,7 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
-import { campaignMinimumBudgetMinor, minorToMajorInputValue } from '@waitlayer/shared';
+import { campaignMinimumBudgetMinor, minorToMajorInputValue } from '@ateva/shared';
 
 import { campaignMoneyInputPolicy, parseCampaignAmountMinor } from '../../campaign-money';
 import {

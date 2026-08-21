@@ -58,15 +58,15 @@ jobs:
           fi
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Build CLI
-        run: pnpm --filter "waitlayer-cli..." build
+        run: pnpm --filter "ateva-cli..." build
       - name: Verify bin artifacts
-        run: pnpm --filter waitlayer-cli pack:check
+        run: pnpm --filter ateva-cli pack:check
       - name: Pack CLI artifact
         run: |
           mkdir -p artifacts/cli
-          pnpm --filter waitlayer-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
+          pnpm --filter ateva-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
       - name: Verify packed manifest has no private runtime dependencies
         shell: bash
         run: |
@@ -83,7 +83,7 @@ jobs:
               const pkg = JSON.parse(body);
               for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
                 for (const [name, version] of Object.entries(pkg[section] || {})) {
-                  if (name.startsWith("@waitlayer/") || String(version).startsWith("workspace:")) {
+                  if (name.startsWith("@ateva/") || String(version).startsWith("workspace:")) {
                     throw new Error(`packed ${section} contains unresolved ${name}@${version}`);
                   }
                 }
@@ -92,17 +92,17 @@ jobs:
       - name: Smoke install packaged CLI
         shell: bash
         run: |
-          CLI_INSTALL_ROOT="$RUNNER_TEMP/waitlayer-cli-install"
+          CLI_INSTALL_ROOT="$RUNNER_TEMP/ateva-cli-install"
           mkdir -p "$CLI_INSTALL_ROOT"
           npm install --prefix "$CLI_INSTALL_ROOT" --ignore-scripts ./artifacts/cli/*.tgz
-          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/waitlayer"
+          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/ateva"
           test -x "$CLI_BIN"
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --version
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --help
+          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --version
+          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --help
       - name: Upload CLI package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: waitlayer-cli-package
+          name: ateva-cli-package
           path: artifacts/cli/*.tgz
           if-no-files-found: error
 
@@ -123,7 +123,7 @@ jobs:
       - name: Download CLI package artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: waitlayer-cli-package
+          name: ateva-cli-package
           path: artifacts/cli
       - name: Re-verify artifact version against the release tag
         shell: bash

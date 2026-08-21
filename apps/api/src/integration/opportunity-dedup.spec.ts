@@ -6,8 +6,8 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
 
-import { AdPlacementType, UserRole } from '@waitlayer/shared';
-import { signPayload } from '@waitlayer/shared';
+import { AdPlacementType, UserRole } from '@ateva/shared';
+import { signPayload } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -27,13 +27,13 @@ import { PrismaService } from '../config/prisma.service';
  *  - nothing on this path writes an earnings/ledger row (cash settlement
  *    stays disabled; responses are mode:'sandbox', hasCashValue:false).
  *
- * The suite boots with WAITLAYER_ENVIRONMENT_KIND=sandbox so
+ * The suite boots with ATEVA_ENVIRONMENT_KIND=sandbox so
  * requestSandboxPlacement serves; the production gates remain untouched.
  */
 
 const BASE = '/api/v1/extension/sandbox-placement';
 const ENV_ID = 'opportunity-xtest';
-const HOUSE_ADVERTISER_EMAIL = 'house-ads@waitlayer.test';
+const HOUSE_ADVERTISER_EMAIL = 'house-ads@ateva.test';
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -63,8 +63,8 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
 
   beforeAll(async () => {
     process.env.REDIS_URL = '';
-    process.env.WAITLAYER_ENVIRONMENT_KIND = 'sandbox';
-    process.env.WAITLAYER_ENVIRONMENT_ID = ENV_ID;
+    process.env.ATEVA_ENVIRONMENT_KIND = 'sandbox';
+    process.env.ATEVA_ENVIRONMENT_ID = ENV_ID;
     // Sandbox/staging/production env kinds require a privacy key.
     process.env.PRIVACY_HASH_KEY = 'opportunity-dedup-integration-privacy-key-0000';
 
@@ -176,8 +176,8 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
         campaignId: campaign.id,
         title: 'House sandbox ad',
         sponsoredMessage: 'XTS test credits only',
-        destinationUrl: 'https://sandbox.waitlayer.test/ad',
-        displayDomain: 'sandbox.waitlayer.test',
+        destinationUrl: 'https://sandbox.ateva.test/ad',
+        displayDomain: 'sandbox.ateva.test',
         ctaText: 'Learn more',
         status: 'approved',
       },
@@ -194,13 +194,17 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
     return { campaignId: campaign.id, creativeId: creative.id };
   }
 
-  async function seedOpportunity(userId: string, deviceId: string, opts: {
-    placementType?: string;
-    state?: string;
-    eligibleAt?: Date;
-    expiresAt?: Date;
-    confidence?: number;
-  } = {}) {
+  async function seedOpportunity(
+    userId: string,
+    deviceId: string,
+    opts: {
+      placementType?: string;
+      state?: string;
+      eligibleAt?: Date;
+      expiresAt?: Date;
+      confidence?: number;
+    } = {},
+  ) {
     const placementType = opts.placementType ?? AdPlacementType.COMPLETION_RETURN;
     const eligibleAt = opts.eligibleAt ?? new Date(Date.now() - 5_000);
     const expiresAt = opts.expiresAt ?? new Date(Date.now() + 600_000);
@@ -221,7 +225,10 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
   }
 
   async function fixture(maxAdsPerHour = 6): Promise<Fixture> {
-    const devToken = await signup(`dedup-${Date.now()}-${Math.random().toString(36).slice(2)}@waitlayer.test`, UserRole.DEVELOPER);
+    const devToken = await signup(
+      `dedup-${Date.now()}-${Math.random().toString(36).slice(2)}@ateva.test`,
+      UserRole.DEVELOPER,
+    );
     const me = await request(app.getHttpServer())
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${devToken}`)
@@ -266,7 +273,12 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
 
   function sandboxRequest(
     f: Fixture,
-    payload: { placementType: string; correlationId: string; deviceId: string; idempotencyKey: string },
+    payload: {
+      placementType: string;
+      correlationId: string;
+      deviceId: string;
+      idempotencyKey: string;
+    },
   ): Promise<Response> {
     const signature = signPayload(payload, f.eventSecret);
     return request(app.getHttpServer())
@@ -275,7 +287,8 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
       .send({ ...payload, signature });
   }
 
-  const served = (res: Response) => res.body.ad as { impressionToken: string; campaignId: string; creativeId: string } | null;
+  const served = (res: Response) =>
+    res.body.ad as { impressionToken: string; campaignId: string; creativeId: string } | null;
   const sandboxMark = (res: Response) => ({
     mode: res.body.mode,
     hasCashValue: res.body.hasCashValue,
@@ -436,8 +449,12 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
 
   it('applies the A-061 hourly exposure cap to sandbox placements', async () => {
     const f = await fixture(1); // one placement per hour
-    await seedOpportunity(f.devUserId, f.deviceId, { placementType: AdPlacementType.COMPLETION_RETURN });
-    await seedOpportunity(f.devUserId, f.deviceId, { placementType: AdPlacementType.COMPLETION_RETURN });
+    await seedOpportunity(f.devUserId, f.deviceId, {
+      placementType: AdPlacementType.COMPLETION_RETURN,
+    });
+    await seedOpportunity(f.devUserId, f.deviceId, {
+      placementType: AdPlacementType.COMPLETION_RETURN,
+    });
 
     const first = await sandboxRequest(f, {
       placementType: AdPlacementType.COMPLETION_RETURN,

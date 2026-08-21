@@ -1,16 +1,16 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-const CONFIG_SECTION = 'waitlayer';
+const CONFIG_SECTION = 'ateva';
 
-const DEFAULT_API_URL = 'https://api.waitlayer.com/api/v1';
+const DEFAULT_API_URL = 'https://api.ateva.com/api/v1';
 
 export class ConfigurationManager {
   private readonly secrets: vscode.SecretStorage;
-  private deviceKey = 'waitlayer.deviceFingerprint';
-  private deviceUuidKey = 'waitlayer.deviceUUID';
-  private deviceEventSecretKey = 'waitlayer.deviceEventSecret';
-  private deviceUserIdKey = 'waitlayer.deviceUserId';
+  private deviceKey = 'ateva.deviceFingerprint';
+  private deviceUuidKey = 'ateva.deviceUUID';
+  private deviceEventSecretKey = 'ateva.deviceEventSecret';
+  private deviceUserIdKey = 'ateva.deviceUserId';
 
   /**
    * Secrets is required — it carries the VS Code SecretStorage instance from
@@ -37,13 +37,13 @@ export class ConfigurationManager {
   getApiUrl(): string {
     // Packaged/distributed installs default to the production SaaS origin so a
     // user who installs the extension can reach the real API without manual
-    // configuration. Local development overrides via the `waitlayer.apiUrl`
+    // configuration. Local development overrides via the `ateva.apiUrl`
     // setting (A-013).
     //
-    // The override is VALIDATED, not trusted. This extension sends a WaitLayer
+    // The override is VALIDATED, not trusted. This extension sends a Ateva
     // access token from SecretStorage to whatever origin this returns, and the
     // setting used to be plain `window` scope — so a repository containing
-    // `.vscode/settings.json` with `{"waitlayer.apiUrl": "https://evil/api/v1"}`
+    // `.vscode/settings.json` with `{"ateva.apiUrl": "https://evil/api/v1"}`
     // repointed it the moment the folder was opened, exfiltrating the access
     // and refresh tokens. `scope: machine` in package.json now stops workspace
     // values being read at all; this check is the second line, because a
@@ -55,7 +55,7 @@ export class ConfigurationManager {
     try {
       parsed = new URL(configured);
     } catch {
-      console.error(`[WaitLayer] Ignoring malformed waitlayer.apiUrl: ${configured}`);
+      console.error(`[Ateva] Ignoring malformed ateva.apiUrl: ${configured}`);
       return DEFAULT_API_URL;
     }
 
@@ -64,7 +64,7 @@ export class ConfigurationManager {
     const isLoopback = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname);
     if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
       console.error(
-        `[WaitLayer] Ignoring insecure waitlayer.apiUrl (${parsed.protocol}//${parsed.host}); ` +
+        `[Ateva] Ignoring insecure ateva.apiUrl (${parsed.protocol}//${parsed.host}); ` +
           'only https, or http on loopback, is accepted.',
       );
       return DEFAULT_API_URL;
@@ -74,7 +74,7 @@ export class ConfigurationManager {
 
   /**
    * Web dashboard origin derived from the configured API URL (e.g.
-   * `https://api.waitlayer.com/api/v1` → `https://waitlayer.com/developer`),
+   * `https://api.ateva.com/api/v1` → `https://ateva.com/developer`),
    * so staging/dev installs open the matching dashboard instead of always
    * pointing at the production site.
    */
@@ -86,7 +86,7 @@ export class ConfigurationManager {
       const webHost = host.startsWith('api.') ? host.slice('api.'.length) : host;
       return `${parsed.protocol}//${webHost}/developer`;
     } catch {
-      return 'https://waitlayer.com/developer';
+      return 'https://ateva.com/developer';
     }
   }
 
@@ -155,7 +155,7 @@ export class ConfigurationManager {
   /**
    * How long (ms) the user must be inactive before a wait state is inferred.
    * Default: 15_000 (15 seconds).
-   * Configurable via `waitlayer.inactivityTimeoutMs` in VS Code settings.
+   * Configurable via `ateva.inactivityTimeoutMs` in VS Code settings.
    */
   getInactivityTimeoutMs(): number {
     const raw =
@@ -169,11 +169,11 @@ export class ConfigurationManager {
 
   async getTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
     try {
-      const raw = await this.secrets.get('waitlayer.authTokens');
+      const raw = await this.secrets.get('ateva.authTokens');
       if (raw) return JSON.parse(raw);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+      console.error(`[Ateva] SecretStorage failure: ${msg}`);
       /* tokens not stored yet */
     }
     return null;
@@ -181,20 +181,20 @@ export class ConfigurationManager {
 
   async storeTokens(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
     try {
-      await this.secrets.store('waitlayer.authTokens', JSON.stringify(tokens));
+      await this.secrets.store('ateva.authTokens', JSON.stringify(tokens));
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+      console.error(`[Ateva] SecretStorage failure: ${msg}`);
       throw e;
     }
   }
 
   async clearTokens(): Promise<void> {
     try {
-      await this.secrets.delete('waitlayer.authTokens');
+      await this.secrets.delete('ateva.authTokens');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+      console.error(`[Ateva] SecretStorage failure: ${msg}`);
       throw e;
     }
   }
@@ -205,14 +205,14 @@ export class ConfigurationManager {
       if (id) return id;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+      console.error(`[Ateva] SecretStorage failure: ${msg}`);
       /* fall through to fingerprint generation */
     }
 
     // Generate a stable fingerprint from machineId only (no sessionId — it changes per session)
     const fingerprint = crypto
       .createHash('sha256')
-      .update(`${vscode.env.machineId}-waitlayer-device`)
+      .update(`${vscode.env.machineId}-ateva-device`)
       .digest('hex');
 
     // Persist in SecretStorage so it's stable across restarts
@@ -220,7 +220,7 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceKey, fingerprint);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+      console.error(`[Ateva] SecretStorage failure: ${msg}`);
       /* storage not available — fingerprint regenerated each session */
     }
 
@@ -233,7 +233,7 @@ export class ConfigurationManager {
       if (id) return id;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (getDeviceUUID): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (getDeviceUUID): ${msg}`);
     }
     return null;
   }
@@ -243,7 +243,7 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceUuidKey, uuid);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (storeDeviceUUID): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (storeDeviceUUID): ${msg}`);
     }
   }
 
@@ -253,7 +253,7 @@ export class ConfigurationManager {
       if (secret) return secret;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (getDeviceEventSecret): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (getDeviceEventSecret): ${msg}`);
     }
     return null;
   }
@@ -263,7 +263,7 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceEventSecretKey, secret);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (storeDeviceEventSecret): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (storeDeviceEventSecret): ${msg}`);
     }
   }
 
@@ -273,21 +273,21 @@ export class ConfigurationManager {
       await this.secrets.delete(this.deviceUuidKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (clear UUID): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (clear UUID): ${msg}`);
       firstFailure = e;
     }
     try {
       await this.secrets.delete(this.deviceEventSecretKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (clear event secret): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (clear event secret): ${msg}`);
       firstFailure ??= e;
     }
     try {
       await this.secrets.delete(this.deviceUserIdKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure (clear device userId): ${msg}`);
+      console.error(`[Ateva] SecretStorage failure (clear device userId): ${msg}`);
       firstFailure ??= e;
     }
     if (firstFailure !== undefined) throw firstFailure;
@@ -301,7 +301,7 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceUserIdKey, userId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[WaitLayer] SecretStorage failure (store device userId): ${msg}`);
+      console.warn(`[Ateva] SecretStorage failure (store device userId): ${msg}`);
     }
   }
 
@@ -311,7 +311,7 @@ export class ConfigurationManager {
       if (id) return id;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[WaitLayer] SecretStorage failure (getDeviceUserId): ${msg}`);
+      console.warn(`[Ateva] SecretStorage failure (getDeviceUserId): ${msg}`);
     }
     return null;
   }

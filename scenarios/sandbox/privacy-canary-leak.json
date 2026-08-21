@@ -4,16 +4,10 @@
   "version": 1,
   "persona": "distracted_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-sandbox-v1",
-  "actions": [
-    "signup",
-    "consent",
-    "start_session"
-  ],
+  "seed": "ateva-sandbox-v1",
+  "actions": ["signup", "consent", "start_session"],
   "expected": {
-    "eventTypes": [
-      "session.started"
-    ],
+    "eventTypes": ["session.started"],
     "placementTypes": [],
     "financialMode": "sandbox",
     "hasCashValue": false
@@ -35,9 +29,7 @@
   },
   "runner": {
     "command": "node",
-    "args": [
-      "scenarios/sandbox/privacy-canary-leak.runner.mjs"
-    ],
+    "args": ["scenarios/sandbox/privacy-canary-leak.runner.mjs"],
     "timeoutMs": 5000
   }
 }

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { assertSafeJson } from '../common/utils/json-value';
@@ -233,7 +233,7 @@ export class ComplianceService {
     return this.prisma.$transaction(
       async (tx) => {
         const lockRows = await tx.$queryRaw<Array<{ acquired: boolean }>>`
-          SELECT pg_try_advisory_xact_lock(hashtext('waitlayer-retention-cron')) AS "acquired"
+          SELECT pg_try_advisory_xact_lock(hashtext('ateva-retention-cron')) AS "acquired"
         `;
         if (!lockRows[0]?.acquired) {
           this.logger.warn('Retention purge is running on another replica — skipping this tick');

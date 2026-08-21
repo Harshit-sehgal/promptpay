@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "distracted_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-sandbox-v1",
+  "seed": "ateva-sandbox-v1",
   "reporting": {
     "deterministic": true,
     "severity": "medium",

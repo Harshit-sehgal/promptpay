@@ -12,7 +12,7 @@ export default function SecurityPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <Link
             href="/"
@@ -65,7 +65,7 @@ export default function SecurityPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-surface-900 font-sans">Secure CLI Credentials</h2>
             <p className="text-surface-500 text-sm leading-relaxed font-light">
-              The WaitLayer CLI securely isolates session tokens locally. Directory structures are
+              The Ateva CLI securely isolates session tokens locally. Directory structures are
               configured with UNIX file mode permissions `0700` (read/write/search by owner only)
               and credentials files are restricted to `0600` (read/write by owner only), locking out
               unauthorized local processes.

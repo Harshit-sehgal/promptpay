@@ -1,5 +1,5 @@
 {
-  "name": "@waitlayer/config",
+  "name": "@ateva/config",
   "version": "0.0.1",
   "private": true,
   "engines": {
@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@waitlayer/eslint-config": "workspace:*",
+    "@ateva/eslint-config": "workspace:*",
     "typescript": "^5.9.2",
     "vitest": "4.1.10"
   },

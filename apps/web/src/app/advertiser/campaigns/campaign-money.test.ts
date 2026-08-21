@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { campaignMinimumBudgetMinor } from '@waitlayer/shared';
+import { campaignMinimumBudgetMinor } from '@ateva/shared';
 
-import {
-  campaignMoneyInputPolicy,
-  parseCampaignAmountMinor,
-} from './campaign-money';
+import { campaignMoneyInputPolicy, parseCampaignAmountMinor } from './campaign-money';
 
 describe('campaign money input policy', () => {
   it('uses cents and a currency-formatted floor for USD', () => {

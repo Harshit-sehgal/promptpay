@@ -3,7 +3,7 @@
 import { ReactNode } from 'react';
 import { AuthProvider } from '@/lib/auth-context';
 
-import { ToastProvider } from '@waitlayer/ui';
+import { ToastProvider } from '@ateva/ui';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (

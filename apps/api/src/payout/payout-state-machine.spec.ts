@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { PayoutStatus } from '@waitlayer/shared';
+import { PayoutStatus } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';

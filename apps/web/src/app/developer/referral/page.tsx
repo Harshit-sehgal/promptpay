@@ -6,7 +6,7 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown, formatDate } from '@/lib/format';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 interface ReferralData {
   referralCode: string | null;

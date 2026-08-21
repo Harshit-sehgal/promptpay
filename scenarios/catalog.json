@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "source": "docs/waitlayer-implementation-blueprint.md#appendix-a",
+  "source": "docs/ateva-implementation-blueprint.md#appendix-a",
   "scenarios": [
     { "id": 1, "category": "identity_consent", "title": "new signup, telemetry disabled" },
     { "id": 2, "category": "identity_consent", "title": "telemetry enabled" },

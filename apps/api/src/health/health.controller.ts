@@ -44,8 +44,8 @@ export class HealthController {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
-      environmentKind: this.config?.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development'),
-      environmentId: this.config?.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local'),
+      environmentKind: this.config?.get<string>('ATEVA_ENVIRONMENT_KIND', 'development'),
+      environmentId: this.config?.get<string>('ATEVA_ENVIRONMENT_ID', 'local'),
     };
 
     // A-089: publish the settlement state on the public health contract.
@@ -128,8 +128,8 @@ export class HealthController {
     const checks: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      environmentKind: this.config?.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development'),
-      environmentId: this.config?.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local'),
+      environmentKind: this.config?.get<string>('ATEVA_ENVIRONMENT_KIND', 'development'),
+      environmentId: this.config?.get<string>('ATEVA_ENVIRONMENT_ID', 'local'),
     };
     let ready = true;
 

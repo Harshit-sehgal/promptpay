@@ -9,7 +9,7 @@ const { build } = requireVscodeDependency('esbuild');
 
 const mode = process.argv[2];
 const source = path.resolve('apps/vscode-extension/src/attention-state-machine.ts');
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-vscode-scenario-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-vscode-scenario-'));
 const compiled = path.join(directory, 'attention-state-machine.mjs');
 
 function event(eventType, metadata = {}) {

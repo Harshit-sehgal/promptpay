@@ -30,8 +30,8 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://waitlayer.com'),
-  title: 'WaitLayer — private beta for AI wait-state verification',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.com'),
+  title: 'Ateva — private beta for AI wait-state verification',
   description:
     'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation. No code tracking.',
   keywords: [
@@ -43,15 +43,15 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: 'website',
-    siteName: 'WaitLayer',
-    title: 'WaitLayer — private beta for AI wait-state verification',
+    siteName: 'Ateva',
+    title: 'Ateva — private beta for AI wait-state verification',
     description:
       'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation.',
     url: '/',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'WaitLayer — private beta for AI wait-state verification',
+    title: 'Ateva — private beta for AI wait-state verification',
     description:
       'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation.',
   },

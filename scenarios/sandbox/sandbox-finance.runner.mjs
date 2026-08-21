@@ -136,9 +136,9 @@ function serviceFor(prisma) {
     { log: async () => undefined },
     {
       get: (key, fallback) =>
-        key === 'WAITLAYER_ENVIRONMENT_KIND'
+        key === 'ATEVA_ENVIRONMENT_KIND'
           ? 'sandbox'
-          : key === 'WAITLAYER_ENVIRONMENT_ID'
+          : key === 'ATEVA_ENVIRONMENT_ID'
             ? 'scenario-sandbox-run'
             : fallback,
     },

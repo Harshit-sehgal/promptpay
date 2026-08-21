@@ -1,7 +1,7 @@
 import { validate } from 'class-validator';
 import { describe, expect, it } from 'vitest';
 
-import { ToolType } from '@waitlayer/shared';
+import { ToolType } from '@ateva/shared';
 
 import { AdRequestDto, QualifiedImpressionDto } from './ad-events.dto';
 import { WaitStateEndDto } from './wait-state.dto';

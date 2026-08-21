@@ -40,8 +40,8 @@ interface PemKeyPair {
   kid: string;
 }
 
-const DEFAULT_ISSUER = 'https://simulator.waitlayer.local/attestation';
-const DEFAULT_AUDIENCE = 'waitlayer-attestation';
+const DEFAULT_ISSUER = 'https://simulator.ateva.local/attestation';
+const DEFAULT_AUDIENCE = 'ateva-attestation';
 const DEFAULT_PROVIDER = 'trusted-attestation-simulator';
 const DEFAULT_VERSION = 'simulator-v1';
 const MAX_DURATION_MS = 30 * 60_000;

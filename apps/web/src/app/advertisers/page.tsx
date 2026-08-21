@@ -10,7 +10,7 @@ export default function AdvertisersPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -35,9 +35,9 @@ export default function AdvertisersPage() {
             Advertise in the moments that matter
           </h1>
           <p className="text-surface-500 text-lg leading-relaxed mb-8 max-w-2xl">
-            WaitLayer reaches developers while they wait for builds, tests, and deployments — their
-            most focused, screen-on moments. We&rsquo;re in private beta, so advertising is not open
-            yet. Join the waitlist to secure a founding sponsor slot.
+            Ateva reaches developers while they wait for builds, tests, and deployments — their most
+            focused, screen-on moments. We&rsquo;re in private beta, so advertising is not open yet.
+            Join the waitlist to secure a founding sponsor slot.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">

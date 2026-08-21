@@ -56,8 +56,8 @@ describe('PayoutController Stripe Connect onboarding', () => {
     const { controller, service } = await setup();
 
     const result = await controller.createStripeConnectOnboarding('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/refresh',
-      returnUrl: 'https://app.waitlayer.com/return',
+      refreshUrl: 'https://app.ateva.com/refresh',
+      returnUrl: 'https://app.ateva.com/return',
       currency: 'USD',
     });
 
@@ -66,8 +66,8 @@ describe('PayoutController Stripe Connect onboarding', () => {
       onboardingUrl: 'https://connect.stripe.com/onboarding/test',
     });
     expect(service.createStripeConnectOnboarding).toHaveBeenCalledWith('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/refresh',
-      returnUrl: 'https://app.waitlayer.com/return',
+      refreshUrl: 'https://app.ateva.com/refresh',
+      returnUrl: 'https://app.ateva.com/return',
       currency: 'USD',
     });
   });
@@ -76,13 +76,13 @@ describe('PayoutController Stripe Connect onboarding', () => {
     const { controller, service } = await setup();
 
     await controller.createStripeConnectOnboarding('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/refresh',
-      returnUrl: 'https://app.waitlayer.com/return',
+      refreshUrl: 'https://app.ateva.com/refresh',
+      returnUrl: 'https://app.ateva.com/return',
     });
 
     expect(service.createStripeConnectOnboarding).toHaveBeenCalledWith('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/refresh',
-      returnUrl: 'https://app.waitlayer.com/return',
+      refreshUrl: 'https://app.ateva.com/refresh',
+      returnUrl: 'https://app.ateva.com/return',
       currency: undefined,
     });
   });

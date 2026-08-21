@@ -3,7 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 /**
  * Advertiser waitlist signup form (LAUNCH_PLAN Phase 2 step 11).
@@ -124,8 +124,8 @@ export function WaitlistSignup() {
           className="mt-0.5 h-4 w-4 rounded border-surface-300 text-brand-500 focus:ring-brand-500"
         />
         <span className="text-surface-600 text-sm leading-relaxed">
-          I agree to receive email updates about WaitLayer advertiser availability. I can opt out at
-          any time.
+          I agree to receive email updates about Ateva advertiser availability. I can opt out at any
+          time.
         </span>
       </label>
       {/* Honeypot — hidden from humans, visible to bots. Server rejects if filled. */}

@@ -1,6 +1,6 @@
-import type { PayoutProviderReadiness } from '@waitlayer/shared';
+import type { PayoutProviderReadiness } from '@ateva/shared';
 
-export type { PayoutProviderReadiness } from '@waitlayer/shared';
+export type { PayoutProviderReadiness } from '@ateva/shared';
 
 /** Runtime-selectable providers. Missing or internally inconsistent state fails closed. */
 export function selectablePayoutProviders(

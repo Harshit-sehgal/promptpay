@@ -70,7 +70,7 @@ export async function verifyMigrationsApplied(
       );
     }
     const detail = `Migration directory is unavailable at ${dir}: ${error instanceof Error ? error.message : String(error)}`;
-    console.warn(`[WaitLayer] ${detail}`);
+    console.warn(`[Ateva] ${detail}`);
     return [];
   }
   if (folderMigrations.length === 0) {
@@ -78,7 +78,7 @@ export async function verifyMigrationsApplied(
     if (process.env.NODE_ENV === 'production') {
       throw new Error(`[migration-check] ${detail}`);
     }
-    console.warn(`[WaitLayer] ${detail}`);
+    console.warn(`[Ateva] ${detail}`);
     return [];
   }
 
@@ -94,7 +94,7 @@ export async function verifyMigrationsApplied(
       );
     }
     const detail = `Could not read completed migrations from _prisma_migrations: ${error instanceof Error ? error.message : String(error)}`;
-    console.warn(`[WaitLayer] ${detail}`);
+    console.warn(`[Ateva] ${detail}`);
     return folderMigrations;
   }
 
@@ -108,7 +108,7 @@ export async function verifyMigrationsApplied(
     if (process.env.NODE_ENV === 'production') {
       throw new Error(`[migration-check] ${detail}`);
     }
-    console.warn(`[WaitLayer] ${detail}`);
+    console.warn(`[Ateva] ${detail}`);
   }
   return pending;
 }

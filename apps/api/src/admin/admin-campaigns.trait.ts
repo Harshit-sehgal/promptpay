@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
-import { CampaignStatus } from '@waitlayer/db';
+import { CampaignStatus } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';

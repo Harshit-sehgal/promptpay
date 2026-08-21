@@ -18,7 +18,7 @@ describe('printSandboxBanner', () => {
   });
 
   it('trusts the API-confirmed sandbox marker even when the local marker is absent', async () => {
-    vi.stubEnv('WAITLAYER_ENVIRONMENT_KIND', '');
+    vi.stubEnv('ATEVA_ENVIRONMENT_KIND', '');
     const sink = output();
 
     await printSandboxBanner(
@@ -36,7 +36,7 @@ describe('printSandboxBanner', () => {
   });
 
   it('reports an explicit local/server environment mismatch', async () => {
-    vi.stubEnv('WAITLAYER_ENVIRONMENT_KIND', 'sandbox');
+    vi.stubEnv('ATEVA_ENVIRONMENT_KIND', 'sandbox');
     const sink = output();
 
     await printSandboxBanner(

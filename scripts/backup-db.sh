@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Postgres logical backup for WaitLayer.
+# Postgres logical backup for Ateva.
 #
 # Produces a gzipped custom-format pg_dump that can be restored with
 # scripts/restore-db.sh. Designed to run unattended (cron / CI / operator):
@@ -7,7 +7,7 @@
 #   - never embeds the password on the command line (uses PGPASSWORD env)
 #   - timestamps the output file in UTC
 #   - emits a manifest line parseable by verify-backup.mjs:
-#       WAITLAYER_BACKUP <path> <bytes> <epoch_ms> <source_db>
+#       ATEVA_BACKUP <path> <bytes> <epoch_ms> <source_db>
 #
 # Usage:
 #   scripts/backup-db.sh [OUTPUT_DIR] [DATABASE_URL]
@@ -33,16 +33,16 @@ command -v gzip   >/dev/null 2>&1 || { echo "gzip not found" >&2;   exit 2; }
 mkdir -p "$OUTPUT_DIR"
 
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
-SOURCE_DB="waitlayer"
+SOURCE_DB="ateva"
 if [ -n "$DATABASE_URL" ]; then
   # Derive the db name from the URL for the manifest (best-effort).
   SOURCE_DB="$(printf '%s' "$DATABASE_URL" | sed -E 's#.*/([^/?]+)(\?.*)?$#\1#')"
   export DATABASE_URL
 else
-  SOURCE_DB="${PGDATABASE:-waitlayer}"
+  SOURCE_DB="${PGDATABASE:-ateva}"
 fi
 
-OUT="$OUTPUT_DIR/waitlayer-db-$STAMP.dump.gz"
+OUT="$OUTPUT_DIR/ateva-db-$STAMP.dump.gz"
 
 # pg_dump custom format (-Fc) is the most flexible for restore (parallel,
 # selective). --no-owner avoids restore failures when the owning role differs.
@@ -55,5 +55,5 @@ fi
 
 BYTES=$(wc -c < "$OUT")
 EPOCH=$(date +%s%3N)
-echo "WAITLAYER_BACKUP $OUT $BYTES $EPOCH $SOURCE_DB"
+echo "ATEVA_BACKUP $OUT $BYTES $EPOCH $SOURCE_DB"
 echo "Backup written: $OUT ($(numfmt --to=iec "$BYTES" 2>/dev/null || echo "$BYTES bytes"))"

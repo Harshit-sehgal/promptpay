@@ -1,4 +1,4 @@
-import { WaitAssertionProvider } from '@waitlayer/shared';
+import { WaitAssertionProvider } from '@ateva/shared';
 
 /**
  * Adapter for a separately operated independent-proof service. The CLI never
@@ -8,18 +8,18 @@ import { WaitAssertionProvider } from '@waitlayer/shared';
 export function createCliWaitAssertionProvider(
   env: NodeJS.ProcessEnv = process.env,
 ): WaitAssertionProvider | null {
-  const provider = env.WAITLAYER_ATTESTATION_PROVIDER?.trim();
-  const url = env.WAITLAYER_ATTESTATION_PROVIDER_URL?.trim();
+  const provider = env.ATEVA_ATTESTATION_PROVIDER?.trim();
+  const url = env.ATEVA_ATTESTATION_PROVIDER_URL?.trim();
   if (!provider || !url) return null;
   // Validate the URL up front so a typo'd provider config fails fast with a
   // clear message instead of a confusing fetch error inside the wait loop.
   try {
     new URL(url);
   } catch {
-    throw new Error(`WAITLAYER_ATTESTATION_PROVIDER_URL is not a valid URL: "${url}"`);
+    throw new Error(`ATEVA_ATTESTATION_PROVIDER_URL is not a valid URL: "${url}"`);
   }
   if (!/^https:\/\//i.test(url) && env.NODE_ENV === 'production') {
-    throw new Error('WAITLAYER_ATTESTATION_PROVIDER_URL must use HTTPS in production');
+    throw new Error('ATEVA_ATTESTATION_PROVIDER_URL must use HTTPS in production');
   }
   // A hung attestation provider must not hang the wait loop forever; 10s
   // covers a cold TLS handshake plus signing round-trip with room to spare.

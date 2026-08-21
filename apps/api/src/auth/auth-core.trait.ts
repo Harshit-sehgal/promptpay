@@ -4,8 +4,8 @@ import { BadRequestException, ConflictException, UnauthorizedException } from '@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { Prisma } from '@waitlayer/db';
-import { DEFAULT_COMPANY_NAME, UserRole } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { DEFAULT_COMPANY_NAME, UserRole } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
@@ -331,8 +331,8 @@ export class AuthCoreTrait {
       payload = await this.jwt.verifyAsync<TokenPayload>(token, {
         secret: this.publicKey,
         algorithms: ['RS256'],
-        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
-        audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
+        issuer: this.config.get<string>('JWT_ISSUER', 'ateva'),
+        audience: this.config.get<string>('JWT_AUDIENCE', 'ateva-client'),
       });
     } catch {
       throw new UnauthorizedException('Invalid token');

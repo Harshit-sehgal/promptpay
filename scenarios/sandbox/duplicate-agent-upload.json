@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reliability_tester",
   "environment": "sandbox",
-  "seed": "waitlayer-duplicate-upload-v1",
+  "seed": "ateva-duplicate-upload-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

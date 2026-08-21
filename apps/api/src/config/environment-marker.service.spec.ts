@@ -19,8 +19,8 @@ function makeService(
   };
   const config = {
     get: vi.fn((key: string, fallback: string) => {
-      if (key === 'WAITLAYER_ENVIRONMENT_KIND') return environmentKind;
-      if (key === 'WAITLAYER_ENVIRONMENT_ID') return environmentId;
+      if (key === 'ATEVA_ENVIRONMENT_KIND') return environmentKind;
+      if (key === 'ATEVA_ENVIRONMENT_ID') return environmentId;
       return fallback;
     }),
   };

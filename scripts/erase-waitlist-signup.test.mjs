@@ -10,10 +10,10 @@ import test from 'node:test';
 const requireDb = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = requireDb('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = requireDb('@ateva/db');
 
 const root = resolve(import.meta.dirname, '..');
-const dbUrl = process.env.ERASURE_TEST_DATABASE_URL ?? 'postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public';
+const dbUrl = process.env.ERASURE_TEST_DATABASE_URL ?? 'postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public';
 const SCRIPT = resolve(root, 'scripts/erase-waitlist-signup.mjs');
 
 /**
@@ -23,7 +23,7 @@ const SCRIPT = resolve(root, 'scripts/erase-waitlist-signup.mjs');
  */
 test('erase-waitlist-signup deletes the row and scrubs the audit trail', async (t) => {
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(dbUrl) });
-  const email = `erasure-${randomUUID()}@waitlayer.test`;
+  const email = `erasure-${randomUUID()}@ateva.test`;
 
   await prisma.advertiserWaitlist.create({
     data: { email, consent: true, company: 'Erasure Co' },
@@ -75,7 +75,7 @@ test('erase-waitlist-signup refuses production without --confirm-production', ()
 });
 
 test('erase-waitlist-signup exits 0 cleanly for an unknown email', async () => {
-  const out = execFileSync('node', [SCRIPT, '--email', 'nobody@waitlayer.test'], {
+  const out = execFileSync('node', [SCRIPT, '--email', 'nobody@ateva.test'], {
     env: { ...process.env, DATABASE_URL: dbUrl, NODE_ENV: 'test' },
     encoding: 'utf8',
   });

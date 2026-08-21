@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { UserStatus } from '@waitlayer/db';
+import { UserStatus } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';

@@ -25,7 +25,7 @@ This checklist is a product and engineering planning artifact, not legal advice.
 
 ## Prohibited data collection
 
-WaitLayer must not collect these by default:
+Ateva must not collect these by default:
 
 - [ ] Source code.
 - [ ] File contents.

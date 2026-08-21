@@ -16,8 +16,8 @@ const PUBLIC_PEM = publicKey.export({ type: 'spki', format: 'pem' }).toString();
 
 const BASE = {
   NODE_ENV: 'production',
-  WAITLAYER_ENVIRONMENT_KIND: 'production',
-  DATABASE_URL: 'postgresql://user:password@db.example/waitlayer',
+  ATEVA_ENVIRONMENT_KIND: 'production',
+  DATABASE_URL: 'postgresql://user:password@db.example/ateva',
   REDIS_URL: 'rediss://:redis-password@redis.example:6380',
   API_BASE_URL: 'https://api.example.com',
   WEB_BASE_URL: 'https://app.example.com',
@@ -51,7 +51,7 @@ test('accepts a complete production-shaped environment without exposing values',
 test('rejects missing production infrastructure, auth, URLs, and OAuth inputs', () => {
   const findings = diagnoseEnvironment({
     NODE_ENV: 'production',
-    WAITLAYER_ENVIRONMENT_KIND: 'production',
+    ATEVA_ENVIRONMENT_KIND: 'production',
   });
   for (const name of ['database_url', 'redis-config', 'jwt-keys', 'web-api-url', 'google-oauth']) {
     assert.equal(finding(findings, name).level, 'FAIL', `${name} should fail closed`);

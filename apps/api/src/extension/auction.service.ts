@@ -2,8 +2,8 @@ import * as crypto from 'crypto';
 import { LRUCache } from 'lru-cache';
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 
-import { BidType, Prisma } from '@waitlayer/db';
-import { nextBillableCharge, selectCampaignIndex } from '@waitlayer/shared';
+import { BidType, Prisma } from '@ateva/db';
+import { nextBillableCharge, selectCampaignIndex } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalancesByCurrency } from '../common/utils/advertiser-balance';

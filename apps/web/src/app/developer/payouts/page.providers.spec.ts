@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { payoutProviderStatusLabel, selectablePayoutProviders } from '@/lib/payout-readiness';
 
-import { PayoutProvider, PayoutProviderReadinessResponse } from '@waitlayer/shared';
+import { PayoutProvider, PayoutProviderReadinessResponse } from '@ateva/shared';
 
 describe('effective payout-provider readiness', () => {
   it('fails closed when readiness could not be fetched', () => {

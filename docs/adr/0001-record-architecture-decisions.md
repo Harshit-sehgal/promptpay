@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADRs)
 
 This directory captures the significant architecture decisions made for
-WaitLayer. We use the lightweight [MADR](https://adr.github.io/madr/)-style
+Ateva. We use the lightweight [MADR](https://adr.github.io/madr/)-style
 format: **Context → Decision → Consequences**.
 
 - `0001` — Record architecture decisions (this index)

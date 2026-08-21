@@ -1,4 +1,4 @@
-# WaitLayer Makefile — common developer shortcuts
+# Ateva Makefile — common developer shortcuts
 #
 # Usage: make <target>
 # Most targets defer to pnpm workspace filters.
@@ -7,7 +7,7 @@
         db-studio start-api start-web clean help
 
 help: ## Show this help
-	@echo "WaitLayer — available make targets:"
+	@echo "Ateva — available make targets:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
@@ -30,22 +30,22 @@ test: ## Run all tests (requires DATABASE_URL + REDIS_URL + JWT_SECRET)
 	pnpm run test
 
 db-generate: ## Regenerate the Prisma client
-	pnpm --filter @waitlayer/db generate
+	pnpm --filter @ateva/db generate
 
 db-migrate: ## Apply Prisma migrations (dev)
-	pnpm --filter @waitlayer/db migrate
+	pnpm --filter @ateva/db migrate
 
 db-deploy: ## Apply committed Prisma migrations (deployment)
-	pnpm --filter @waitlayer/db migrate:deploy
+	pnpm --filter @ateva/db migrate:deploy
 
 db-status: ## Check for pending Prisma migrations
-	pnpm --filter @waitlayer/db migrate:status
+	pnpm --filter @ateva/db migrate:status
 
 db-drift: ## Compare the migration-built database with schema.prisma
-	pnpm --filter @waitlayer/db migrate:drift
+	pnpm --filter @ateva/db migrate:drift
 
 db-studio: ## Open Prisma Studio
-	pnpm --filter @waitlayer/db studio
+	pnpm --filter @ateva/db studio
 
 start-api: ## Build + start the API
 	pnpm run start:api

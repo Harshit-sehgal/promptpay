@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   return {
     api,
     creds: {
-      apiUrl: 'https://api.waitlayer.com/api/v1',
+      apiUrl: 'https://api.ateva.com/api/v1',
       token: 'tok',
       email: 'dev@test.com',
       role: 'developer',
@@ -67,7 +67,7 @@ describe('runStatus', () => {
     expect(mocks.api.getBalance).toHaveBeenCalledWith();
     expect(mocks.api.getOverview).toHaveBeenCalledWith();
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain('WaitLayer Status');
+    expect(output).toContain('Ateva Status');
     expect(output).toContain('Available');
     expect(output).toContain('Trust Level');
     expect(output).toContain('normal');

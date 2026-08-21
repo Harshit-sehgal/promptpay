@@ -1,6 +1,6 @@
-name: waitlayer
+name: ateva
 
-# Docker Compose reference for WaitLayer.
+# Docker Compose reference for Ateva.
 #
 # Profiles:
 #   (default)  — postgres, redis, api, web (local dev / demo)
@@ -11,15 +11,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: waitlayer
-      POSTGRES_USER: waitlayer
-      POSTGRES_PASSWORD: waitlayer-dev
+      POSTGRES_DB: ateva
+      POSTGRES_USER: ateva
+      POSTGRES_PASSWORD: ateva-dev
     ports:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U waitlayer -d waitlayer']
+      test: ['CMD-SHELL', 'pg_isready -U ateva -d ateva']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -37,28 +37,28 @@ services:
       retries: 5
 
   # Isolated Postgres for the integration test suite (profile `test`). Keeps
-  # the dev DB untouched when running `pnpm --filter waitlayer-api test`.
+  # the dev DB untouched when running `pnpm --filter ateva-api test`.
   postgres-test:
     image: postgres:16-alpine
     profiles: ['test']
     environment:
-      POSTGRES_DB: waitlayer_test
-      POSTGRES_USER: waitlayer
-      POSTGRES_PASSWORD: waitlayer-test
+      POSTGRES_DB: ateva_test
+      POSTGRES_USER: ateva
+      POSTGRES_PASSWORD: ateva-test
     ports:
       - '5433:5432'
     volumes:
       - pgtestdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U waitlayer -d waitlayer_test']
+      test: ['CMD-SHELL', 'pg_isready -U ateva -d ateva_test']
       interval: 5s
       timeout: 5s
       retries: 5
 
   api:
-    # Production/staging deployments set WAITLAYER_API_IMAGE to an immutable
+    # Production/staging deployments set ATEVA_API_IMAGE to an immutable
     # registry digest. Local compose retains this predictable development tag.
-    image: ${WAITLAYER_API_IMAGE:-waitlayer-api:local}
+    image: ${ATEVA_API_IMAGE:-ateva-api:local}
     restart: unless-stopped
     build:
       context: .
@@ -78,26 +78,26 @@ services:
       args:
         JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
         JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-        JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-        JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+        JWT_ISSUER: ${JWT_ISSUER:-ateva}
+        JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
     ports:
       - '4002:4002'
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://ateva:ateva-dev@postgres:5432/ateva}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       # ── WARNING: Dev-only secrets ──
       # These are visible to anyone who can read this file. Production deploys
       # MUST override EVERY one of these via a .env file, Docker secrets, or
       # your secrets manager.
-      # The @waitlayer/config refine() rejects keys containing "change-me" or
+      # The @ateva/config refine() rejects keys containing "change-me" or
       # "replace-with" — placeholders below are crafted to pass validation
       # while being trivially distinguishable from real secrets.
       JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:-}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      JWT_ISSUER: ${JWT_ISSUER:-ateva}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
       API_PORT: '4002'
@@ -111,8 +111,8 @@ services:
       # real Google account. The verifier requires BOTH NODE_ENV !== 'production'
       # AND an explicit flag — never set this in staging/production.
       ALLOW_MOCK_GOOGLE: ${ALLOW_MOCK_GOOGLE:-true}
-      WAITLAYER_ENVIRONMENT_KIND: ${WAITLAYER_ENVIRONMENT_KIND:-development}
-      WAITLAYER_ENVIRONMENT_ID: ${WAITLAYER_ENVIRONMENT_ID:-local-compose}
+      ATEVA_ENVIRONMENT_KIND: ${ATEVA_ENVIRONMENT_KIND:-development}
+      ATEVA_ENVIRONMENT_ID: ${ATEVA_ENVIRONMENT_ID:-local-compose}
       ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
       ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:-}
       ALLOWED_CURRENCIES: ${ALLOWED_CURRENCIES:-}
@@ -122,7 +122,7 @@ services:
       WAIT_ATTESTATION_ISSUERS: ${WAIT_ATTESTATION_ISSUERS:-}
       VERIFIED_WAIT_ATTESTATION_VERSIONS: ${VERIFIED_WAIT_ATTESTATION_VERSIONS:-}
       EMAIL_DRIVER: ${EMAIL_DRIVER:-console}
-      EMAIL_FROM: ${EMAIL_FROM:-noreply@waitlayer.local}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@ateva.local}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder}
       # Sentry — uncomment to enable error monitoring locally
       # SENTRY_DSN: https://your-dsn@o123456.ingest.sentry.io/654321
@@ -164,7 +164,7 @@ services:
 
   web:
     # See api.image: CI supplies a content-addressed image for release hosts.
-    image: ${WAITLAYER_WEB_IMAGE:-waitlayer-web:local}
+    image: ${ATEVA_WEB_IMAGE:-ateva-web:local}
     restart: unless-stopped
     build:
       context: .
@@ -177,12 +177,12 @@ services:
       args:
         JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
         JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-        JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-        JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+        JWT_ISSUER: ${JWT_ISSUER:-ateva}
+        JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
         NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-http://localhost:3000}
-        NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: ${NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND:-development}
+        NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: ${NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND:-development}
         NEXT_PUBLIC_ALLOW_MOCK_AUTH: ${NEXT_PUBLIC_ALLOW_MOCK_AUTH:-"true"}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-}
@@ -192,12 +192,12 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
-      NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: ${NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND:-development}
+      NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: ${NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND:-development}
       JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      JWT_ISSUER: ${JWT_ISSUER:-ateva}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
       # Match the api service — dev convenience compose uses NODE_ENV=development
       # so the mock-google sign-in button remains available for local testing.
       NODE_ENV: ${NODE_ENV:-development}

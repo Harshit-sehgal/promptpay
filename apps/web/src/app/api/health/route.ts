@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 export function GET() {
   return NextResponse.json({
     status: 'ok',
-    service: 'waitlayer-web',
+    service: 'ateva-web',
     time: new Date().toISOString(),
   });
 }

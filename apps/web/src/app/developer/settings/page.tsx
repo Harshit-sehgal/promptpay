@@ -10,7 +10,7 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 interface DevSettings {
   adsEnabled: boolean;
@@ -195,7 +195,7 @@ export default function DevSettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'waitlayer-export.json';
+      a.download = 'ateva-export.json';
       a.click();
       URL.revokeObjectURL(url);
       if (exportData.exportMeta?.truncated) {

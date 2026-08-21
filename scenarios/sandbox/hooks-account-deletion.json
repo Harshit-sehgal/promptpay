@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "privacy_conscious_user",
   "environment": "sandbox",
-  "seed": "waitlayer-hooks-delete-v1",
+  "seed": "ateva-hooks-delete-v1",
   "reporting": {
     "deterministic": true,
     "severity": "critical",

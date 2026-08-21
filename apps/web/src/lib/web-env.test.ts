@@ -4,14 +4,14 @@ import { validateWebEnv } from './web-env';
 
 describe('web environment validation', () => {
   it('defaults the web environment marker to production and accepts sandbox explicitly', () => {
-    expect(validateWebEnv({ NODE_ENV: 'development' }).NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND).toBe(
+    expect(validateWebEnv({ NODE_ENV: 'development' }).NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND).toBe(
       'production',
     );
     expect(
       validateWebEnv({
         NODE_ENV: 'development',
-        NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
-      }).NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND,
+        NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: 'sandbox',
+      }).NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND,
     ).toBe('sandbox');
   });
 

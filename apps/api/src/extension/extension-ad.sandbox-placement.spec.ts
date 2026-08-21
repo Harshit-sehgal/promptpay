@@ -18,8 +18,8 @@ const creative = {
   status: 'approved',
   title: 'Sandbox test ad',
   sponsoredMessage: 'Test credits only',
-  displayDomain: 'sandbox.waitlayer.test',
-  destinationUrl: 'https://sandbox.waitlayer.test/ad',
+  displayDomain: 'sandbox.ateva.test',
+  destinationUrl: 'https://sandbox.ateva.test/ad',
   ctaText: 'Learn more',
 };
 

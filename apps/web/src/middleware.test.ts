@@ -68,8 +68,8 @@ function makeReq(token?: string): NextRequest {
 
 async function makeToken(
   aud: string = 'access',
-  issuer: string = 'waitlayer',
-  baseAudience: string = 'waitlayer-client',
+  issuer: string = 'ateva',
+  baseAudience: string = 'ateva-client',
 ): Promise<string> {
   const privateKey = await importPKCS8(TEST_JWT_PRIVATE_KEY.replace(/\\n/g, '\n'), 'RS256');
   return new SignJWT({ sub: 'u1', role: 'developer' })
@@ -145,7 +145,7 @@ describe('protected-route middleware JWT_PUBLIC_KEY (A-016)', () => {
   it('honours a custom issuer and audience', async () => {
     process.env.JWT_PUBLIC_KEY = TEST_JWT_PUBLIC_KEY;
     process.env.JWT_ISSUER = 'https://auth.example.com';
-    process.env.JWT_AUDIENCE = 'waitlayer-production';
+    process.env.JWT_AUDIENCE = 'ateva-production';
     const token = await makeToken('access', process.env.JWT_ISSUER, process.env.JWT_AUDIENCE);
 
     const res = await middleware(makeReq(token));

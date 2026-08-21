@@ -38,14 +38,12 @@ describe('A-097 — RS256 signing tolerates escaped PEMs', () => {
   });
 
   it('normalizePem restores a signable private key', () => {
-    const signature = createSign('RSA-SHA256')
-      .update('waitlayer')
-      .sign(normalizePem(escapedPrivate));
+    const signature = createSign('RSA-SHA256').update('ateva').sign(normalizePem(escapedPrivate));
     expect(signature.length).toBeGreaterThan(0);
   });
 
   it('a signature made from the normalised private key verifies against the public key', () => {
-    const payload = 'waitlayer-a097';
+    const payload = 'ateva-a097';
     const signature = createSign('RSA-SHA256').update(payload).sign(normalizePem(escapedPrivate));
     const { createVerify } = require('node:crypto') as typeof import('node:crypto');
     const verified = createVerify('RSA-SHA256')

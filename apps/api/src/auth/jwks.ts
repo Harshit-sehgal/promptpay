@@ -5,7 +5,7 @@ import { deriveKeyId } from './jwt-key-id';
 import { loadVerificationKeySet } from './jwt-keys';
 
 /**
- * A JSON Web Key as defined by RFC 7517. Only the RSA members WaitLayer
+ * A JSON Web Key as defined by RFC 7517. Only the RSA members Ateva
  * emits are modelled here.
  */
 export interface RsaJwk {

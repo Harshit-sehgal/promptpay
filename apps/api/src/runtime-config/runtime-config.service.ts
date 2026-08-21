@@ -3,7 +3,7 @@ import semver from 'semver';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -38,7 +38,7 @@ export const RUNTIME_CONFIG_KEYS = {
   DETECTOR_VERSION: { scope: 'detector', target: '1.0.0' },
 } as const satisfies Record<string, RuntimeConfigKey>;
 
-const RUNTIME_CONFIG_INVALIDATION_CHANNEL = 'waitlayer:runtime-config:invalidate';
+const RUNTIME_CONFIG_INVALIDATION_CHANNEL = 'ateva:runtime-config:invalidate';
 
 interface CacheEntry<T> {
   value: T;
@@ -511,13 +511,13 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Product/deployment environment identity (`WAITLAYER_ENVIRONMENT_KIND`),
+   * Product/deployment environment identity (`ATEVA_ENVIRONMENT_KIND`),
    * deliberately separate from `NODE_ENV`. A `'sandbox'` deployment serves
    * non-cash XTS placements through the sandbox opportunity path (WL-G007)
    * instead of failing closed; every other kind keeps the production gates.
    */
   getEnvironmentKind(): string {
-    return this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND') ?? 'development';
+    return this.config.get<string>('ATEVA_ENVIRONMENT_KIND') ?? 'development';
   }
 
   // ── Private helpers ──

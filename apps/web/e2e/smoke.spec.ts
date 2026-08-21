@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 import { createTestUser, deleteTestUser, loginAs, makeTestUser, TestUser } from './fixtures/users';
 
 /**
- * WaitLayer browser E2E smoke tests.
+ * Ateva browser E2E smoke tests.
  *
  * These tests verify the most critical user-facing pages render correctly
  * in a real browser (Chromium). They complement the vitest unit/integration
@@ -11,15 +11,15 @@ import { createTestUser, deleteTestUser, loginAs, makeTestUser, TestUser } from 
  * content that only surface in a real DOM.
  *
  * Required services:
- *   - Web: `pnpm --filter waitlayer-web build && pnpm --filter waitlayer-web start`
- *   - API: `pnpm --filter waitlayer-api build && node apps/api/dist/apps/api/src/main.js`
+ *   - Web: `pnpm --filter ateva-web build && pnpm --filter ateva-web start`
+ *   - API: `pnpm --filter ateva-api build && node apps/api/dist/apps/api/src/main.js`
  *     (for API-dependent pages like /developer)
  *
  * Authenticated tests create real users through the public signup API and then
  * log in via the email/password form. This avoids relying on the mock Google
  * button, which is only available in development builds.
  *
- * Run with: pnpm --filter waitlayer-web e2e
+ * Run with: pnpm --filter ateva-web e2e
  */
 
 const developerUser: TestUser = makeTestUser('developer');
@@ -28,7 +28,7 @@ const advertiserUser: TestUser = makeTestUser('advertiser');
 test.describe('Landing page', () => {
   test('renders the hero section and navigation', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/WaitLayer/i);
+    await expect(page).toHaveTitle(/Ateva/i);
     await expect(page.locator('h1').first()).toBeVisible();
     const nav = page.locator('nav').first();
     await expect(nav).toHaveCount(1);
@@ -154,7 +154,7 @@ test.describe('Advertiser waitlist', () => {
   });
 
   test('submits a signup and shows the recorded state', async ({ page }) => {
-    const email = `e2e-waitlist-${Date.now()}@waitlayer.test`;
+    const email = `e2e-waitlist-${Date.now()}@ateva.test`;
     await page.goto('/advertisers');
     await page.getByLabel('Work email').fill(email);
     await page.getByLabel(/I agree to receive email updates/i).check();

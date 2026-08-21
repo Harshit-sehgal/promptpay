@@ -21,7 +21,7 @@ import { PrismaService } from '../config/prisma.service';
  */
 
 const BASE = '/api/v1/marketing/waitlist';
-const TEST_EMAIL = 'waitlist-integration@waitlayer.test';
+const TEST_EMAIL = 'waitlist-integration@ateva.test';
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.advertiserWaitlist.deleteMany({ where: { email: TEST_EMAIL } });
@@ -70,7 +70,7 @@ describe('Advertiser waitlist (real app, real DB)', () => {
 
   it('persists a normalized signup with consent and an audit trail', async () => {
     const res = await submit({
-      email: '  Waitlist-Integration@WaitLayer.test ',
+      email: '  Waitlist-Integration@Ateva.test ',
       company: 'Acme Corp',
       country: 'US',
       consent: true,

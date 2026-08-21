@@ -60,8 +60,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
       },
       algorithms: ['RS256'],
-      issuer: config.get<string>('JWT_ISSUER', 'waitlayer'),
-      audience: config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
+      issuer: config.get<string>('JWT_ISSUER', 'ateva'),
+      audience: config.get<string>('JWT_AUDIENCE', 'ateva-client'),
     });
     // Assigned after super() (this is unavailable before super() in a derived
     // class). The secretOrKeyProvider closure above only runs during request

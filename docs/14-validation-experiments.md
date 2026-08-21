@@ -39,7 +39,7 @@ Goal: validate whether developer-tool advertisers will pay for this inventory.
 
 Hypothesis:
 
-Developer-tool advertisers will test $50 to $100 campaigns if WaitLayer provides verified impressions, targeting, and invalid-traffic reporting.
+Developer-tool advertisers will test $50 to $100 campaigns if Ateva provides verified impressions, targeting, and invalid-traffic reporting.
 
 Method:
 
@@ -235,4 +235,3 @@ Decision:
 - If success, build reports as designed.
 - If mixed, add UTM/conversion guidance.
 - If failure, redesign advertiser proposition.
-

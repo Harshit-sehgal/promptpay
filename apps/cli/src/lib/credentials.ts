@@ -5,14 +5,14 @@ import * as path from 'path';
 
 import { clearAgentTelemetry, enableBridge } from './agent-spool';
 
-const CRED_DIR = path.join(os.homedir(), '.config', 'waitlayer');
+const CRED_DIR = path.join(os.homedir(), '.config', 'ateva');
 const CRED_FILE = path.join(CRED_DIR, 'credentials.json');
 
 // OS keychain coordinates for the per-device event secret. When a keychain
 // backend (keytar: GNOME Keyring / macOS Keychain / Windows CredMan) is
 // available, the secret lives ONLY there; otherwise we fall back to the local
 // XOR-obfuscated file (dev/CI only — production refuses the fallback).
-const KEYCHAIN_SERVICE = 'waitlayer-cli';
+const KEYCHAIN_SERVICE = 'ateva-cli';
 const KEYCHAIN_ACCOUNT = 'device-event-secret';
 
 // OS keychain coordinates for the access/refresh tokens. Same back-end as the
@@ -242,7 +242,7 @@ export async function setCredentials(creds: Credentials): Promise<void> {
   try {
     fs.chmodSync(CRED_DIR, 0o700);
   } catch {
-    console.warn('[waitlayer] Failed to set credentials directory permissions');
+    console.warn('[ateva] Failed to set credentials directory permissions');
   }
   // Strip the event secret AND the tokens BEFORE writing. The event secret is
   // stored via storeDeviceEventSecret(); the tokens via saveTokens(). The JSON
@@ -295,7 +295,7 @@ export async function setCredentials(creds: Credentials): Promise<void> {
  * removes the environment from the question.
  */
 export function assertInsecureSecretStoreAllowed(env: NodeJS.ProcessEnv): void {
-  if (env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE !== '1') {
+  if (env.ATEVA_ALLOW_INSECURE_SECRET_STORE !== '1') {
     // The local XOR storage is recoverable from `hostname + username` alone
     // (the key in `hashDeviceSecretOnDisk` derives from those two values, both
     // fully discoverable to any local code), so the per-device HMAC signing key
@@ -304,7 +304,7 @@ export function assertInsecureSecretStoreAllowed(env: NodeJS.ProcessEnv): void {
     throw new Error(
       'No OS keychain is available, so the device event secret cannot be stored securely.\n' +
         'Install a keyring backend (GNOME Keyring / macOS Keychain / Windows Credential Manager),\n' +
-        'or, for development and CI only, set WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1 to accept\n' +
+        'or, for development and CI only, set ATEVA_ALLOW_INSECURE_SECRET_STORE=1 to accept\n' +
         'local obfuscated storage that is recoverable by any process running as this user.',
     );
   }
@@ -312,7 +312,7 @@ export function assertInsecureSecretStoreAllowed(env: NodeJS.ProcessEnv): void {
   // Reached only by explicit opt-in. Say so every time — this is not a
   // condition anyone should get used to seeing without noticing.
   console.warn(
-    '[waitlayer] WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1: storing the device event secret in ' +
+    '[ateva] ATEVA_ALLOW_INSECURE_SECRET_STORE=1: storing the device event secret in ' +
       'local obfuscated form. Any process running as this user can recover it.',
   );
 }
@@ -334,7 +334,7 @@ export function assertInsecureSecretStoreAllowed(env: NodeJS.ProcessEnv): void {
  * warning only fires on a failed keychain WRITE.
  *
  * So the default is inverted: no keychain means refuse. Dev and CI opt in
- * explicitly with `WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1`, which is a
+ * explicitly with `ATEVA_ALLOW_INSECURE_SECRET_STORE=1`, which is a
  * deliberate act that shows up in a shell history or a workflow file, rather
  * than a condition that happens to be false on a user's laptop.
  */
@@ -345,7 +345,7 @@ export async function storeDeviceEventSecret(secret: string): Promise<void> {
       await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret);
       return;
     } catch {
-      console.warn('[waitlayer] OS keychain write failed; falling back to local storage');
+      console.warn('[ateva] OS keychain write failed; falling back to local storage');
     }
   }
 
@@ -403,7 +403,7 @@ export async function saveTokens(tokens: Tokens): Promise<void> {
       await keytar.setPassword(KEYCHAIN_SERVICE, TOKENS_ACCOUNT, JSON.stringify(tokens));
       return;
     } catch {
-      console.warn('[waitlayer] OS keychain write failed; storing tokens in local fallback');
+      console.warn('[ateva] OS keychain write failed; storing tokens in local fallback');
     }
   }
   // Plaintext fallback (headless CI / no keychain). The directory is 0o700 and
@@ -474,7 +474,7 @@ export async function clearTokens(): Promise<void> {
  */
 function hashDeviceSecretOnDisk(secret: string): string {
   const key = createHash('sha256')
-    .update(`${os.hostname()}-${os.userInfo().username}-waitlayer`)
+    .update(`${os.hostname()}-${os.userInfo().username}-ateva`)
     .digest('hex');
   const buf = Buffer.from(secret, 'utf-8');
   const keyBuf = Buffer.from(key, 'hex');
@@ -484,7 +484,7 @@ function hashDeviceSecretOnDisk(secret: string): string {
 
 function decodeHashedDeviceSecret(hashedHex: string): string {
   const key = createHash('sha256')
-    .update(`${os.hostname()}-${os.userInfo().username}-waitlayer`)
+    .update(`${os.hostname()}-${os.userInfo().username}-ateva`)
     .digest('hex');
   const buf = Buffer.from(hashedHex, 'hex');
   const keyBuf = Buffer.from(key, 'hex');
@@ -513,7 +513,7 @@ function acquireInstallationLock(): { file: string; handle: number } {
         // The lock disappeared between open/stat; retry.
       }
       if (Date.now() >= deadline) {
-        throw new Error('WaitLayer credential metadata is locked by another process');
+        throw new Error('Ateva credential metadata is locked by another process');
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }

@@ -2,7 +2,7 @@
 
 ## Positioning
 
-WaitLayer should be payout-flexible, not payout-magical. The promise is a global-first payout architecture with PayPal-first MVP support and future provider expansion. Marketing must avoid implying that every country and user is immediately payable.
+Ateva should be payout-flexible, not payout-magical. The promise is a global-first payout architecture with PayPal-first MVP support and future provider expansion. Marketing must avoid implying that every country and user is immediately payable.
 
 ## MVP payout model
 
@@ -120,7 +120,7 @@ Requirements:
 Add when:
 
 - Supported countries and tax onboarding improve conversion for eligible users.
-- WaitLayer needs stronger KYC/tax collection through a managed provider.
+- Ateva needs stronger KYC/tax collection through a managed provider.
 
 Rules:
 

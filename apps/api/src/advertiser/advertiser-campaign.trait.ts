@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 
-import { BidType, Prisma } from '@waitlayer/db';
+import { BidType, Prisma } from '@ateva/db';
 import {
   AD_SERVING,
   assertSameCurrency,
@@ -12,7 +12,7 @@ import {
   getCurrencyPolicy,
   Money,
   validatePositiveMoney,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';

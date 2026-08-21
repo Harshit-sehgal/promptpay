@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -93,7 +93,7 @@ describe('Payout double-execution safety (DB-backed)', () => {
 
     await prisma.user.create({
       data: {
-        email: 'admin-double@waitlayer.com',
+        email: 'admin-double@ateva.com',
         passwordHash: await bcrypt.hash('Password123!', 12),
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -115,7 +115,7 @@ describe('Payout double-execution safety (DB-backed)', () => {
     // the request (checkSharedPayoutDestination). Give each seeded developer a
     // distinct destination so this suite exercises double-execution, not fraud.
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
-    const devEmail = `dev-double-${suffix}@waitlayer.com`;
+    const devEmail = `dev-double-${suffix}@ateva.com`;
     const signup = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({
@@ -140,7 +140,7 @@ describe('Payout double-execution safety (DB-backed)', () => {
     adminToken = (
       await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'admin-double@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'admin-double@ateva.com', password: 'Password123!' })
         .expect(200)
     ).body.accessToken;
 
@@ -304,7 +304,7 @@ describe('Payout double-execution safety (DB-backed)', () => {
   // an untranslated unique-constraint violation would leak a Prisma error to a
   // developer and look like a platform fault rather than "already claimed".
   it('lets only one of two competing requests consume the same earnings', async () => {
-    const devEmail = `dev-spend-${Date.now()}${Math.random().toString(36).slice(2, 8)}@waitlayer.com`;
+    const devEmail = `dev-spend-${Date.now()}${Math.random().toString(36).slice(2, 8)}@ateva.com`;
     const signup = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({

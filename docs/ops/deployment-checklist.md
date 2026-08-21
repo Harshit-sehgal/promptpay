@@ -52,7 +52,7 @@ explicit so a config-only run is safe before networking or migrations are
 available.
 
 It checks: the dev-compose override trap (see the warning below), the full
-`@waitlayer/config` production schema, `COOKIE_SECURE`, every mock-auth flag,
+`@ateva/config` production schema, `COOKIE_SECURE`, every mock-auth flag,
 test-only `THROTTLE_*` overrides, the reference attestation bridge, Postgres
 and Redis reachability, unfinished migrations, whether an administrator exists
 **and has TOTP enrolled**, and which money switches are live. Exit 0 means
@@ -77,7 +77,7 @@ every blocking check passed.
 
 **The API will not start in production without this.**
 `EnvironmentMarkerService.verify()` refuses to boot unless `environment_markers`
-row 1 exists and matches your `WAITLAYER_ENVIRONMENT_KIND`/`_ID`. Non-production
+row 1 exists and matches your `ATEVA_ENVIRONMENT_KIND`/`_ID`. Non-production
 auto-creates it; production deliberately does not, because auto-stamping would
 destroy the interlock — an API accidentally pointed at the wrong database would
 simply claim it.
@@ -86,8 +86,8 @@ Run once, after `migrate deploy`, against the database you intend to serve:
 
 ```bash
 DATABASE_URL=<production-url> \
-WAITLAYER_ENVIRONMENT_KIND=production \
-WAITLAYER_ENVIRONMENT_ID=<your-env-id> \
+ATEVA_ENVIRONMENT_KIND=production \
+ATEVA_ENVIRONMENT_ID=<your-env-id> \
   pnpm bootstrap:env-marker --confirm-stamp
 ```
 

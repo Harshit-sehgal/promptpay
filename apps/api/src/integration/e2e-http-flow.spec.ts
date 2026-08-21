@@ -6,8 +6,8 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { BidType, MINIMUM_VISIBLE_DURATION_MS, PayoutProvider, UserRole } from '@waitlayer/shared';
-import { signPayload } from '@waitlayer/shared';
+import { BidType, MINIMUM_VISIBLE_DURATION_MS, PayoutProvider, UserRole } from '@ateva/shared';
+import { signPayload } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -21,7 +21,7 @@ import { LedgerService } from '../ledger/ledger.service';
 
 const ATTESTATION_PROVIDER = 'http-flow-attestor';
 const ATTESTATION_ISSUER = 'https://http-flow-attestor.example.test';
-const ATTESTATION_AUDIENCE = 'waitlayer-http-flow';
+const ATTESTATION_AUDIENCE = 'ateva-http-flow';
 const ATTESTATION_KID = 'http-flow-attestor-key';
 const ATTESTATION_VERSION = 'http-flow-v1';
 
@@ -141,7 +141,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin@waitlayer.com',
+        email: 'admin@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -285,7 +285,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'dev@waitlayer.com',
+          email: 'dev@ateva.com',
           password: 'Password123!',
           role: UserRole.DEVELOPER,
           name: 'Jane Developer',
@@ -305,7 +305,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'adv@waitlayer.com',
+          email: 'adv@ateva.com',
           password: 'Password123!',
           role: UserRole.ADVERTISER,
           name: 'Big Brand Co',
@@ -324,7 +324,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'adv-b@waitlayer.com',
+          email: 'adv-b@ateva.com',
           password: 'Password123!',
           role: UserRole.ADVERTISER,
           name: 'Alternative Advertiser',
@@ -346,7 +346,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'admin2@waitlayer.com',
+          email: 'admin2@ateva.com',
           password: 'Password123!',
           role: UserRole.ADMIN,
           name: 'Super Admin',
@@ -363,7 +363,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Developer Login
       const devRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'dev@ateva.com', password: 'Password123!' })
         .expect(200);
       devToken = devRes.body.accessToken;
       firstDevRefreshToken = devRes.body.refreshToken;
@@ -371,14 +371,14 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Admin Login
       const adminRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'admin@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'admin@ateva.com', password: 'Password123!' })
         .expect(200);
       adminToken = adminRes.body.accessToken;
 
       // Advertiser B Login
       const advBRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'adv-b@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'adv-b@ateva.com', password: 'Password123!' })
         .expect(200);
       advertiserBToken = advBRes.body.accessToken;
 
@@ -424,7 +424,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Login again to refresh devToken for subsequent tests
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'dev@ateva.com', password: 'Password123!' })
         .expect(200);
       devToken = loginRes.body.accessToken;
     });
@@ -461,7 +461,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should complete the full password reset flow (forgot → reset → re-login)', async () => {
-      const email = 'reset-flow@waitlayer.com';
+      const email = 'reset-flow@ateva.com';
       const originalPassword = 'Original-password-123!';
       const newPassword = 'Brand-new-password-456!';
 
@@ -482,7 +482,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Unknown email → generic message, no token leaked
       const unknownRes = await request(app.getHttpServer())
         .post('/api/v1/auth/password/forgot')
-        .send({ email: 'does-not-exist@waitlayer.com' })
+        .send({ email: 'does-not-exist@ateva.com' })
         .expect(200);
       expect(unknownRes.body.token).toBeUndefined();
       expect(unknownRes.body.message).toContain('If an account exists');
@@ -1086,7 +1086,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'dev2@waitlayer.com',
+          email: 'dev2@ateva.com',
           password: 'Password123!',
           role: UserRole.DEVELOPER,
           name: 'Dev Two',
@@ -1099,7 +1099,7 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev2@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'dev2@ateva.com', password: 'Password123!' })
         .expect(200);
       dev2Token = loginRes.body.accessToken;
 

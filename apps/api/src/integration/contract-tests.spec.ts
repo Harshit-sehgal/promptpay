@@ -5,14 +5,8 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import {
-  BidType,
-  canonicalJson,
-  PayoutProvider,
-  UserRole,
-  verifySignature,
-} from '@waitlayer/shared';
-import { signPayload } from '@waitlayer/shared';
+import { BidType, canonicalJson, PayoutProvider, UserRole, verifySignature } from '@ateva/shared';
+import { signPayload } from '@ateva/shared';
 import {
   AdClickResponse,
   AdRenderedResponse,
@@ -32,7 +26,7 @@ import {
   SignupResponse,
   WaitStateEndResponse,
   WaitStateStartResponse,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -45,7 +39,7 @@ import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 
 const ATTESTATION_PROVIDER = 'contract-attestor';
 const ATTESTATION_ISSUER = 'https://contract-attestor.example.test';
-const ATTESTATION_AUDIENCE = 'waitlayer-contract';
+const ATTESTATION_AUDIENCE = 'ateva-contract';
 const ATTESTATION_KID = 'contract-attestor-key';
 const ATTESTATION_VERSION = 'contract-v1';
 // Resolve after `ms` milliseconds without nested Promise-executor callbacks.

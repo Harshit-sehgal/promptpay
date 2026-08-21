@@ -9,7 +9,7 @@ import { prompt } from '../lib/prompt';
 export async function runConfig() {
   const creds = await getCredentials();
   if (!creds) {
-    console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
+    console.error(chalk.red('Not logged in. Run `ateva auth` first.'));
     process.exit(1);
   }
 
@@ -26,7 +26,7 @@ export async function runConfig() {
 
       console.log();
       await printSandboxBanner(api);
-      console.log(chalk.bold.cyan('WaitLayer Settings'));
+      console.log(chalk.bold.cyan('Ateva Settings'));
       console.log(chalk.dim('─'.repeat(40)));
       console.log();
       console.log(
@@ -110,7 +110,7 @@ export async function runConfig() {
       continue;
     } catch (err: unknown) {
       if (getErrorStatus(err) === 401) {
-        console.error(chalk.red('Session expired. Run `waitlayer auth` again.'));
+        console.error(chalk.red('Session expired. Run `ateva auth` again.'));
       } else {
         console.error(
           chalk.red(`Failed to load settings: ${getErrorMessage(err, 'request failed')}`),

@@ -4,7 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -16,7 +16,7 @@ import { AuthService } from './auth.service';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-const EMAIL = 'logout-test@waitlayer.com';
+const EMAIL = 'logout-test@ateva.com';
 const PASSWORD = 'Password123!';
 
 describe('Auth logout contracts (P0.3)', () => {
@@ -93,7 +93,7 @@ describe('Auth logout contracts (P0.3)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti,
-        aud: ['waitlayer-client', 'access'],
+        aud: ['ateva-client', 'access'],
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -121,7 +121,7 @@ describe('Auth logout contracts (P0.3)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti,
-        aud: ['waitlayer-client', 'access'],
+        aud: ['ateva-client', 'access'],
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -133,8 +133,8 @@ describe('Auth logout contracts (P0.3)', () => {
         role: UserRole.DEVELOPER,
         family: 'f',
         jti: 'j-expired',
-        iss: 'waitlayer',
-        aud: ['waitlayer-client', 'refresh'],
+        iss: 'ateva',
+        aud: ['ateva-client', 'refresh'],
       },
       { expiresIn: -10 },
     );
@@ -171,8 +171,8 @@ describe('Auth logout contracts (P0.3)', () => {
         role: UserRole.DEVELOPER,
         family: 'f',
         jti: 'j-rogue',
-        iss: 'waitlayer',
-        aud: ['waitlayer-client', 'refresh'],
+        iss: 'ateva',
+        aud: ['ateva-client', 'refresh'],
       },
       { expiresIn: '30d' },
     );

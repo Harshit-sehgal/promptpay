@@ -55,7 +55,7 @@ async function main() {
     update: {},
     create: {
       id: DEMO_ADVERTISER_USER_ID,
-      email: 'demo-advertiser@waitlayer.dev',
+      email: 'demo-advertiser@ateva.dev',
       name: 'Demo Advertiser',
       role: 'advertiser',
       status: 'active',
@@ -72,8 +72,8 @@ async function main() {
       id: DEMO_ADVERTISER_ID,
       userId: DEMO_ADVERTISER_USER_ID,
       companyName: 'Demo Advertiser Inc.',
-      billingEmail: 'billing@waitlayer.dev',
-      websiteUrl: 'https://waitlayer.dev',
+      billingEmail: 'billing@ateva.dev',
+      websiteUrl: 'https://ateva.dev',
     },
   });
   await prisma.campaign.upsert({
@@ -99,8 +99,8 @@ async function main() {
       campaignId: DEMO_CAMPAIGN_ID,
       title: 'Boost your AI workflow',
       sponsoredMessage: 'Try the tool developers love during wait time.',
-      destinationUrl: 'https://waitlayer.dev/demo',
-      displayDomain: 'waitlayer.dev',
+      destinationUrl: 'https://ateva.dev/demo',
+      displayDomain: 'ateva.dev',
       status: 'draft',
     },
   });
@@ -111,7 +111,7 @@ async function main() {
     update: {},
     create: {
       id: DEMO_DEVELOPER_USER_ID,
-      email: 'demo-developer@waitlayer.dev',
+      email: 'demo-developer@ateva.dev',
       name: 'Demo Developer',
       role: 'developer',
       status: 'active',

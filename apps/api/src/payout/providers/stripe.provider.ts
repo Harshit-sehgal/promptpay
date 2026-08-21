@@ -67,7 +67,7 @@ export class StripeProvider {
             price_data: {
               currency: params.currency.toLowerCase(),
               product_data: {
-                name: 'WaitLayer Ad Credit Deposit',
+                name: 'Ateva Ad Credit Deposit',
                 description: `Deposit for advertiser ${params.advertiserId}`,
               },
               unit_amount: Number(
@@ -298,9 +298,9 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       );
     }
 
-    const environmentKind = this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND') ?? 'development';
-    const environmentId = this.config.get<string>('WAITLAYER_ENVIRONMENT_ID') ?? 'local';
-    const idempotencyKey = `waitlayer-connect-${createHash('sha256')
+    const environmentKind = this.config.get<string>('ATEVA_ENVIRONMENT_KIND') ?? 'development';
+    const environmentId = this.config.get<string>('ATEVA_ENVIRONMENT_ID') ?? 'local';
+    const idempotencyKey = `ateva-connect-${createHash('sha256')
       .update(`${environmentKind}\0${environmentId}\0${params.userId}`)
       .digest('hex')}`;
     const account = await this.stripe.accounts.create(
@@ -311,9 +311,9 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
           transfers: { requested: true },
         },
         metadata: {
-          waitlayerUserId: params.userId,
-          waitlayerEnvironmentKind: environmentKind,
-          waitlayerEnvironmentId: environmentId,
+          atevaUserId: params.userId,
+          atevaEnvironmentKind: environmentKind,
+          atevaEnvironmentId: environmentId,
         },
       },
       { idempotencyKey },

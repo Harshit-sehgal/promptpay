@@ -6,7 +6,7 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "out/**"]
     },
-    "@waitlayer/eslint-config#build": {
+    "@ateva/eslint-config#build": {
       "outputs": []
     },
     "dev": {

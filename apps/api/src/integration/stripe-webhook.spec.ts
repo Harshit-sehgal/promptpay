@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';

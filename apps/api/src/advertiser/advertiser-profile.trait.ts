@@ -6,8 +6,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { DEFAULT_COMPANY_NAME } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';

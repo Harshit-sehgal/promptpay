@@ -1,4 +1,4 @@
-# Contributing to WaitLayer
+# Contributing to Ateva
 
 Thanks for contributing! This short guide covers the conventions the project
 expects before a PR is merged.

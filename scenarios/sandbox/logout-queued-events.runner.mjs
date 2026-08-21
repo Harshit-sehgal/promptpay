@@ -7,7 +7,7 @@ import path from 'node:path';
 // redirected, both the credential file and the default spool land under this
 // disposable directory, so clearCredentials() clears exactly what the fixture
 // wrote (and never touches a real developer's credentials).
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-scenario-logout-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-scenario-logout-'));
 process.env.HOME = directory;
 
 const { clearAgentTelemetry, enqueueAgentEvent, getSpoolPaths, readSpoolStatus } = await import(
@@ -15,7 +15,7 @@ const { clearAgentTelemetry, enqueueAgentEvent, getSpoolPaths, readSpoolStatus }
 );
 const { clearCredentials } = await import('../../apps/cli/dist/lib/credentials.js');
 
-const credentialFile = path.join(directory, '.config', 'waitlayer', 'credentials.json');
+const credentialFile = path.join(directory, '.config', 'ateva', 'credentials.json');
 const paths = getSpoolPaths();
 const installationId = 'logout-queued-installation-v1';
 const deviceId = '00000000-0000-4000-8000-000000000005';

@@ -1,7 +1,7 @@
 # ADR 0003: HMAC-Signed, Idempotent Extension Event Pipeline
 
 - **Status:** Accepted (2026)
-- **Deciders:** WaitLayer engineering
+- **Deciders:** Ateva engineering
 
 ## Context
 

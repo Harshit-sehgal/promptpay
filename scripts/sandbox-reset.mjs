@@ -7,13 +7,13 @@ import { dirname, join } from 'node:path';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 const args = new Set(process.argv.slice(2));
-const kind = process.env.WAITLAYER_ENVIRONMENT_KIND;
-const environmentId = process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local';
+const kind = process.env.ATEVA_ENVIRONMENT_KIND;
+const environmentId = process.env.ATEVA_ENVIRONMENT_ID ?? 'local';
 const databaseUrl = process.env.DATABASE_URL;
 if (kind !== 'sandbox' && kind !== 'test')
-  throw new Error('sandbox-reset requires WAITLAYER_ENVIRONMENT_KIND=sandbox or test');
+  throw new Error('sandbox-reset requires ATEVA_ENVIRONMENT_KIND=sandbox or test');
 if (!args.has('--confirm-sandbox-reset'))
   throw new Error('pass --confirm-sandbox-reset to reset sandbox state');
 if (!databaseUrl) throw new Error('sandbox-reset requires DATABASE_URL');

@@ -2,7 +2,7 @@ import { Transform } from 'class-transformer';
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { SIGNUP_ALLOWED_ROLES, UserRole } from '@waitlayer/shared';
+import { SIGNUP_ALLOWED_ROLES, UserRole } from '@ateva/shared';
 
 import { IsStrongPassword } from '../../common/validators/password.validator';
 import { transformAuthEmail } from '../email-normalization';

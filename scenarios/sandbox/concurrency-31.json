@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "parallel_provider_user",
   "environment": "sandbox",
-  "seed": "waitlayer-concurrency-v1",
+  "seed": "ateva-concurrency-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

@@ -189,14 +189,14 @@ export function TwoFactorEnrolment({
   const downloadBackupCodes = () => {
     const blob = new Blob(
       [
-        `WaitLayer two-factor backup codes\nGenerated: ${new Date().toISOString()}\n\n${backupCodes.join('\n')}\n`,
+        `Ateva two-factor backup codes\nGenerated: ${new Date().toISOString()}\n\n${backupCodes.join('\n')}\n`,
       ],
       { type: 'text/plain' },
     );
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'waitlayer-2fa-backup-codes.txt';
+    anchor.download = 'ateva-2fa-backup-codes.txt';
     anchor.click();
     URL.revokeObjectURL(url);
     setBackupCodesSaved(true);
@@ -229,7 +229,7 @@ export function TwoFactorEnrolment({
         <div className="mt-4 rounded-xl border border-amber-400/50 bg-amber-50 p-4 text-amber-950">
           <p className="text-sm font-semibold">Save these one-time backup codes now</p>
           <p className="mt-1 text-xs leading-5">
-            Each code works once. This is the only time WaitLayer will display this set.
+            Each code works once. This is the only time Ateva will display this set.
           </p>
           <ul
             aria-label="Two-factor backup codes"

@@ -4,12 +4,12 @@ import {
   formatMinorUnits,
   parseMinor,
   primaryCurrency,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 /**
  * P1.4 — mixed-currency client rendering helpers.
  *
- * All currency math here defers to `@waitlayer/shared` (`primaryCurrency`,
+ * All currency math here defers to `@ateva/shared` (`primaryCurrency`,
  * `formatMinorUnits`, `convertMoney`) so the extension and server agree on
  * semantics. The API serializes BigInt monetary columns as decimal strings;
  * `byCurrency` therefore arrives as `Record<string, string>` and we parse it
@@ -44,7 +44,7 @@ export interface DisplayResolution {
 /**
  * Resolve which currency to display.
  *  - No preference → the deterministic primary currency (first positive balance
- *    in ascending ISO-4217 order) via `@waitlayer/shared#primaryCurrency`.
+ *    in ascending ISO-4217 order) via `@ateva/shared#primaryCurrency`.
  *  - Preference present in `byCurrency` → that currency.
  *  - Preference present but ABSENT from `byCurrency` → show the primary
  *    currency and a clear note; do NOT fabricate an FX-converted total (the
@@ -74,7 +74,7 @@ export function resolveDisplayCurrency(
 }
 
 /**
- * Guard for cross-currency conversion. Uses `@waitlayer/shared#convertMoney`
+ * Guard for cross-currency conversion. Uses `@ateva/shared#convertMoney`
  * ONLY when a REAL quote is supplied — it never fabricates a rate. Without a
  * quote (the current backend state) it returns the amount unchanged, so a
  * caller can never silently invent a converted total.

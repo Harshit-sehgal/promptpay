@@ -48,21 +48,21 @@ const IS_LOOPBACK =
   API_HOSTNAME === 'localhost' || API_HOSTNAME === '127.0.0.1' || API_HOSTNAME === '::1';
 if (IS_LOOPBACK) {
   console.warn(
-    '[WaitLayer] CLI is pointed at a local dev API (' +
+    '[Ateva] CLI is pointed at a local dev API (' +
       API_URL +
-      '). Set WAITLAYER_API_URL to the production API (https://api.waitlayer.com/api/v1) to connect to WaitLayer.',
+      '). Set ATEVA_API_URL to the production API (https://api.ateva.com/api/v1) to connect to Ateva.',
   );
 }
 
 const program = new Command();
 program
-  .name('waitlayer')
-  .description('WaitLayer CLI — track AI wait states for the private beta')
+  .name('ateva')
+  .description('Ateva CLI — track AI wait states for the private beta')
   .version(version);
 
 program
   .command('auth')
-  .description('Authenticate with WaitLayer (login or signup)')
+  .description('Authenticate with Ateva (login or signup)')
   .option('-e, --email <email>', 'Login email')
   .option('-s, --signup', 'Create a new account instead of logging in')
   .action((opts) => runAuth(opts));
@@ -142,13 +142,13 @@ integrationsCommand
   });
 integrationsCommand
   .command('repair <provider>')
-  .description('Repair a WaitLayer-owned native hook integration')
+  .description('Repair a Ateva-owned native hook integration')
   .action((provider: string) => {
     runIntegrationRepair({ provider });
   });
 integrationsCommand
   .command('uninstall <provider>')
-  .description('Remove only WaitLayer-owned native hook entries')
+  .description('Remove only Ateva-owned native hook entries')
   .action((provider: string) => {
     runIntegrationUninstall({ provider });
   });
@@ -169,7 +169,7 @@ program
   .action(() => runConfig());
 
 // Only parse when run as the CLI entrypoint (direct node invocation or the
-// installed `waitlayer` bin symlink, both realpath-identical to this file).
+// installed `ateva` bin symlink, both realpath-identical to this file).
 // Tests import `program` to exercise the commander wiring hermetically; under
 // an ESM test runner `__filename` is absent and the guard stays false.
 let isEntrypoint = false;

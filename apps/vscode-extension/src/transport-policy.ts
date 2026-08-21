@@ -7,8 +7,8 @@ export function resolveCredentialSafeUrl(baseUrl: string, path: string): URL {
 
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
     throw new Error(
-      `WaitLayer refuses to send credentials over ${url.protocol}. ` +
-      "Set 'waitlayer.apiUrl' to an https:// endpoint, or http://localhost for local development.",
+      `Ateva refuses to send credentials over ${url.protocol}. ` +
+        "Set 'ateva.apiUrl' to an https:// endpoint, or http://localhost for local development.",
     );
   }
 
@@ -17,9 +17,7 @@ export function resolveCredentialSafeUrl(baseUrl: string, path: string): URL {
 
 export function requestHostnameForUrl(url: URL): string {
   const hostname = url.hostname.toLowerCase();
-  return hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1)
-    : hostname;
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
 }
 
 function buildUrl(baseUrl: string, path: string): string {

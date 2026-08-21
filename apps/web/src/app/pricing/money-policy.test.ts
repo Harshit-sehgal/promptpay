@@ -5,7 +5,7 @@ import {
   depositMinimumMinor,
   formatMinorUnits,
   payoutMinimumMinor,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 // Public pricing renders only configured thresholds/currency policy. Participant
 // compensation is intentionally not expressed as a percentage of advertiser

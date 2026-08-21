@@ -1,6 +1,6 @@
 # Environment Variable Reference
 
-All variables are validated at boot by `@waitlayer/config` (Zod schema in
+All variables are validated at boot by `@ateva/config` (Zod schema in
 `packages/config/src`). Unknown variables are ignored; **required** variables
 missing or invalid cause the process to exit at startup. See `.env.example` for
 a copy-paste template.
@@ -15,10 +15,10 @@ Default shown where one exists.
 | `NODE_ENV`  | opt | `development` | `development` \| `production` \| `test` |
 | `LOG_LEVEL` | opt | `info`        | `debug` \| `info` \| `warn` \| `error`  |
 
-| `WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | `development` \\| `test` \\| `sandbox` \\| `staging` \\| `production`; production requires `NODE_ENV=production`, and sandbox is never production. |
-| `WAITLAYER_ENVIRONMENT_ID` | opt | `local` | Stable environment/run identifier persisted in the database marker. |
+| `ATEVA_ENVIRONMENT_KIND` | opt | `development` | `development` \\| `test` \\| `sandbox` \\| `staging` \\| `production`; production requires `NODE_ENV=production`, and sandbox is never production. |
+| `ATEVA_ENVIRONMENT_ID` | opt | `local` | Stable environment/run identifier persisted in the database marker. |
 | `SANDBOX_RESET_TOKEN` | opt | — | 32–256 character operator bearer required by the admin-only sandbox reset endpoint; accepted only by `test`/`sandbox` deployments and never a production credential. |
-| `NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | Web build identity; valid values are `development`, `test`, `sandbox`, `staging`, and `production`; `sandbox` renders a persistent “Test credits only — no cash value” banner. Production deployments must set this explicitly to `production`. |
+| `NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND` | opt | `development` | Web build identity; valid values are `development`, `test`, `sandbox`, `staging`, and `production`; `sandbox` renders a persistent “Test credits only — no cash value” banner. Production deployments must set this explicitly to `production`. |
 | `ENABLE_STAGING_FAUCET` | opt | `false` | Test faucet toggle; accepted only in `test`, `sandbox`, or `staging`. |
 
 ## Database
@@ -66,21 +66,21 @@ Default shown where one exists.
 
 ## Auth
 
-| Variable                            | Req | Default            | Purpose                                                                                                                                  |
-| ----------------------------------- | --- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `JWT_PRIVATE_KEY`                   | req | —                  | PEM-encoded RSA private key for RS256 access/refresh tokens.                                                                             |
-| `JWT_PUBLIC_KEY`                    | req | —                  | Current RSA public key. Required by the API and web build.                                                                               |
-| `JWT_PUBLIC_KEYS`                   | opt | —                  | Additional public PEM keys. Keep old keys through `JWT_REFRESH_TTL` and pass the set to the web build.                                   |
-| `JWT_ISSUER`                        | opt | `waitlayer`        | Expected JWT issuer. Custom values must match the web build.                                                                             |
-| `JWT_AUDIENCE`                      | opt | `waitlayer-client` | Base JWT audience. Custom values must match the web build.                                                                               |
-| `JWT_SECRET`                        | req | —                  | Symmetric secret, **min 32 chars**. Used for refresh-token HMAC integrity and BFF rate-limit identity signing. NOT used for JWT signing. |
-| `JWT_ACCESS_TTL`                    | opt | `15m`              | Access token lifetime.                                                                                                                   |
-| `JWT_REFRESH_TTL`                   | opt | `30d`              | Refresh token lifetime.                                                                                                                  |
-| `TOTP_SECRET_ENCRYPTION_KEY`        | opt | —                  | App-level key for encrypted server-stored TOTP seeds. **Required in production** for MFA.                                                |
-| `ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS` | opt | `900`              | Maximum age of an admin step-up token (60-3600 seconds).                                                                                 |
-| `GOOGLE_CLIENT_ID`                  | opt | —                  | Google OAuth client id (server-side verification).                                                                                       |
-| `MOCK_GOOGLE_ENABLED`               | opt | —                  | `1` enables mock Google verifier (ignored in production).                                                                                |
-| `ALLOW_MOCK_GOOGLE`                 | opt | —                  | `true` legacy alias for `MOCK_GOOGLE_ENABLED` (ignored in prod).                                                                         |
+| Variable                            | Req | Default        | Purpose                                                                                                                                  |
+| ----------------------------------- | --- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_PRIVATE_KEY`                   | req | —              | PEM-encoded RSA private key for RS256 access/refresh tokens.                                                                             |
+| `JWT_PUBLIC_KEY`                    | req | —              | Current RSA public key. Required by the API and web build.                                                                               |
+| `JWT_PUBLIC_KEYS`                   | opt | —              | Additional public PEM keys. Keep old keys through `JWT_REFRESH_TTL` and pass the set to the web build.                                   |
+| `JWT_ISSUER`                        | opt | `ateva`        | Expected JWT issuer. Custom values must match the web build.                                                                             |
+| `JWT_AUDIENCE`                      | opt | `ateva-client` | Base JWT audience. Custom values must match the web build.                                                                               |
+| `JWT_SECRET`                        | req | —              | Symmetric secret, **min 32 chars**. Used for refresh-token HMAC integrity and BFF rate-limit identity signing. NOT used for JWT signing. |
+| `JWT_ACCESS_TTL`                    | opt | `15m`          | Access token lifetime.                                                                                                                   |
+| `JWT_REFRESH_TTL`                   | opt | `30d`          | Refresh token lifetime.                                                                                                                  |
+| `TOTP_SECRET_ENCRYPTION_KEY`        | opt | —              | App-level key for encrypted server-stored TOTP seeds. **Required in production** for MFA.                                                |
+| `ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS` | opt | `900`          | Maximum age of an admin step-up token (60-3600 seconds).                                                                                 |
+| `GOOGLE_CLIENT_ID`                  | opt | —              | Google OAuth client id (server-side verification).                                                                                       |
+| `MOCK_GOOGLE_ENABLED`               | opt | —              | `1` enables mock Google verifier (ignored in production).                                                                                |
+| `ALLOW_MOCK_GOOGLE`                 | opt | —              | `true` legacy alias for `MOCK_GOOGLE_ENABLED` (ignored in prod).                                                                         |
 
 ## Advertiser deposits (money-in)
 
@@ -107,14 +107,14 @@ rail (decision D1); Stripe is inactive at launch (D2).** See
 
 ## Email
 
-| Variable                    | Req  | Default                   | Purpose                                                               |
-| --------------------------- | ---- | ------------------------- | --------------------------------------------------------------------- |
-| `EMAIL_DRIVER`              | opt  | `console`                 | `console` \| `resend`; production requires `resend`.                  |
-| `EMAIL_FROM`                | opt  | `noreply@waitlayer.local` | From address; production requires a non-development sender.           |
-| `RESEND_API_KEY`            | opt  | —                         | Resend API key; required by the production email policy.              |
-| `EMAIL_QUEUE_SECRET`        | opt* | —                         | 32+ character queued-payload encryption key; required in production.  |
-| `EMAIL_PROVIDER_TIMEOUT_MS` | opt  | `10000`                   | Transactional email provider timeout (1000-30000).                    |
-| `OPS_ALERT_EMAIL`           | opt* | —                         | Monitored financial/security alert recipient; required in production. |
+| Variable                    | Req  | Default               | Purpose                                                               |
+| --------------------------- | ---- | --------------------- | --------------------------------------------------------------------- |
+| `EMAIL_DRIVER`              | opt  | `console`             | `console` \| `resend`; production requires `resend`.                  |
+| `EMAIL_FROM`                | opt  | `noreply@ateva.local` | From address; production requires a non-development sender.           |
+| `RESEND_API_KEY`            | opt  | —                     | Resend API key; required by the production email policy.              |
+| `EMAIL_QUEUE_SECRET`        | opt* | —                     | 32+ character queued-payload encryption key; required in production.  |
+| `EMAIL_PROVIDER_TIMEOUT_MS` | opt  | `10000`               | Transactional email provider timeout (1000-30000).                    |
+| `OPS_ALERT_EMAIL`           | opt* | —                     | Monitored financial/security alert recipient; required in production. |
 
 ## Sentry (error monitoring)
 
@@ -133,7 +133,7 @@ rail (decision D1); Stripe is inactive at launch (D2).** See
 | `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —                        | If > 0, newly-added/changed payout destinations require MFA for that many hours.                                                                                                                                                                                                                                |
 | `PAYOUT_FENCE_HIGH_VALUE_MINOR`     | opt | per-currency default map | Global override for the payout-fence release threshold (in minor units, e.g. `1000000` = $10,000 USD). A fence release whose exposure is at or above the threshold requires a distinct second approver (`secondApproverId`). Beats any per-currency `HIGH_VALUE_FENCE_<CUR>_MINOR` override.                    |
 | `HIGH_VALUE_FENCE_<CUR>_MINOR`      | opt | per-currency default map | Per-currency threshold (ISO-4217 code in the variable name, e.g. `HIGH_VALUE_FENCE_USD_MINOR=1000000`). Beats the configured policy/default map for that currency but not the global `PAYOUT_FENCE_HIGH_VALUE_MINOR`. Defaults (minor units): USD/EUR/GBP/CAD/AUD/BRL `1000000`, INR `80000000`, JPY `1500000`. |
-| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —                        | Strict JSON provider -> `available`/`coming_soon` API gate.                                                                                                                                                                                                                                                     |
+| `ATEVA_PAYOUT_PROVIDER_STATUS`      | opt | —                        | Strict JSON provider -> `available`/`coming_soon` API gate.                                                                                                                                                                                                                                                     |
 | `PAYOUT_HOLD_DAYS_NEW_ACCOUNT`      | opt | `30`                     | Earnings hold (days) for new/low-trust developers (§8.11 float sizing). Validated 1–365.                                                                                                                                                                                                                        |
 | `PAYOUT_HOLD_DAYS_NORMAL`           | opt | `14`                     | Earnings hold (days) for normal-trust developers (§8.11 float sizing). Validated 1–365.                                                                                                                                                                                                                         |
 | `PAYOUT_HOLD_DAYS_HIGH_TRUST`       | opt | `7`                      | Earnings hold (days) for high-trust developers (§8.11 float sizing). Validated 1–365.                                                                                                                                                                                                                           |

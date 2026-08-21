@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'WaitLayer — private beta for AI wait-state verification';
+export const alt = 'Ateva — private beta for AI wait-state verification';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -35,7 +35,7 @@ export default function OpengraphImage() {
         >
           W
         </div>
-        WaitLayer
+        Ateva
       </div>
       <div style={{ fontSize: 68, fontWeight: 800, marginTop: 40, lineHeight: 1.1 }}>Verify AI</div>
       <div style={{ fontSize: 68, fontWeight: 800, lineHeight: 1.1, color: '#a5b4fc' }}>

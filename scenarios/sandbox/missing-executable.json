@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "terminal_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-missing-executable-v1",
+  "seed": "ateva-missing-executable-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

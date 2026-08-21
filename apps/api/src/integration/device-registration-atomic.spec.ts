@@ -24,7 +24,7 @@ describe('device registration atomicity (real PostgreSQL)', () => {
   async function createDeveloper(label: string) {
     const user = await prisma.user.create({
       data: {
-        email: `device-atomic-${label}-${Date.now()}@waitlayer.test`,
+        email: `device-atomic-${label}-${Date.now()}@ateva.test`,
         name: `Device Atomic ${label}`,
         passwordHash: 'test-password-hash',
         role: 'developer',
@@ -108,8 +108,8 @@ describe('device registration atomicity (real PostgreSQL)', () => {
         platform: 'linux',
       },
     });
-    const triggerName = 'waitlayer_device_atomic_test_outbox_failure';
-    const functionName = 'waitlayer_device_atomic_test_outbox_failure_fn';
+    const triggerName = 'ateva_device_atomic_test_outbox_failure';
+    const functionName = 'ateva_device_atomic_test_outbox_failure_fn';
     await prisma.$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION "${functionName}"() RETURNS trigger
       LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'intentional atomicity test failure'; RETURN NEW; END; $$;

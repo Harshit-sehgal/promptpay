@@ -24,7 +24,7 @@ const pkg = JSON.parse(readFileSync(cliPkgPath, 'utf-8'));
 const dependencySections = ['dependencies', 'optionalDependencies', 'peerDependencies'];
 for (const section of dependencySections) {
   for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-    if (name.startsWith('@waitlayer/') || String(version).startsWith('workspace:')) {
+    if (name.startsWith('@ateva/') || String(version).startsWith('workspace:')) {
       console.error(
         `[verify-cli-bin] FAIL: published ${section} contains private workspace dependency ${name}@${version}`,
       );
@@ -58,7 +58,7 @@ if (!ok || process.exitCode) process.exit(1);
 // Prove that the packaged entrypoint itself is self-contained. Run a copy from
 // the OS temp directory with NODE_PATH cleared, so module resolution cannot
 // accidentally fall back to this monorepo's workspace links.
-const isolatedRoot = mkdtempSync(resolve(tmpdir(), 'waitlayer-cli-bin-'));
+const isolatedRoot = mkdtempSync(resolve(tmpdir(), 'ateva-cli-bin-'));
 try {
   const isolatedDist = resolve(isolatedRoot, 'dist');
   mkdirSync(isolatedDist);
@@ -73,7 +73,7 @@ try {
     });
     if (result.status !== 0) {
       console.error(
-        `[verify-cli-bin] FAIL: isolated waitlayer ${arg} exited ${result.status}\n${result.stderr}`,
+        `[verify-cli-bin] FAIL: isolated ateva ${arg} exited ${result.status}\n${result.stderr}`,
       );
       process.exit(1);
     }

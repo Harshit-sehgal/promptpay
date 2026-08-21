@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 export default function FeedbackPage() {
   const { success, error: showError } = useToast();

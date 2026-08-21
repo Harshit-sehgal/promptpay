@@ -199,7 +199,7 @@ Response:
     "label": "Sponsored",
     "message": "Railway - Deploy your AI app in seconds",
     "display_domain": "railway.app",
-    "click_url": "https://waitlayer.example/click/token",
+    "click_url": "https://ateva.example/click/token",
     "impression_token": "opaque-token",
     "minimum_visible_ms": 5000
   }

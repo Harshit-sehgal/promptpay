@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
-import { signPayload } from '@waitlayer/shared';
+import { signPayload } from '@ateva/shared';
 
 import { AdminService } from '../admin/admin.service';
 import { AdvertiserService } from '../advertiser/advertiser.service';

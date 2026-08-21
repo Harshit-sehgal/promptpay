@@ -9,7 +9,7 @@ const requireVscodeDependency = createRequire(new URL('../../apps/vscode-extensi
 const { build } = requireVscodeDependency('esbuild');
 
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-concurrency-scenario-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-concurrency-scenario-'));
 const output = path.join(directory, 'correlation.mjs');
 
 function event(eventType, metadata = {}) {

@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { FraudSeverity } from '@waitlayer/shared';
+import { FraudSeverity } from '@ateva/shared';
 
 import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';

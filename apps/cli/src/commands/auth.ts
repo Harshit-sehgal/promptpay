@@ -15,7 +15,7 @@ export async function runAuth(opts: { email?: string; signup?: boolean }) {
   const existing = await getCredentials();
   if (existing) {
     console.log(chalk.green(`Already logged in as ${existing.email}`));
-    console.log(chalk.dim('Run `waitlayer logout` to switch accounts.'));
+    console.log(chalk.dim('Run `ateva logout` to switch accounts.'));
     return;
   }
 

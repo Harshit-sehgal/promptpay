@@ -6,7 +6,7 @@ import api from '@/lib/api/client';
 import { useAuth } from '@/lib/auth-context';
 import { readStoredCookieConsent, writeStoredCookieConsent } from '@/lib/consent-preferences';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 const VISITOR_ID_KEY = 'wl_visitor_id';
 const OPEN_EVENT = 'wl:open-cookie-settings';
@@ -138,7 +138,7 @@ export default function CookieConsent() {
       <div className="mx-auto max-w-3xl bg-white border border-surface-200 rounded-2xl shadow-lg shadow-surface-300/30 p-5 flex flex-col sm:flex-row sm:items-center gap-4 motion-reduce:shadow-none">
         <p className="text-surface-700 text-[13px] leading-relaxed flex-1">
           We use essential cookies to keep you signed in and optional analytics cookies to improve
-          WaitLayer. See our{' '}
+          Ateva. See our{' '}
           <Link
             href="/privacy"
             className="text-brand-700 hover:text-brand-800 font-medium underline underline-offset-2 focus-visible:rounded-sm"

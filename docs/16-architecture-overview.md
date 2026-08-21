@@ -1,8 +1,8 @@
-# WaitLayer — Architecture Overview
+# Ateva — Architecture Overview
 
 > Last updated: 2026-07-08
 
-WaitLayer is a **privacy-first reward marketplace** for AI wait time and
+Ateva is a **privacy-first reward marketplace** for AI wait time and
 developer attention. Developers earn money by viewing sponsored content during
 AI tool wait states (compilation, analysis, code generation). Advertisers bid
 for that attention in a fraud-mitigated, ledger-backed marketplace.
@@ -24,7 +24,7 @@ It pairs with the [ADRs](./adr/0001-record-architecture-decisions.md) and the
                                          │ ad events      │ request
                                          ▼               ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│                           WaitLayer API  (NestJS)                           │
+│                           Ateva API  (NestJS)                           │
 │                                                                            │
 │  ┌────────────┐  ┌──────────┐  ┌────────┐  ┌────────┐  ┌──────────────┐   │
 │  │  Auth /    │  │ Campaign │  │ Ledger │  │ Payout │  │  Fraud /     │   │
@@ -85,15 +85,15 @@ It pairs with the [ADRs](./adr/0001-record-architecture-decisions.md) and the
 
 ## Key Design Decisions
 
-| Area | Decision | Why |
-|------|----------|-----|
-| Money | **Three-ledger double-entry** (earnings / advertiser / platform) | Auditable, fraud-resistant, supports holds & recovery debits |
-| Split | **60/30/10** (80/10/10 launch) developer/platform-fee/fraud-reserve | Aligns incentives, funds the fraud reserve |
-| Extensions | **HMAC-signed, idempotent events** with per-device secrets | Privacy-enforced, replay-safe, no shared global key |
-| Auth | JWT access + refresh with **rotation + reuse detection**, TOTP 2FA | Detects token theft; phishing-resistant second factor |
-| Anti-fraud | Redis-backed rate limits, brute-force lockouts, CTR & self-click analysis, trust scoring | Stops incentive fraud before it pays out |
-| Payouts | Multi-provider with **fail-closed** production guards | Never moves real money without configured, ready providers |
-| Privacy | Consent ledger, retention cron, erasure paths | GDPR/CCPA-aligned data lifecycle |
+| Area       | Decision                                                                                 | Why                                                          |
+| ---------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Money      | **Three-ledger double-entry** (earnings / advertiser / platform)                         | Auditable, fraud-resistant, supports holds & recovery debits |
+| Split      | **60/30/10** (80/10/10 launch) developer/platform-fee/fraud-reserve                      | Aligns incentives, funds the fraud reserve                   |
+| Extensions | **HMAC-signed, idempotent events** with per-device secrets                               | Privacy-enforced, replay-safe, no shared global key          |
+| Auth       | JWT access + refresh with **rotation + reuse detection**, TOTP 2FA                       | Detects token theft; phishing-resistant second factor        |
+| Anti-fraud | Redis-backed rate limits, brute-force lockouts, CTR & self-click analysis, trust scoring | Stops incentive fraud before it pays out                     |
+| Payouts    | Multi-provider with **fail-closed** production guards                                    | Never moves real money without configured, ready providers   |
+| Privacy    | Consent ledger, retention cron, erasure paths                                            | GDPR/CCPA-aligned data lifecycle                             |
 
 See [ADRs](./adr/0001-record-architecture-decisions.md) for the rationale and
 alternatives considered for each.
@@ -102,17 +102,17 @@ alternatives considered for each.
 
 ## Package Map
 
-| Package | Responsibility |
-|---------|----------------|
-| `apps/api` | NestJS REST API — all domains |
-| `apps/web` | Next.js dashboards (developer / advertiser / admin / legal) |
-| `apps/cli` | Developer CLI — register device, report wait states, check earnings |
-| `apps/vscode-extension` | VS Code extension — wait-state detection + ad panel |
-| `packages/shared` | Types, Zod contracts, HMAC signing, constants |
-| `packages/config` | Zod-validated environment schema |
-| `packages/db` | Prisma schema, migrations, client |
-| `packages/ui` | Shared UI components |
-| `packages/eslint-config` | Shared ESLint flat config |
+| Package                  | Responsibility                                                      |
+| ------------------------ | ------------------------------------------------------------------- |
+| `apps/api`               | NestJS REST API — all domains                                       |
+| `apps/web`               | Next.js dashboards (developer / advertiser / admin / legal)         |
+| `apps/cli`               | Developer CLI — register device, report wait states, check earnings |
+| `apps/vscode-extension`  | VS Code extension — wait-state detection + ad panel                 |
+| `packages/shared`        | Types, Zod contracts, HMAC signing, constants                       |
+| `packages/config`        | Zod-validated environment schema                                    |
+| `packages/db`            | Prisma schema, migrations, client                                   |
+| `packages/ui`            | Shared UI components                                                |
+| `packages/eslint-config` | Shared ESLint flat config                                           |
 
 ---
 

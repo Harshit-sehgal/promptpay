@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  DETECTOR_VERSION,
-  DetectorEvidence,
-  signEvidence,
-  verifyEvidence,
-} from '@waitlayer/shared';
+import { DETECTOR_VERSION, DetectorEvidence, signEvidence, verifyEvidence } from '@ateva/shared';
 
 import { classifyWaitState } from './extension.constants';
 
@@ -108,7 +103,7 @@ describe('classifyWaitState with evidence (P0)', () => {
   });
 
   it('keeps supervised local CLI process telemetry non-billable', () => {
-    // `waitlayer run` does observe the spawned child process, but its device
+    // `ateva run` does observe the spawned child process, but its device
     // signature is still produced by the client. The server must classify this
     // new beta telemetry as inferred until an independent attestation source is
     // available, even if a modified client labels it observed.

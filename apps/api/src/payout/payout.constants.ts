@@ -1,4 +1,4 @@
-import { PayoutStatus } from '@waitlayer/shared';
+import { PayoutStatus } from '@ateva/shared';
 
 export const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,

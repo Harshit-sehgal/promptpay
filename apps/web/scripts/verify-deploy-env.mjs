@@ -1,11 +1,20 @@
 import { createPublicKey } from 'node:crypto';
 
-const enforce = process.env.VERCEL === '1' || process.env.WAITLAYER_REQUIRE_DEPLOY_ENV === '1';
+// Accept the pre-rename `ATEVA_*` names. This script runs before any
+// application code, so it cannot go through the `applyLegacyEnvAliases`
+// shim in @ateva/config — the fallback has to be spelled out here or a
+// deployment whose secrets still use the old prefix fails its preflight.
+const requireDeployEnv =
+  process.env.ATEVA_REQUIRE_DEPLOY_ENV ?? process.env.WAITLAYER_REQUIRE_DEPLOY_ENV;
+const enforce = process.env.VERCEL === '1' || requireDeployEnv === '1';
 const errors = [];
-const environmentKind = process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND ?? 'production';
+const environmentKind =
+  process.env.NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND ??
+  process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND ??
+  'production';
 if (!['development', 'test', 'sandbox', 'staging', 'production'].includes(environmentKind)) {
   errors.push(
-    'NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND must be development, test, sandbox, staging, or production',
+    'NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND must be development, test, sandbox, staging, or production',
   );
 }
 if (errors.length > 0) {

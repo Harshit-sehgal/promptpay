@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentLifecycleEventSchema } from '@waitlayer/agent-protocol';
+import { agentLifecycleEventSchema } from '@ateva/agent-protocol';
 
-import {
-  createGenericWrapperEvent,
-  normalizeExecutableFamily,
-} from './generic-wrapper-adapter';
+import { createGenericWrapperEvent, normalizeExecutableFamily } from './generic-wrapper-adapter';
 
 const base = {
   installationId: 'installation-123456789',

@@ -1,7 +1,7 @@
 import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { MAX_AD_MESSAGE_LENGTH } from '@waitlayer/shared';
+import { MAX_AD_MESSAGE_LENGTH } from '@ateva/shared';
 
 export class CreateCreativeDto {
   @ApiProperty()

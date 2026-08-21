@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { REFERRAL } from '@waitlayer/shared';
+import { REFERRAL } from '@ateva/shared';
 
 import { ReferralService } from './referral.service';
 

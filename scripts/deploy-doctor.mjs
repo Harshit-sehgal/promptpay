@@ -372,15 +372,15 @@ function checkEnvironment(env) {
         )
       : pass('throttle-overrides', 'none set'),
   );
-  if (production && env.WAITLAYER_ENVIRONMENT_KIND !== 'production') {
+  if (production && env.ATEVA_ENVIRONMENT_KIND !== 'production') {
     findings.push(
       fail(
         'environment-kind',
-        'production NODE_ENV requires WAITLAYER_ENVIRONMENT_KIND=production',
+        'production NODE_ENV requires ATEVA_ENVIRONMENT_KIND=production',
       ),
     );
   } else {
-    findings.push(pass('environment-kind', env.WAITLAYER_ENVIRONMENT_KIND ?? 'unset'));
+    findings.push(pass('environment-kind', env.ATEVA_ENVIRONMENT_KIND ?? 'unset'));
   }
   findings.push(...checkDatabaseUrl(env));
   findings.push(...checkRedisUrl(env, production));
@@ -468,7 +468,7 @@ async function probeDatabase(env) {
   if (!env.DATABASE_URL) return [fail('database-reachability', 'DATABASE_URL is unavailable')];
   try {
     const require = createRequire(new URL('../apps/api/package.json', import.meta.url));
-    const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+    const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
     const prisma = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
     try {
       await prisma.$queryRaw`SELECT 1`;

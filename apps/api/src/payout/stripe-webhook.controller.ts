@@ -13,8 +13,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
-import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
-import { PayoutStatus } from '@waitlayer/shared';
+import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@ateva/db';
+import { PayoutStatus } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { EventBus } from '../common/events/event-bus';

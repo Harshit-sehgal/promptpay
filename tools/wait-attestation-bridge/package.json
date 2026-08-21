@@ -1,5 +1,5 @@
 {
-  "name": "@waitlayer/wait-attestation-bridge",
+  "name": "@ateva/wait-attestation-bridge",
   "version": "0.0.1",
   "private": true,
   "description": "Reference/stub independent wait-attestation provider bridge for local and staging development.",
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@waitlayer/eslint-config": "workspace:*",
+    "@ateva/eslint-config": "workspace:*",
     "tsx": "^4.23.7",
     "typescript": "^5.9.2",
     "vitest": "4.1.10"

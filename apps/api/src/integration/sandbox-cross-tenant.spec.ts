@@ -12,8 +12,8 @@
  *    reconciliation; hard row deletion cascades cleanly (no orphans)
  *
  * Environment gating: the sandbox module is fail-closed outside
- * test/sandbox deployments; this spec boots with WAITLAYER_ENVIRONMENT_KIND=test
- * and a dedicated WAITLAYER_ENVIRONMENT_ID so it can never touch a real-money
+ * test/sandbox deployments; this spec boots with ATEVA_ENVIRONMENT_KIND=test
+ * and a dedicated ATEVA_ENVIRONMENT_ID so it can never touch a real-money
  * environment.
  */
 import * as bcrypt from 'bcryptjs';
@@ -24,7 +24,7 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -35,8 +35,8 @@ import { PrismaService } from '../config/prisma.service';
 const BASE = '/api/v1/sandbox';
 const FAUCET = `${BASE}/faucet`;
 
-process.env.WAITLAYER_ENVIRONMENT_KIND = 'test';
-process.env.WAITLAYER_ENVIRONMENT_ID = 'integration-xtest';
+process.env.ATEVA_ENVIRONMENT_KIND = 'test';
+process.env.ATEVA_ENVIRONMENT_ID = 'integration-xtest';
 
 async function cleanSandboxRows(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -68,7 +68,10 @@ async function createDeveloper(app: INestApplication, email: string): Promise<Te
 }
 
 async function faucet(app: INestApplication, token: string, key: string): Promise<Response> {
-  return request(app.getHttpServer()).post(FAUCET).set('Authorization', `Bearer ${token}`).send({ idempotencyKey: key });
+  return request(app.getHttpServer())
+    .post(FAUCET)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ idempotencyKey: key });
 }
 
 describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
@@ -87,7 +90,12 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
       .useValue({ canActivate: () => true })
       .overrideProvider(ThrottlerStorage)
       .useValue({
-        increment: async () => ({ totalHits: 0, timeToExpire: 0, isBlocked: false, timeToBlockExpire: 0 }),
+        increment: async () => ({
+          totalHits: 0,
+          timeToExpire: 0,
+          isBlocked: false,
+          timeToBlockExpire: 0,
+        }),
       })
       .compile();
 
@@ -113,8 +121,8 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
   });
 
   it('different users with the same idempotency key get independent grants', async () => {
-    const alice = await createDeveloper(app, 'sandbox-alice@waitlayer.com');
-    const bob = await createDeveloper(app, 'sandbox-bob@waitlayer.com');
+    const alice = await createDeveloper(app, 'sandbox-alice@ateva.com');
+    const bob = await createDeveloper(app, 'sandbox-bob@ateva.com');
     const key = 'itest-shared-key-0001';
 
     const aliceRes = await faucet(app, alice.token, key);
@@ -143,7 +151,7 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
   });
 
   it('the same user in a different environment may reuse a key', async () => {
-    const carol = await createDeveloper(app, 'sandbox-carol@waitlayer.com');
+    const carol = await createDeveloper(app, 'sandbox-carol@ateva.com');
     const key = 'itest-env-scoped-key-0002';
 
     const first = await faucet(app, carol.token, key);
@@ -151,7 +159,7 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
 
     // A second app instance booted against the same database but with a
     // different environment id represents a separate sandbox deployment.
-    process.env.WAITLAYER_ENVIRONMENT_ID = 'integration-xtest-2';
+    process.env.ATEVA_ENVIRONMENT_ID = 'integration-xtest-2';
     const moduleFixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideGuard(BruteForceGuard)
       .useValue({ canActivate: () => true })
@@ -161,13 +169,20 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
       .useValue({ canActivate: () => true })
       .overrideProvider(ThrottlerStorage)
       .useValue({
-        increment: async () => ({ totalHits: 0, timeToExpire: 0, isBlocked: false, timeToBlockExpire: 0 }),
+        increment: async () => ({
+          totalHits: 0,
+          timeToExpire: 0,
+          isBlocked: false,
+          timeToBlockExpire: 0,
+        }),
       })
       .compile();
     const app2 = moduleFixture.createNestApplication();
     app2.setGlobalPrefix('api');
     app2.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
-    app2.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app2.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    );
     await app2.init();
     try {
       const second = await faucet(app2, carol.token, key);
@@ -183,12 +198,12 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
       ]);
     } finally {
       await app2.close();
-      process.env.WAITLAYER_ENVIRONMENT_ID = 'integration-xtest';
+      process.env.ATEVA_ENVIRONMENT_ID = 'integration-xtest';
     }
   });
 
   it('concurrent duplicate faucet claims mutate exactly once', async () => {
-    const dave = await createDeveloper(app, 'sandbox-dave@waitlayer.com');
+    const dave = await createDeveloper(app, 'sandbox-dave@ateva.com');
     const key = 'itest-concurrent-key-0003';
 
     const [a, b] = await Promise.all([faucet(app, dave.token, key), faucet(app, dave.token, key)]);
@@ -214,12 +229,14 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
     });
     expect(account.balanceMinor).toBe(10_000n);
     expect(
-      await prisma.sandboxCreditEntry.count({ where: { accountId: account.id, idempotencyKey: key } }),
+      await prisma.sandboxCreditEntry.count({
+        where: { accountId: account.id, idempotencyKey: key },
+      }),
     ).toBe(1);
   });
 
   it('erasure keeps sandbox rows; hard delete cascades without orphans', async () => {
-    const eve = await createDeveloper(app, 'sandbox-eve@waitlayer.com');
+    const eve = await createDeveloper(app, 'sandbox-eve@ateva.com');
     const key = 'itest-retention-key-0004';
     expect((await faucet(app, eve.token, key)).status).toBe(201);
 
@@ -228,7 +245,9 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
     // reconciliation.
     await prisma.user.update({ where: { id: eve.id }, data: { status: 'deleted' } });
     expect(
-      await prisma.sandboxCreditAccount.count({ where: { userId: eve.id, environmentId: 'integration-xtest' } }),
+      await prisma.sandboxCreditAccount.count({
+        where: { userId: eve.id, environmentId: 'integration-xtest' },
+      }),
     ).toBe(1);
     expect(
       await prisma.sandboxCreditEntry.count({
@@ -239,23 +258,25 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
     // A hard row deletion (privacy erasure of a never-used account) cascades
     // the whole sandbox subtree; no orphaned rows may remain.
     await prisma.user.delete({ where: { id: eve.id } });
+    expect(await prisma.sandboxCreditAccount.count({ where: { userId: eve.id } })).toBe(0);
     expect(
-      await prisma.sandboxCreditAccount.count({ where: { userId: eve.id } }),
+      await prisma.sandboxCreditEntry.count({
+        where: { environmentId: 'integration-xtest', idempotencyKey: key },
+      }),
     ).toBe(0);
     expect(
-      await prisma.sandboxCreditEntry.count({ where: { environmentId: 'integration-xtest', idempotencyKey: key } }),
-    ).toBe(0);
-    expect(
-      await prisma.sandboxOperation.count({ where: { environmentId: 'integration-xtest', idempotencyKey: key } }),
+      await prisma.sandboxOperation.count({
+        where: { environmentId: 'integration-xtest', idempotencyKey: key },
+      }),
     ).toBe(0);
   });
 
   it('role gates: advertisers cannot claim faucet, developers cannot simulate deposits', async () => {
-    const frank = await createDeveloper(app, 'sandbox-frank@waitlayer.com');
+    const frank = await createDeveloper(app, 'sandbox-frank@ateva.com');
     const passwordHash = await bcrypt.hash('Password123!', 12);
     const advertiser = await prisma.user.create({
       data: {
-        email: 'sandbox-advertiser@waitlayer.com',
+        email: 'sandbox-advertiser@ateva.com',
         passwordHash,
         name: 'Sandbox Advertiser',
         role: UserRole.ADVERTISER,
@@ -265,7 +286,7 @@ describe('Sandbox cross-tenant idempotency (real app, real DB)', () => {
     });
     const login = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'sandbox-advertiser@waitlayer.com', password: 'Password123!' });
+      .send({ email: 'sandbox-advertiser@ateva.com', password: 'Password123!' });
     expect(login.status).toBe(200);
 
     const advFaucet = await faucet(app, login.body.accessToken, 'itest-role-key-0005');

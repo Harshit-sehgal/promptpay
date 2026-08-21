@@ -840,7 +840,7 @@ model AdOpportunity {
   @@map("ad_opportunities")
 }
 
-// A nonce issued by WaitLayer before an approved AI/provider operation. The
+// A nonce issued by Ateva before an approved AI/provider operation. The
 // raw nonce is returned once to the client but only its digest is persisted.
 // A client-held device secret is never sufficient to consume this session.
 model SandboxCreditAccount {

@@ -38,7 +38,7 @@ import { dirname, join } from 'node:path';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, Prisma, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, Prisma, createPrismaAdapter } = require('@ateva/db');
 
 function argValue(name) {
   const idx = process.argv.indexOf(name);

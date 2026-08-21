@@ -9,8 +9,8 @@ import type { Metadata } from 'next';
  * bookmark and shared link read the same string.
  */
 export const metadata: Metadata = {
-  title: 'Verify your email — WaitLayer',
-  description: 'Confirm your email address to finish setting up your WaitLayer account.',
+  title: 'Verify your email — Ateva',
+  description: 'Confirm your email address to finish setting up your Ateva account.',
   // Defence in depth alongside robots.ts: this surface must never be indexed.
   robots: { index: false, follow: false },
 };

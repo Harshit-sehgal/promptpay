@@ -1,11 +1,6 @@
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import {
-  buildOtpAuthUrl,
-  generateTotp,
-  generateTotpSecret,
-  verifyTotp,
-} from '@waitlayer/shared';
+import { buildOtpAuthUrl, generateTotp, generateTotpSecret, verifyTotp } from '@ateva/shared';
 
 describe('TOTP (RFC 6238)', () => {
   it('generates a base32 secret of sufficient entropy', () => {

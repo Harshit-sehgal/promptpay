@@ -42,7 +42,7 @@ export const SITEMAP_ROUTES = PUBLIC_ROUTES;
 export function siteUrl(): string {
   // Same source as `metadataBase` in the root layout, so absolute URLs in the
   // sitemap and the OpenGraph tags can never disagree about the origin.
-  return (process.env.NEXT_PUBLIC_WEB_URL ?? 'https://waitlayer.com').replace(/\/$/, '');
+  return (process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.com').replace(/\/$/, '');
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {

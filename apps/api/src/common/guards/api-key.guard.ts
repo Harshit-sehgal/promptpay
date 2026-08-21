@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import { UserRole } from '@waitlayer/db';
+import { UserRole } from '@ateva/db';
 
 import { ApiKeyService } from '../../developer/api-key.service';
 import { ALLOW_API_KEY, REQUIRED_API_KEY_SCOPES } from '../decorators/allow-api-key.decorator';

@@ -29,8 +29,8 @@ export function createJwtModuleOptions(config: ConfigService): JwtModuleOptions 
   // Derive a stable key ID from the public key so verification can
   // detect key rotation and clients can select the right JWKS key.
   const kid = deriveKeyId(publicKey);
-  const issuer = config.get<string>('JWT_ISSUER', 'waitlayer');
-  const audience = config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
+  const issuer = config.get<string>('JWT_ISSUER', 'ateva');
+  const audience = config.get<string>('JWT_AUDIENCE', 'ateva-client');
   return {
     privateKey,
     publicKey,

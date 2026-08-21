@@ -107,7 +107,7 @@ if (process.argv[1]?.endsWith('/scenario-report.mjs')) {
       manifest: JSON.parse(fs.readFileSync(manifestPath, 'utf8')),
       trace: JSON.parse(fs.readFileSync(tracePath, 'utf8')),
       buildSha: process.env.GIT_SHA ?? 'unknown',
-      environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'unknown',
+      environmentId: process.env.ATEVA_ENVIRONMENT_ID ?? 'unknown',
     });
     process.stdout.write(
       format === 'markdown' ? renderMarkdown(report) : `${JSON.stringify(report, null, 2)}\n`,

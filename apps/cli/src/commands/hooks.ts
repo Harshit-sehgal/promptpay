@@ -1,4 +1,4 @@
-import { AgentProvider } from '@waitlayer/agent-protocol';
+import { AgentProvider } from '@ateva/agent-protocol';
 
 import { sendAgentEventToBridge } from '../lib/agent-bridge';
 import { adaptClaudeCodeHook } from '../lib/claude-code-adapter';
@@ -25,7 +25,7 @@ const PROVIDERS = new Set<AgentProvider>([
 /**
  * Ingest one provider hook without making a network request. Hook failures are
  * intentionally non-blocking: provider commands must continue even when
- * WaitLayer is not installed, logged in, or locally available.
+ * Ateva is not installed, logged in, or locally available.
  */
 export async function runHookIngest(options: HookIngestOptions): Promise<boolean> {
   const provider = options.provider?.trim() as AgentProvider | undefined;
@@ -41,7 +41,8 @@ export async function runHookIngest(options: HookIngestOptions): Promise<boolean
     const deviceId = credentials?.deviceUUID;
     if (!credentials?.installationId || !deviceId) return false;
     const integrationProvider = provider === 'claude_code' ? 'claude-code' : null;
-    if (integrationProvider && new HookConfigManager().isDisabled(integrationProvider)) return false;
+    if (integrationProvider && new HookConfigManager().isDisabled(integrationProvider))
+      return false;
     if (provider === 'codex_cli') {
       adaptCodexHook(providerEvent, input);
       return false;
@@ -56,7 +57,7 @@ export async function runHookIngest(options: HookIngestOptions): Promise<boolean
       deviceId,
       identifierSecret: await getDeviceEventSecret(),
       ...(adapted?.adapterVersion ? { adapterVersion: adapted.adapterVersion } : {}),
-      environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local',
+      environmentId: process.env.ATEVA_ENVIRONMENT_ID ?? 'local',
     });
     if (!event) return false;
 

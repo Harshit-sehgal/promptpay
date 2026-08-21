@@ -73,7 +73,7 @@ export class DodoProvider implements DepositSessionProvider {
     this.productId = this.config.get<string>('DODO_PRODUCT_ID', '');
     this.webhookSecret = this.config.get<string>('DODO_WEBHOOK_SECRET', '');
     // A checkout without a verifiable webhook is not a usable deposit rail:
-    // the advertiser can pay, but WaitLayer cannot safely credit the ledger.
+    // the advertiser can pay, but Ateva cannot safely credit the ledger.
     this.enabled = Boolean(this.apiKey && this.baseUrl && this.productId && this.webhookSecret);
   }
 

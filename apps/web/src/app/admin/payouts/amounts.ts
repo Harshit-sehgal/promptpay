@@ -1,4 +1,4 @@
-import { majorToMinor, minorToMajorInputValue, minorUnitExponent } from '@waitlayer/shared';
+import { majorToMinor, minorToMajorInputValue, minorUnitExponent } from '@ateva/shared';
 
 export { minorToMajorInputValue };
 

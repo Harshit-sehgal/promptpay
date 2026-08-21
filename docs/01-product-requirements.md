@@ -2,9 +2,9 @@
 
 ## Product
 
-Name: WaitLayer
+Name: Ateva
 
-One-line description: WaitLayer lets developers earn from clearly labeled, opt-in sponsored messages shown during eligible AI wait states while giving advertisers verified developer attention and invalid-traffic protection.
+One-line description: Ateva lets developers earn from clearly labeled, opt-in sponsored messages shown during eligible AI wait states while giving advertisers verified developer attention and invalid-traffic protection.
 
 ## Goals
 
@@ -19,7 +19,7 @@ One-line description: WaitLayer lets developers earn from clearly labeled, opt-i
 Developer/user:
 
 - Wants optional earnings without workflow disruption.
-- Needs proof that WaitLayer does not inspect private work.
+- Needs proof that Ateva does not inspect private work.
 - Needs transparent balances and payout status.
 - Needs controls for categories, quiet mode, disable, export, and deletion.
 
@@ -177,4 +177,3 @@ Fraud:
 - No public self-serve advertiser launch until moderation and prohibited category controls work.
 - No client release before telemetry schema is reviewed for prohibited fields.
 - No payout before ledger reconciliation and payout approval logs are tested.
-

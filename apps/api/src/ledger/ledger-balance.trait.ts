@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { LedgerStatus, primaryCurrency } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerMathTrait } from './ledger-math.trait';

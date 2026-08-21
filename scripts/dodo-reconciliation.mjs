@@ -2,8 +2,8 @@
 /**
  * Read-only Dodo reconciliation report.
  *
- * This compares the Dodo webhook events retained by WaitLayer with the
- * WaitLayer advertiser/platform ledger. It does not call Dodo, mutate rows, or
+ * This compares the Dodo webhook events retained by Ateva with the
+ * Ateva advertiser/platform ledger. It does not call Dodo, mutate rows, or
  * claim that the provider balance agrees: that final comparison requires live
  * Dodo credentials and a provider-side export/report.
  *
@@ -522,7 +522,7 @@ function mergeById(primary, linked) {
 
 async function readFromDatabase({ since, until } = {}) {
   const require = createRequire(new URL('../apps/api/package.json', import.meta.url));
-  const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+  const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(process.env.DATABASE_URL) });
   const date = {

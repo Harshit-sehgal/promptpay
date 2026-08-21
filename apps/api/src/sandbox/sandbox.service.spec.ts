@@ -75,7 +75,7 @@ function makeService(environmentKind = 'sandbox', resetToken?: string) {
   };
   const config = {
     get: vi.fn((key: string, fallback: string) =>
-      key === 'WAITLAYER_ENVIRONMENT_KIND'
+      key === 'ATEVA_ENVIRONMENT_KIND'
         ? environmentKind
         : key === 'SANDBOX_RESET_TOKEN'
           ? resetToken

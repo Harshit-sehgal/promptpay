@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';
@@ -112,7 +112,7 @@ function eraseAccountIdentityOnce(
         where: { userId },
         select: { id: true },
       });
-      const deletedEmail = `deleted-${userId}@waitlayer.com`;
+      const deletedEmail = `deleted-${userId}@ateva.com`;
       const now = new Date();
 
       // Per-row device pseudonyms preserve uniqueness while invalidating every

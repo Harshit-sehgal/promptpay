@@ -60,7 +60,17 @@ function securityHeaders() {
  * `dev` already runs on webpack for the Sentry webpack options below.
  */
 const nextConfig = {
-  transpilePackages: ['@waitlayer/ui', '@waitlayer/shared', '@waitlayer/config'],
+  transpilePackages: ['@ateva/ui', '@ateva/shared', '@ateva/config'],
+
+  /**
+   * Next writes its own `AGENTS.md` and `CLAUDE.md` into this app on every
+   * `next dev` run. This repo already has an authoritative root `AGENTS.md`
+   * that `CLAUDE.md` points every agent at, so a generated second copy inside
+   * `apps/web` is worse than nothing: it is untracked, it silently reappears,
+   * and an agent that opens the nearest file gets Next's boilerplate instead
+   * of the repo's actual operating rules and audit trail.
+   */
+  agentRules: false,
   // Vercel's Next 16 adapter expects the normal build output. Keeping
   // standalone for container builds is useful, but enabling it on Vercel
   // makes the adapter look for the NFT manifest that Next 16.3 no longer

@@ -9,9 +9,9 @@ import type { Metadata } from 'next';
  * bookmark and shared link read the same string.
  */
 export const metadata: Metadata = {
-  title: 'FAQ — WaitLayer',
+  title: 'FAQ — Ateva',
   description:
-    'Answers about how WaitLayer verifies AI wait states, what is measured, and what is never collected.',
+    'Answers about how Ateva verifies AI wait states, what is measured, and what is never collected.',
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

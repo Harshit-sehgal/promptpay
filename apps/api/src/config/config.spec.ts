@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { envSchema, loadEnv } from '@waitlayer/config';
+import { envSchema, loadEnv } from '@ateva/config';
 
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
 
@@ -29,7 +29,7 @@ function baseDevEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
 function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     NODE_ENV: 'production',
-    WAITLAYER_ENVIRONMENT_KIND: 'production',
+    ATEVA_ENVIRONMENT_KIND: 'production',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     JWT_SECRET: 'a-very-long-production-jwt-secret-value-32plus!!',
     JWT_PRIVATE_KEY: TEST_JWT_PRIVATE_KEY,
@@ -37,12 +37,12 @@ function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv 
     REDIS_URL: 'redis://localhost:6379',
     TOTP_SECRET_ENCRYPTION_KEY: 'production-totp-encryption-key-32plus!!!',
     EMAIL_QUEUE_SECRET: 'production-email-queue-key-at-least-32-characters',
-    OPS_ALERT_EMAIL: 'ops@waitlayer.com',
+    OPS_ALERT_EMAIL: 'ops@ateva.com',
     PRIVACY_HASH_KEY: 'production-privacy-hmac-key-at-least-32-characters',
-    API_BASE_URL: 'https://api.waitlayer.com',
-    WEB_BASE_URL: 'https://app.waitlayer.com',
+    API_BASE_URL: 'https://api.ateva.com',
+    WEB_BASE_URL: 'https://app.ateva.com',
     EMAIL_DRIVER: 'resend',
-    EMAIL_FROM: 'security@waitlayer.com',
+    EMAIL_FROM: 'security@ateva.com',
     RESEND_API_KEY: 'resend-production-key',
     PAYOUT_REQUIRE_2FA: 'true',
     ALLOWED_COUNTRIES: 'US',
@@ -67,7 +67,7 @@ describe('env validation (config module)', () => {
   it('permits staging to exercise the production runtime controls', () => {
     const result = envSchema.safeParse(
       baseProdEnv({
-        WAITLAYER_ENVIRONMENT_KIND: 'staging',
+        ATEVA_ENVIRONMENT_KIND: 'staging',
         BFF_TRUST_PROXY_HOPS: '1',
         PAYOUT_DESTINATION_COOLDOWN_HOURS: '24',
         PAYOUT_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
@@ -85,9 +85,9 @@ describe('env validation (config module)', () => {
   it('rejects the repository reference wait-attestation bridge in production', () => {
     const referenceIssuer = JSON.stringify([
       {
-        provider: 'waitlayer-stub-bridge',
-        issuer: 'https://waitlayer.local/attestation',
-        audience: 'waitlayer-client',
+        provider: 'ateva-stub-bridge',
+        issuer: 'https://ateva.local/attestation',
+        audience: 'ateva-client',
         publicKeys: {
           stub: `-----BEGIN PUBLIC KEY-----\\n${'A'.repeat(96)}\\n-----END PUBLIC KEY-----`,
         },
@@ -223,14 +223,12 @@ describe('env validation (config module)', () => {
 
   it('strictly validates payout-provider override JSON', () => {
     expect(
-      envSchema.safeParse(
-        baseDevEnv({ WAITLAYER_PAYOUT_PROVIDER_STATUS: '{"unknown":"available"}' }),
-      ).success,
+      envSchema.safeParse(baseDevEnv({ ATEVA_PAYOUT_PROVIDER_STATUS: '{"unknown":"available"}' }))
+        .success,
     ).toBe(false);
     expect(
-      envSchema.safeParse(
-        baseDevEnv({ WAITLAYER_PAYOUT_PROVIDER_STATUS: '{"wise":"coming_soon"}' }),
-      ).success,
+      envSchema.safeParse(baseDevEnv({ ATEVA_PAYOUT_PROVIDER_STATUS: '{"wise":"coming_soon"}' }))
+        .success,
     ).toBe(true);
   });
 

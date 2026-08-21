@@ -72,7 +72,7 @@ export class EmailService {
 
   constructor(private config: ConfigService) {
     this.driver = this.config.get<string>('EMAIL_DRIVER', 'console');
-    this.from = this.config.get<string>('EMAIL_FROM', 'WaitLayer <no-reply@waitlayer.dev>');
+    this.from = this.config.get<string>('EMAIL_FROM', 'Ateva <no-reply@ateva.dev>');
     this.webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
     this.resendApiKey = this.config.get<string>('RESEND_API_KEY', '');
     this.providerTimeoutMs = this.config.get<number>('EMAIL_PROVIDER_TIMEOUT_MS', 10_000);
@@ -103,16 +103,16 @@ export class EmailService {
             'non-console transport.',
         );
       }
-      // The `EMAIL_FROM` default `WaitLayer <no-reply@waitlayer.dev>` uses a
+      // The `EMAIL_FROM` default `Ateva <no-reply@ateva.dev>` uses a
       // `.dev` TLD domain that has HSTS preloading enforced by browsers and
       // most major mail providers. Email sent from this address would be
       // silently flagged by SPF/DKIM checks for any production domain that
       // doesn't literally match the `.dev` suffix. Three-hour password-reset
       // windows burn expensively on this.
-      if (this.from === 'WaitLayer <no-reply@waitlayer.dev>' && !process.env.EMAIL_FROM) {
+      if (this.from === 'Ateva <no-reply@ateva.dev>' && !process.env.EMAIL_FROM) {
         throw new Error(
           'EMAIL_FROM must be set in production — the dev default ' +
-            '"WaitLayer <no-reply@waitlayer.dev>" uses a .dev TLD that breaks ' +
+            '"Ateva <no-reply@ateva.dev>" uses a .dev TLD that breaks ' +
             'SPF/DKIM for any real production domain. Set EMAIL_FROM to a sender ' +
             'address on your production apex domain.',
         );
@@ -183,16 +183,16 @@ export class EmailService {
     const link = `${this.webBaseUrl}/auth/verify-email?token=${encodeURIComponent(token)}`;
     return {
       to,
-      subject: 'Verify your WaitLayer email',
-      text: `Verify your email address by opening this link (valid for 24 hours):\n\n${link}\n\nIf you did not create a WaitLayer account, you can ignore this email.`,
+      subject: 'Verify your Ateva email',
+      text: `Verify your email address by opening this link (valid for 24 hours):\n\n${link}\n\nIf you did not create a Ateva account, you can ignore this email.`,
       // Queue retention must not outlive the 24h verification token.
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Verify your email',
-        `<p>Confirm this email address for your WaitLayer account. The link is valid for <strong>24 hours</strong>.</p>`,
+        `<p>Confirm this email address for your Ateva account. The link is valid for <strong>24 hours</strong>.</p>`,
         link,
         'Verify email',
-        'If you did not create a WaitLayer account, you can safely ignore this email.',
+        'If you did not create a Ateva account, you can safely ignore this email.',
       ),
     };
   }
@@ -207,13 +207,13 @@ export class EmailService {
     const link = `${this.webBaseUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
     return {
       to,
-      subject: 'Reset your WaitLayer password',
-      text: `Reset your WaitLayer password by opening this link (valid for 1 hour):\n\n${link}\n\nIf you did not request a password reset, you can ignore this email.`,
+      subject: 'Reset your Ateva password',
+      text: `Reset your Ateva password by opening this link (valid for 1 hour):\n\n${link}\n\nIf you did not request a password reset, you can ignore this email.`,
       // Queue retention must not outlive the 1h reset token.
       ttlMs: 60 * 60 * 1000,
       html: this.layout(
         'Reset your password',
-        `<p>We received a request to reset your WaitLayer password. The link is valid for <strong>1 hour</strong>.</p>`,
+        `<p>We received a request to reset your Ateva password. The link is valid for <strong>1 hour</strong>.</p>`,
         link,
         'Reset password',
         'If you did not request a password reset, you can safely ignore this email — your password will not change.',
@@ -230,13 +230,13 @@ export class EmailService {
   buildPasswordChanged(to: string): EmailMessage {
     return {
       to,
-      subject: 'Your WaitLayer password was changed',
-      text: 'Your WaitLayer password was just changed and all active sessions were signed out. If this was not you, reset your password immediately and contact support.',
+      subject: 'Your Ateva password was changed',
+      text: 'Your Ateva password was just changed and all active sessions were signed out. If this was not you, reset your password immediately and contact support.',
       // Security notifications are time-sensitive; bound queue retention.
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Password changed',
-        `<p>Your WaitLayer password was just changed and all active sessions were signed out.</p>`,
+        `<p>Your Ateva password was just changed and all active sessions were signed out.</p>`,
         null,
         null,
         'If this was not you, reset your password immediately and contact support.',
@@ -253,15 +253,15 @@ export class EmailService {
   buildAccountDeleted(to: string): EmailMessage {
     return {
       to,
-      subject: 'Your WaitLayer account has been deleted',
+      subject: 'Your Ateva account has been deleted',
       text:
-        'Your WaitLayer account has been permanently deleted. Your personal information has been anonymized ' +
+        'Your Ateva account has been permanently deleted. Your personal information has been anonymized ' +
         'and all active sessions and API keys have been revoked. If this was not you, contact support immediately.',
       // Account-deletion confirmations are time-sensitive; bound queue retention.
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Account deleted',
-        `<p>Your WaitLayer account has been <strong>permanently deleted</strong>. Your personal information has been anonymized and all active sessions and API keys have been revoked.</p>`,
+        `<p>Your Ateva account has been <strong>permanently deleted</strong>. Your personal information has been anonymized and all active sessions and API keys have been revoked.</p>`,
         null,
         null,
         'If this was not you, contact support immediately.',
@@ -307,9 +307,9 @@ export class EmailService {
       : metadata.destination;
     return {
       to,
-      subject: 'Your WaitLayer payout account was frozen by an operator',
+      subject: 'Your Ateva payout account was frozen by an operator',
       text:
-        `Your WaitLayer payout account was frozen by an operator (${metadata.actorRole}).
+        `Your Ateva payout account was frozen by an operator (${metadata.actorRole}).
 
 ` +
         `Provider: ${metadata.provider}
@@ -336,7 +336,7 @@ export class EmailService {
         // admin input), but all named fields get escaped as a defence-in-
         // depth measure — a future caller that passes a user-supplied value
         // into a field currently set from enums won't silently re-open this.
-        `<p>Your WaitLayer payout account was frozen by an operator (<strong>${htmlEscape(metadata.actorRole)}</strong>) on <strong>${htmlEscape(metadata.time)}</strong>.</p>` +
+        `<p>Your Ateva payout account was frozen by an operator (<strong>${htmlEscape(metadata.actorRole)}</strong>) on <strong>${htmlEscape(metadata.time)}</strong>.</p>` +
           `<ul>` +
           `<li><strong>Provider:</strong> ${htmlEscape(metadata.provider)}</li>` +
           `<li><strong>Destination:</strong> ${htmlEscape(displayedDestination)}</li>` +
@@ -399,7 +399,7 @@ export class EmailService {
       .join('\n');
     return {
       to,
-      subject: `[${metadata.severity.toUpperCase()}] WaitLayer money-integrity discrepancy detected`,
+      subject: `[${metadata.severity.toUpperCase()}] Ateva money-integrity discrepancy detected`,
       text:
         `The money-integrity monitor detected a ledger reconciliation discrepancy at ${metadata.time}.\n\n` +
         `Severity: ${metadata.severity}\n` +
@@ -421,7 +421,7 @@ export class EmailService {
           `<p>Investigate immediately via the admin /operations page. Do NOT auto-correct — the report is read-only by design.</p>`,
         null,
         null,
-        'This is an automated alert from the WaitLayer money-integrity monitor.',
+        'This is an automated alert from the Ateva money-integrity monitor.',
       ),
     };
   }
@@ -534,7 +534,7 @@ export class EmailService {
       <tr><td align="center">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:32px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
           <tr><td>
-            <p style="font-weight:700;font-size:15px;margin:0 0 24px;">WaitLayer</p>
+            <p style="font-weight:700;font-size:15px;margin:0 0 24px;">Ateva</p>
             <h1 style="font-size:20px;margin:0 0 12px;">${escapedTitle}</h1>
             <div style="font-size:14px;line-height:1.6;color:#374151;">${bodyHtml}</div>
             ${button}

@@ -1,4 +1,4 @@
-import { FraudFlagStatus, FraudSeverity, Prisma } from '@waitlayer/db';
+import { FraudFlagStatus, FraudSeverity, Prisma } from '@ateva/db';
 
 import { PrismaService } from '../config/prisma.service';
 import { ACTIVE_FRAUD_FLAG_STATUSES } from '../fraud/fraud.constants';

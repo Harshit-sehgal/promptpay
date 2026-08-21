@@ -20,7 +20,7 @@ interface CurrencyAmount {
  * implementation picked the currency with the LARGEST raw minor value, which
  * produced wildly wrong display currencies for multi-currency balances.
  *
- * We mirror `@waitlayer/shared#primaryCurrency` here rather than importing it:
+ * We mirror `@ateva/shared#primaryCurrency` here rather than importing it:
  * the CLI deliberately avoids a dependency on the shared package (see
  * `format.ts`, which duplicates `minorUnitExponent`/`parseMinor` for the same
  * reason). The rule is identical — the first currency carrying a positive
@@ -72,7 +72,7 @@ function overviewAmountForCurrency(
 export async function runStatus() {
   const creds = await getCredentials();
   if (!creds) {
-    console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
+    console.error(chalk.red('Not logged in. Run `ateva auth` first.'));
     process.exit(1);
   }
 
@@ -87,7 +87,7 @@ export async function runStatus() {
 
     console.log();
     await printSandboxBanner(api);
-    console.log(chalk.bold.cyan('WaitLayer Status'));
+    console.log(chalk.bold.cyan('Ateva Status'));
     console.log(chalk.dim('─'.repeat(40)));
     console.log();
     console.log(`${chalk.dim('Account:')}        ${creds.email}`);
@@ -126,7 +126,7 @@ export async function runStatus() {
     console.log();
   } catch (err: unknown) {
     if (getErrorStatus(err) === 401) {
-      console.error(chalk.red('Session expired. Run `waitlayer auth` again.'));
+      console.error(chalk.red('Session expired. Run `ateva auth` again.'));
     } else {
       console.error(chalk.red(`Failed to load status: ${getErrorMessage(err, 'request failed')}`));
     }

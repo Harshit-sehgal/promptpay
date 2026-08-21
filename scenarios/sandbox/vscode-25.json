@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "vscode_degraded_integration",
   "environment": "sandbox",
-  "seed": "waitlayer-vscode-detector-v1",
+  "seed": "ateva-vscode-detector-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

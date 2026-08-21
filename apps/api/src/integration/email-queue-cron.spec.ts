@@ -32,7 +32,7 @@ describe('EmailQueueCron against a real database', () => {
   const send = vi.fn();
   let previousRedisUrl: string | undefined;
 
-  const RECIPIENT = 'email-queue-cron-integration@waitlayer.test';
+  const RECIPIENT = 'email-queue-cron-integration@ateva.test';
 
   beforeAll(async () => {
     previousRedisUrl = process.env.REDIS_URL;

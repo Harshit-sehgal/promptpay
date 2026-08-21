@@ -118,8 +118,8 @@ describe('AuthService behavioral composition', () => {
 
     const payload = jwt.verify(result.accessToken, {
       algorithms: ['RS256'],
-      issuer: 'waitlayer',
-      audience: 'waitlayer-client',
+      issuer: 'ateva',
+      audience: 'ateva-client',
     }) as any;
     expect(payload.sub).toBe('u-2');
     expect(payload.role).toBe('developer');
@@ -188,16 +188,16 @@ describe('AuthService behavioral composition', () => {
         role: 'developer',
         family: 'family-1',
         jti: 's-2',
-        aud: ['waitlayer-client', 'refresh'],
+        aud: ['ateva-client', 'refresh'],
       },
-      { expiresIn: '30d', issuer: 'waitlayer' },
+      { expiresIn: '30d', issuer: 'ateva' },
     );
 
     // Use the same v2 HMAC the service uses so the test does not depend on
     // the rolling bcrypt compatibility path.
     const { createHmac } = await import('crypto');
     const tokenHash = `v2:${createHmac('sha256', 'test-secret-at-least-32-characters-long')
-      .update(`waitlayer-refresh-token-v2:${refreshToken}`)
+      .update(`ateva-refresh-token-v2:${refreshToken}`)
       .digest('hex')}`;
 
     mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });

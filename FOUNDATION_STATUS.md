@@ -1,4 +1,4 @@
-# WaitLayer Foundation Status
+# Ateva Foundation Status
 
 Last updated: 2026-07-11 (current hardening pass)
 
@@ -25,7 +25,7 @@ Last updated: 2026-07-11 (current hardening pass)
 >   `try/catch` fallback frozen into prerendered HTML, invisible to every gate.
 > - The domain table scores implementation, never reachability or operability.
 >   As of 2026-08-07 the application is **not deployed** (13 of 21 probed public
->   routes 404, no `api.waitlayer.com` DNS) and a fresh production database
+>   routes 404, no `api.ateva.com` DNS) and a fresh production database
 >   **cannot produce an admin** (A-088), so nothing in this table is reachable
 >   by a real user regardless of its status column.
 >
@@ -98,12 +98,12 @@ The following gaps from the gap analysis were closed in this pass:
 
 ### Recently Completed (2026-07-09) — All 158 gap-analysis items verified/closed
 
-This pass closed the remaining items from `waitlayer-gap-analysis.md` (158 gaps). Each was
+This pass closed the remaining items from `ateva-gap-analysis.md` (158 gaps). Each was
 verified against source; genuinely-missing behavior was implemented, already-done items were
 confirmed, and a small set of pre-existing test/schema issues uncovered while running the DB-backed
 test suite were fixed (see "Critical fixes" below).
 
-**Security / Money / Ops / Architecture (API + `@waitlayer/config`):**
+**Security / Money / Ops / Architecture (API + `@ateva/config`):**
 
 - #41 Launch incentive split is now env-driven (`LAUNCH_SPLIT_ENABLED`) and actually applied at both `calculateSplit` call sites.
 - #64 `calculateSplit` now throws on non-positive/non-finite `bidAmountMinor` (prevents zero/negative platform+reserve shares).
@@ -144,12 +144,12 @@ test suite were fixed (see "Critical fixes" below).
 
 - `pnpm run typecheck` → 14/14 tasks.
 - `pnpm run lint` → 9/9 tasks (style warnings allowed; no errors).
-- `pnpm run build` → 9/9 packages (root `pnpm run build` and `pnpm --filter waitlayer-web build` both succeed).
+- `pnpm run build` → 9/9 packages (root `pnpm run build` and `pnpm --filter ateva-web build` both succeed).
 
-> **Note (2026-07-11, resolved):** the `9/9` build claim is correct again — `waitlayer-web` `next build` was blocked earlier 2026-07-11 by a `NODE_ENV=development` env leak (inherited by static-generation workers, causing a null-dispatcher prerender crash on `/_global-error`), **not** a framework regression. Fixed by forcing `NODE_ENV=production` in the web build script; verified green 2026-07-11 (exit 0, all routes prerendered). `pnpm run typecheck` (14/14) and `pnpm run lint` (9/9) still pass.
+> **Note (2026-07-11, resolved):** the `9/9` build claim is correct again — `ateva-web` `next build` was blocked earlier 2026-07-11 by a `NODE_ENV=development` env leak (inherited by static-generation workers, causing a null-dispatcher prerender crash on `/_global-error`), **not** a framework regression. Fixed by forcing `NODE_ENV=production` in the web build script; verified green 2026-07-11 (exit 0, all routes prerendered). `pnpm run typecheck` (14/14) and `pnpm run lint` (9/9) still pass.
 
 - `pnpm test` → full suite (API unit/contract/e2e-http + CLI + web + VS Code). Exact counts grow per pass and are regenerated, not hard-coded; DB-backed API specs require `DATABASE_URL` + `JWT_SECRET` (>=32 chars).
-- `pnpm --filter @waitlayer/db generate` → client regenerated; `prisma migrate deploy` → all migrations applied.
+- `pnpm --filter @ateva/db generate` → client regenerated; `prisma migrate deploy` → all migrations applied.
 
 > Note (2026-07-09): the root `pnpm run build` was failing on a pre-existing TypeScript error in `apps/web/src/app/developer/settings/page.tsx` (used `user.emailVerified`, which was missing from the frontend `User` type). A-001 is closed by adding `emailVerified` to the `auth-context` `User` type (the backend `User` model already has it). The Turbo `.next`/pages-manifest failure described in AGENTS.md did not reproduce once the type error was fixed.
 
@@ -159,8 +159,8 @@ test suite were fixed (see "Critical fixes" below).
 
 - `pnpm run build` and `pnpm run typecheck` compile all workspace packages cleanly
 - Turborepo with pnpm workspaces, TypeScript project references
-- Path aliases configured and resolved: `@waitlayer/config`, `@waitlayer/db`, `@waitlayer/shared`
-- `pnpm --filter waitlayer-api build` (i.e. `nest build`) produces `dist/apps/api/src/main.js`
+- Path aliases configured and resolved: `@ateva/config`, `@ateva/db`, `@ateva/shared`
+- `pnpm --filter ateva-api build` (i.e. `nest build`) produces `dist/apps/api/src/main.js`
 
 **Notable state:**
 
@@ -174,7 +174,7 @@ test suite were fixed (see "Critical fixes" below).
 - REST API at `/api/v1/` (set as global prefix in `main.ts`)
 - All extension, admin, advertiser, auth, campaign, fraud, ledger, payout, referral, api-keys, tool, and webhook endpoints implemented
 - DTO validation via NestJS `ValidationPipe` (whitelist + transform + `forbidNonWhitelisted: true`)
-- **Contract Validation:** 14+ Zod schemas in `@waitlayer/shared` (SignupResponse, LoginResponse, etc.) verify that API responses match the expected structural shapes in `contract-tests.spec.ts`
+- **Contract Validation:** 14+ Zod schemas in `@ateva/shared` (SignupResponse, LoginResponse, etc.) verify that API responses match the expected structural shapes in `contract-tests.spec.ts`
 - Shared HMAC signing utility at `packages/shared/src/signing.ts` (canonical JSON, sorted keys → HMAC-SHA256) used by API, CLI, and VS Code extension
 - Idempotency keys required on all extension write events
 
@@ -318,7 +318,7 @@ test suite were fixed (see "Critical fixes" below).
 - A unique constraint on `PayoutAllocation.earningsEntryId` would prevent the same entry being referenced twice; see prisma schema (verify the actual constraint before relying on it for race protection in concurrent payouts).
 - Provider readiness is checked before claiming an approved payout, so unimplemented or unconfigured automated providers cannot move a production payout into `processing`.
 - If a provider explicitly returns `failed` from initiation, the payout is marked `failed` and its allocations are deleted in one transaction, making the earnings available for a fresh request.
-- Provider availability is operator-gateable at runtime through the API's `WAITLAYER_PAYOUT_PROVIDER_STATUS`; registration rejects unavailable providers and `GET /payout/providers` exposes the same fail-closed state to the web, avoiding a second build-time catalogue that could drift (A-030).
+- Provider availability is operator-gateable at runtime through the API's `ATEVA_PAYOUT_PROVIDER_STATUS`; registration rejects unavailable providers and `GET /payout/providers` exposes the same fail-closed state to the web, avoiding a second build-time catalogue that could drift (A-030).
 
 **Known limitation:**
 
@@ -391,14 +391,14 @@ test suite were fixed (see "Critical fixes" below).
 - `login()` parses flat `{user, accessToken, refreshToken}` (NestJS shape), no nested `.data` wrapper
 - `getBalance()` parses flat `{available: {amountMinor, currency}, pending: {...}, total: {...}, paidOut: {...}}` — the entry-form shape from the ledger controller
 - `getOverview()` parses the full dashboard shape from `/developer/dashboard` (`estimatedEarnings, confirmedEarnings, pendingEarnings, heldEarnings, availableForPayout, lifetimeEarnings, trustLevel, trustScore`)
-- `getOrRegisterDevice()` submits any existing local event secret as proof when re-registering, and accepts a one-time support/admin token through `WAITLAYER_DEVICE_RECOVERY_TOKEN`
+- `getOrRegisterDevice()` submits any existing local event secret as proof when re-registering, and accepts a one-time support/admin token through `ATEVA_DEVICE_RECOVERY_TOKEN`
 - `reportWaitState()` normalizes user-supplied tool names through `normalizeToolType()` so values land in the `ToolType` enum (`claude_code`, `codex_cli`, `terminal`, etc.); arbitrary strings fall back to `terminal` instead of being rejected by `forbidNonWhitelisted`
 - Error parsing in `raw()` extracts `message` from NestJS exception responses (`{message, error, statusCode}`)
 - `raw()` refuses to send bearer/device credentials over cleartext remote endpoints; only loopback HTTP is allowed for local development
 
 **Verified:**
 
-- CLI builds clean (`pnpm --filter waitlayer-cli build`)
+- CLI builds clean (`pnpm --filter ateva-cli build`)
 - All DTO fields in extension calls match backend expectations
 
 ---
@@ -520,7 +520,7 @@ test suite were fixed (see "Critical fixes" below).
 pnpm install --frozen-lockfile
 
 # Generate Prisma client (run after schema changes)
-pnpm --filter @waitlayer/db generate
+pnpm --filter @ateva/db generate
 
 # Quality gates
 pnpm run typecheck
@@ -529,12 +529,12 @@ pnpm run test
 pnpm run build
 
 # Run all API tests (requires DATABASE_URL + JWT_SECRET >= 32 chars)
-DATABASE_URL="postgresql://waitlayer:waitlayer-dev@localhost:5432/waitlayer" \\
+DATABASE_URL="postgresql://ateva:ateva-dev@localhost:5432/ateva" \\
 JWT_SECRET="test-jwt-secret-for-integration-test-runs-only-32+" \\
-  pnpm --filter waitlayer-api test
+  pnpm --filter ateva-api test
 
 # Run with coverage
-pnpm --filter waitlayer-api test:cov
+pnpm --filter ateva-api test:cov
 
 # Production dependency audit
 pnpm audit --prod
@@ -544,10 +544,10 @@ docker compose build
 docker compose up -d
 
 # Develop API locally
-pnpm --filter waitlayer-api dev
+pnpm --filter ateva-api dev
 
 # Develop Web locally
-pnpm --filter waitlayer-web dev
+pnpm --filter ateva-web dev
 ```
 
 ---
@@ -565,7 +565,7 @@ pnpm --filter waitlayer-web dev
 | TOTP encryption key required for production                                   | Med      | `TOTP_SECRET_ENCRYPTION_KEY` must be set to a 32+ character secret in production so MFA seeds are encrypted independently of the database                                                                                                                                |
 | Dev secrets in `docker-compose.yml`                                           | Med      | `JWT_SECRET` is a dev-only placeholder and must be rotated before production deploy; compose also enables mock Google auth for local development only                                                                                                                    |
 | Provider-native re-auth for future non-Google identity providers is not wired | Low      | Password users recover via password re-auth; Google-linked users recover via matching Google ID token; non-Google passwordless users can recover through a short-lived support/admin token. Future providers should add native provider re-auth to reduce support burden |
-| Docker Compose has orphan one-off containers locally                          | Low      | `docker compose up -d` warned about old `waitlayer-api-run-*` containers from prior manual runs; current named services are healthy                                                                                                                                      |
+| Docker Compose has orphan one-off containers locally                          | Low      | `docker compose up -d` warned about old `ateva-api-run-*` containers from prior manual runs; current named services are healthy                                                                                                                                          |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`)                  | Info     | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path                                                                                                                        |
 
 ---
@@ -622,7 +622,7 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 
 | Change                                                                      | Files                                                      | Impact                                                      |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- |
-| Extracted `DEFAULT_COMPANY_NAME` to `@waitlayer/shared`                     | `constants.ts`, `auth.service.ts`, `advertiser.service.ts` | Eliminated 3 duplicated `'Unnamed Company'` string literals |
+| Extracted `DEFAULT_COMPANY_NAME` to `@ateva/shared`                         | `constants.ts`, `auth.service.ts`, `advertiser.service.ts` | Eliminated 3 duplicated `'Unnamed Company'` string literals |
 | Refactored module-level `setInterval` into `startCleanup()`/`stopCleanup()` | `brute-force.guard.ts`                                     | Testable interval with cleanup support                      |
 | Injected `ConfigService` instead of reading `process.env.WEB_BASE_URL`      | `referral.service.ts`                                      | Proper NestJS DI pattern, validated config                  |
 | Replaced `console.error()` with `Logger.error()`                            | `audit.service.ts`                                         | Structured NestJS logging                                   |
@@ -660,7 +660,7 @@ All quality gates pass cleanly:
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities
-- `pnpm --filter @waitlayer/db exec prisma validate --schema prisma/schema.prisma` — PASS
+- `pnpm --filter @ateva/db exec prisma validate --schema prisma/schema.prisma` — PASS
   `prisma migrate status` — PASS, all committed migrations applied and database schema is up to date (live count tracked in AGENTS.md per pass)
 - `prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` — PASS, empty migration
 - `git diff --check` — PASS

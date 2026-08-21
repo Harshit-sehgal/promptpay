@@ -119,7 +119,7 @@ describe('RuntimeConfigService', () => {
             {
               provider: 'provider',
               issuer: 'https://attestor.example.test',
-              audience: 'waitlayer',
+              audience: 'ateva',
               publicKeys: { kid: 'public-key' },
             },
           ]);

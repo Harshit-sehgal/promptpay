@@ -1,4 +1,4 @@
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import type { PrismaService } from '../../config/prisma.service';
 

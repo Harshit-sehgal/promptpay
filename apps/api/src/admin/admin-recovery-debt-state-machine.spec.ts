@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 
-import { RecoveryDebtCaseStatus } from '@waitlayer/db';
+import { RecoveryDebtCaseStatus } from '@ateva/db';
 
 import {
   RECOVERY_DEBT_TRANSITIONS,

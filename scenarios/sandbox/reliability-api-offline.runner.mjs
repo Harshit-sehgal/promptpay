@@ -1,4 +1,4 @@
-process.env.WAITLAYER_API_URL = 'http://127.0.0.1:9/api/v1';
+process.env.ATEVA_API_URL = 'http://127.0.0.1:9/api/v1';
 
 const { ApiClient } = await import('../../apps/cli/dist/lib/api-client.js');
 const client = new ApiClient({

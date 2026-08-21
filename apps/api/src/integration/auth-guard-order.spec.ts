@@ -29,7 +29,7 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole, UserStatus } from '@waitlayer/shared';
+import { UserRole, UserStatus } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -81,8 +81,8 @@ async function mintAccessToken(opts: {
   audience?: string | string[];
   issuer?: string;
 }): Promise<string> {
-  const audience = opts.audience ?? process.env.JWT_AUDIENCE ?? 'waitlayer-client';
-  const issuer = opts.issuer ?? process.env.JWT_ISSUER ?? 'waitlayer';
+  const audience = opts.audience ?? process.env.JWT_AUDIENCE ?? 'ateva-client';
+  const issuer = opts.issuer ?? process.env.JWT_ISSUER ?? 'ateva';
   const exp = opts.exp ?? Math.floor(Date.now() / 1000) + 60 * 60;
   return jwtSigner.signAsync({
     sub: opts.sub,
@@ -200,11 +200,11 @@ describe('P0.4 Auth guard-order (real app, DB-backed)', () => {
         })
         .then((a) => a.id);
 
-    const dev = await makeUser('dev-a@waitlayer.com', UserRole.DEVELOPER, UserStatus.ACTIVE);
+    const dev = await makeUser('dev-a@ateva.com', UserRole.DEVELOPER, UserStatus.ACTIVE);
     devUserId = dev.id;
     devSessionId = await makeSession(devUserId);
 
-    const advA = await makeUser('adv-a@waitlayer.com', UserRole.ADVERTISER, UserStatus.ACTIVE);
+    const advA = await makeUser('adv-a@ateva.com', UserRole.ADVERTISER, UserStatus.ACTIVE);
     advAUserId = advA.id;
     advAAdvertiserId = await makeAdvertiser(advAUserId);
     advASessionId = await makeSession(advAUserId);
@@ -212,21 +212,17 @@ describe('P0.4 Auth guard-order (real app, DB-backed)', () => {
     // is still checked even when an API key is present.
     advARevokedSessionId = await makeSession(advAUserId, true);
 
-    const advB = await makeUser('adv-b@waitlayer.com', UserRole.ADVERTISER, UserStatus.ACTIVE);
+    const advB = await makeUser('adv-b@ateva.com', UserRole.ADVERTISER, UserStatus.ACTIVE);
     advBUserId = advB.id;
     advBAdvertiserId = await makeAdvertiser(advBUserId);
 
-    const banDev = await makeUser('ban-dev@waitlayer.com', UserRole.DEVELOPER, UserStatus.BANNED);
+    const banDev = await makeUser('ban-dev@ateva.com', UserRole.DEVELOPER, UserStatus.BANNED);
     banDevUserId = banDev.id;
     banDevSessionId = await makeSession(banDevUserId);
 
     // Banned API-key owner: create active, mint a key, then ban the owner so
     // the key's owner lookup fails isActiveAccountStatus.
-    const banOwner = await makeUser(
-      'ban-owner@waitlayer.com',
-      UserRole.ADVERTISER,
-      UserStatus.ACTIVE,
-    );
+    const banOwner = await makeUser('ban-owner@ateva.com', UserRole.ADVERTISER, UserStatus.ACTIVE);
     banOwnerUserId = banOwner.id;
     const banOwnerAdvertiserId = await makeAdvertiser(banOwnerUserId);
 

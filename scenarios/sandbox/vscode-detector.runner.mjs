@@ -8,7 +8,7 @@ const requireVscodeDependency = createRequire(new URL('../../apps/vscode-extensi
 const { build } = requireVscodeDependency('esbuild');
 
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-vscode-detector-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-vscode-detector-'));
 
 function event(eventType, metadata = {}) {
   return { eventId: `scenario-${mode}-${eventType}`, eventType, mode: 'sandbox', financialMode: 'sandbox', hasCashValue: false, metadata };

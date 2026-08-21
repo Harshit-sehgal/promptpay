@@ -9,7 +9,7 @@ Common issues and how to resolve them.
 
 - Find the culprit: `lsof -i :4002` (macOS/Linux) or `ss -ltnp | grep 4002`.
 - Stop it, or override the port (see `docs/ONBOARDING.md` port table):
-  `API_PORT=4102 pnpm --filter waitlayer-api dev`.
+  `API_PORT=4102 pnpm --filter ateva-api dev`.
 - Postgres conflict: use the `test` profile DB on `5433`, or remap the compose
   port: `docker compose run -e ... ` / edit `docker-compose.yml` ports mapping.
 - A leftover Docker container may hold the port: `docker ps` + `docker rm -f <id>`.

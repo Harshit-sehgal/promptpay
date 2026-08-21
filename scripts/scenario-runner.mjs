@@ -120,7 +120,7 @@ if (process.argv[1]?.endsWith('/scenario-runner.mjs')) {
           manifest,
           trace,
           buildSha: process.env.GIT_SHA ?? 'unknown',
-          environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'unknown',
+          environmentId: process.env.ATEVA_ENVIRONMENT_ID ?? 'unknown',
           startedAt,
           endedAt,
         });

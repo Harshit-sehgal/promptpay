@@ -31,7 +31,7 @@ vi.mock('os', async () => {
   const actual = (await vi.importActual('os')) as typeof import('os');
   return {
     ...actual,
-    homedir: () => '/tmp/waitlayer-test-home',
+    homedir: () => '/tmp/ateva-test-home',
   };
 });
 
@@ -65,10 +65,10 @@ describe('getCredentials', () => {
     expect(creds?.accessToken).toBe('fresh-access');
     expect(creds?.refreshToken).toBe('fresh-refresh');
     expect(creds?.email).toBe('dev@example.com');
-    expect(keytarMock.getPassword).toHaveBeenCalledWith('waitlayer-cli', 'device-access-tokens');
+    expect(keytarMock.getPassword).toHaveBeenCalledWith('ateva-cli', 'device-access-tokens');
     // The keychain should be re-synced with the authoritative credential-file tokens.
     expect(keytarMock.setPassword).toHaveBeenCalledWith(
-      'waitlayer-cli',
+      'ateva-cli',
       'device-access-tokens',
       JSON.stringify({ accessToken: 'fresh-access', refreshToken: 'fresh-refresh' }),
     );
@@ -168,7 +168,7 @@ describe('getCredentials', () => {
     const [, serialized] = writeFileSyncMock.mock.calls[0] as [string, string];
     const persisted = JSON.parse(serialized) as { installationId: string };
     expect(persisted.installationId).toBe(installationId);
-    expect(serialized).not.toContain('/tmp/waitlayer-test-home');
+    expect(serialized).not.toContain('/tmp/ateva-test-home');
     expect(serialized).not.toContain('hostname');
     expect(renameSyncMock).toHaveBeenCalledOnce();
   });
@@ -236,7 +236,7 @@ describe('insecure secret-store fail-closed default', () => {
 
   it('names both the risk and the escape hatch in the error', () => {
     expect(() => assertInsecureSecretStoreAllowed({})).toThrow(
-      /WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1/,
+      /ATEVA_ALLOW_INSECURE_SECRET_STORE=1/,
     );
     expect(() => assertInsecureSecretStoreAllowed({})).toThrow(/keyring backend/);
   });
@@ -245,7 +245,7 @@ describe('insecure secret-store fail-closed default', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       expect(() =>
-        assertInsecureSecretStoreAllowed({ WAITLAYER_ALLOW_INSECURE_SECRET_STORE: '1' }),
+        assertInsecureSecretStoreAllowed({ ATEVA_ALLOW_INSECURE_SECRET_STORE: '1' }),
       ).not.toThrow();
       expect(warn).toHaveBeenCalledOnce();
       expect(String(warn.mock.calls[0][0])).toMatch(/recover it/);
@@ -257,7 +257,7 @@ describe('insecure secret-store fail-closed default', () => {
   it('treats any value other than exactly "1" as not opted in', () => {
     for (const value of ['0', 'true', 'yes', '', ' 1']) {
       expect(() =>
-        assertInsecureSecretStoreAllowed({ WAITLAYER_ALLOW_INSECURE_SECRET_STORE: value }),
+        assertInsecureSecretStoreAllowed({ ATEVA_ALLOW_INSECURE_SECRET_STORE: value }),
       ).toThrow();
     }
   });

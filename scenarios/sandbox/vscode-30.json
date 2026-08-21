@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "quiet_mode_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-vscode-detector-v1",
+  "seed": "ateva-vscode-detector-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

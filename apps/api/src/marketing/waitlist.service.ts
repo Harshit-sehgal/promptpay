@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { privacyPseudonym } from '../common/utils/privacy-hash';

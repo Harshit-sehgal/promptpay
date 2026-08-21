@@ -1,12 +1,12 @@
 {
-  "name": "waitlayer-cli",
+  "name": "ateva-cli",
   "version": "0.0.1",
   "private": false,
   "engines": {
     "node": ">=22.0.0"
   },
   "bin": {
-    "waitlayer": "./dist/index.js"
+    "ateva": "./dist/index.js"
   },
   "files": [
     "dist/index.js"
@@ -31,9 +31,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "@waitlayer/agent-protocol": "workspace:*",
-    "@waitlayer/eslint-config": "workspace:*",
-    "@waitlayer/shared": "workspace:*",
+    "@ateva/agent-protocol": "workspace:*",
+    "@ateva/eslint-config": "workspace:*",
+    "@ateva/shared": "workspace:*",
     "esbuild": "^0.28.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"

@@ -44,7 +44,7 @@ describe('JWKS (P1 #22)', () => {
 
   it('a token verifies against a public key rebuilt from the JWKS document (independent path)', () => {
     const token = signRs256(
-      { sub: 'user-1', jti: 'session-1', aud: ['waitlayer-client', 'access'] },
+      { sub: 'user-1', jti: 'session-1', aud: ['ateva-client', 'access'] },
       TEST_JWT_PRIVATE_KEY,
       deriveKeyId(TEST_JWT_PUBLIC_KEY),
     );

@@ -79,7 +79,7 @@ function parsePoolParams(raw: string): {
 // not yet present (e.g. unit tests that mock the client). The real app always
 // provides DATABASE_URL via validated environment config before Prisma boots.
 const connectionString =
-  process.env.DATABASE_URL ?? 'postgresql://localhost:5432/waitlayer?schema=public';
+  process.env.DATABASE_URL ?? 'postgresql://localhost:5432/ateva?schema=public';
 const adapter = createPrismaAdapter(connectionString);
 
 export const prisma =

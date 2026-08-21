@@ -1,4 +1,4 @@
-import { LedgerStatus } from '@waitlayer/shared';
+import { LedgerStatus } from '@ateva/shared';
 
 /** Valid earning state transitions */
 export const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {

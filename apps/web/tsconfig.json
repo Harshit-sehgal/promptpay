@@ -4,11 +4,7 @@
     "baseUrl": ".",
     "incremental": true,
     "jsx": "preserve",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "noEmit": true,
@@ -18,26 +14,12 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@waitlayer/shared": [
-        "../../packages/shared/src"
-      ],
-      "@waitlayer/ui": [
-        "../../packages/ui/src"
-      ]
+      "@/*": ["./src/*"],
+      "@ateva/shared": ["../../packages/shared/src"],
+      "@ateva/ui": ["../../packages/ui/src"]
     },
     "allowJs": true
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    ".next"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
 }

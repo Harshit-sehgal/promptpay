@@ -12,13 +12,13 @@ import { dirname, join } from 'node:path';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 
-const kind = process.env.WAITLAYER_ENVIRONMENT_KIND;
-const environmentId = process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local';
+const kind = process.env.ATEVA_ENVIRONMENT_KIND;
+const environmentId = process.env.ATEVA_ENVIRONMENT_ID ?? 'local';
 const databaseUrl = process.env.DATABASE_URL;
 if (kind !== 'sandbox' && kind !== 'test')
-  throw new Error('sandbox-seed requires WAITLAYER_ENVIRONMENT_KIND=sandbox or test');
+  throw new Error('sandbox-seed requires ATEVA_ENVIRONMENT_KIND=sandbox or test');
 if (!databaseUrl) throw new Error('sandbox-seed requires DATABASE_URL');
 
 const prisma = new PrismaClient({ adapter: createPrismaAdapter(databaseUrl) });
@@ -40,8 +40,8 @@ async function main() {
       update: { status: 'active', role: 'advertiser' },
       create: {
         id: IDS.user,
-        email: `sandbox-house-${environmentId}@waitlayer.test`,
-        name: 'WaitLayer Sandbox House',
+        email: `sandbox-house-${environmentId}@ateva.test`,
+        name: 'Ateva Sandbox House',
         role: 'advertiser',
         status: 'active',
         emailVerified: true,
@@ -49,12 +49,12 @@ async function main() {
     });
     await tx.advertiser.upsert({
       where: { id: IDS.advertiser },
-      update: { companyName: 'WaitLayer Sandbox House' },
+      update: { companyName: 'Ateva Sandbox House' },
       create: {
         id: IDS.advertiser,
         userId: IDS.user,
-        companyName: 'WaitLayer Sandbox House',
-        billingEmail: `sandbox-house-${environmentId}@waitlayer.test`,
+        companyName: 'Ateva Sandbox House',
+        billingEmail: `sandbox-house-${environmentId}@ateva.test`,
       },
     });
     await tx.campaign.upsert({
@@ -81,14 +81,14 @@ async function main() {
     });
     await tx.adCreative.upsert({
       where: { id: IDS.creative },
-      update: { status: 'approved', destinationUrl: 'https://sandbox.waitlayer.test/house' },
+      update: { status: 'approved', destinationUrl: 'https://sandbox.ateva.test/house' },
       create: {
         id: IDS.creative,
         campaignId: IDS.campaign,
-        title: 'WaitLayer Sandbox House',
+        title: 'Ateva Sandbox House',
         sponsoredMessage: 'This is a simulated placement for testing only.',
-        destinationUrl: 'https://sandbox.waitlayer.test/house',
-        displayDomain: 'sandbox.waitlayer.test',
+        destinationUrl: 'https://sandbox.ateva.test/house',
+        displayDomain: 'sandbox.ateva.test',
         ctaText: 'Learn about the sandbox',
         status: 'approved',
       },

@@ -2,11 +2,11 @@
 #
 # PRs that change the paths below require review from the named owners before
 # merge. The repository is hosted on GitHub as `Harshit-sehgal/promptpay`; the
-# product is branded WaitLayer. Branch protection must still be enabled in
+# product is branded Ateva. Branch protection must still be enabled in
 # GitHub repo Settings → Branches (see docs/ops/branch-protection.md).
 #
 # To keep ownership explicit, the default owner is the repository owner.
-# Replace with a GitHub team (e.g., @waitlayer/money-team) once the org exists.
+# Replace with a GitHub team (e.g., @ateva/money-team) once the org exists.
 
 # Authentication & identity
 /apps/api/src/auth/          @Harshit-sehgal

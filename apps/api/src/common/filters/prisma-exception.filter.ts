@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus, Logger } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 /**
  * Maps Prisma known-request errors to HTTP exceptions with safe, generic

@@ -1,17 +1,17 @@
 # Deployment
 
-Minimal deployment guidance for WaitLayer. The app is containerised; the
+Minimal deployment guidance for Ateva. The app is containerised; the
 `Dockerfile` produces `api` and `web` images (multi-stage). A full runbook
 lives at `docs/ops/rollback-and-deployment.md` — this is the quick-start.
 
 ## Images
 
 ```sh
-export WAITLAYER_API_IMAGE=registry.example.com/waitlayer-api:v1.0.0
-export WAITLAYER_WEB_IMAGE=registry.example.com/waitlayer-web:v1.0.0
+export ATEVA_API_IMAGE=registry.example.com/ateva-api:v1.0.0
+export ATEVA_WEB_IMAGE=registry.example.com/ateva-web:v1.0.0
 export JWT_PUBLIC_KEY="$(cat jwt-public.pem)"
-export JWT_ISSUER="${JWT_ISSUER:-waitlayer}"
-export JWT_AUDIENCE="${JWT_AUDIENCE:-waitlayer-client}"
+export JWT_ISSUER="${JWT_ISSUER:-ateva}"
+export JWT_AUDIENCE="${JWT_AUDIENCE:-ateva-client}"
 # During rotation only: export JWT_PUBLIC_KEYS="$(cat previous-jwt-public.pem)"
 export NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 export NEXT_PUBLIC_WEB_URL=https://app.example.com
@@ -22,16 +22,16 @@ docker build --target api \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
   --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
-  -t "$WAITLAYER_API_IMAGE" .
+  -t "$ATEVA_API_IMAGE" .
 docker build --target web \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
   --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
-  -t "$WAITLAYER_WEB_IMAGE" .
+  -t "$ATEVA_WEB_IMAGE" .
 
-docker push "$WAITLAYER_API_IMAGE"
-docker push "$WAITLAYER_WEB_IMAGE"
+docker push "$ATEVA_API_IMAGE"
+docker push "$ATEVA_WEB_IMAGE"
 ```
 
 Use immutable, registry-protected version tags or image digests. Do not retag a

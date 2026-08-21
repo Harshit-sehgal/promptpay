@@ -6,8 +6,8 @@
 //
 // To let operators gate a provider on/off at deploy time WITHOUT a code edit,
 // the static statuses can be overridden per-environment via a JSON map of
-// provider -> 'available' | 'coming_soon' (NEXT_PUBLIC_WAITLAYER_PAYOUT_
-// PROVIDER_STATUS on the web, WAITLAYER_PAYOUT_PROVIDER_STATUS on the API).
+// provider -> 'available' | 'coming_soon' (NEXT_PUBLIC_ATEVA_PAYOUT_
+// PROVIDER_STATUS on the web, ATEVA_PAYOUT_PROVIDER_STATUS on the API).
 // Unknown provider keys and invalid status values are ignored so a typo in the
 // env var never silently breaks registration. The API exposes the resulting
 // runtime readiness to the web; the client deliberately has no independent

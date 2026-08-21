@@ -1,6 +1,6 @@
 import { Page } from '@playwright/test';
 
-import { generateTotp } from '@waitlayer/shared';
+import { generateTotp } from '@ateva/shared';
 
 /**
  * Test user credentials and API helpers for browser E2E tests.
@@ -47,7 +47,7 @@ async function requireOk(response: Response, operation: string): Promise<void> {
 export function makeTestUser(role: 'developer' | 'advertiser'): TestUser {
   const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   return {
-    email: `e2e-${role}-${suffix}@waitlayer.test`,
+    email: `e2e-${role}-${suffix}@ateva.test`,
     password: 'TestPassword123!',
     role,
   };

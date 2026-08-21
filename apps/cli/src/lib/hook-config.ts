@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { getCodexCapabilityStatus } from './codex-adapter';
 
 export const HOOK_CONFIG_VERSION = 1;
-export const WAITLAYER_HOOK_MARKER = 'waitlayer-managed-hook-v1';
+export const ATEVA_HOOK_MARKER = 'ateva-managed-hook-v1';
 
 export type IntegrationProvider = 'claude-code' | 'codex';
 
@@ -98,7 +98,7 @@ const PROVIDER_CONFIG: Record<
 };
 
 /**
- * Manage only the WaitLayer-owned command entries in provider JSON settings.
+ * Manage only the Ateva-owned command entries in provider JSON settings.
  * Provider-specific event normalization remains in hook-ingestion/adapters;
  * this module deliberately treats the provider config as an opaque JSON tree
  * except for its top-level `hooks` object.
@@ -112,7 +112,7 @@ export class HookConfigManager {
 
   constructor(options: HookConfigManagerOptions = {}) {
     this.homeDir = options.homeDir ?? os.homedir();
-    this.stateDir = options.stateDir ?? path.join(this.homeDir, '.config', 'waitlayer');
+    this.stateDir = options.stateDir ?? path.join(this.homeDir, '.config', 'ateva');
     this.executable = options.executable ?? resolveExecutable();
     this.now = options.now ?? (() => new Date());
     this.configPaths = {
@@ -241,7 +241,7 @@ export class HookConfigManager {
       ...(stateDrifted
         ? {
             reason:
-              'provider configuration was manually modified; run repair to restore WaitLayer entries',
+              'provider configuration was manually modified; run repair to restore Ateva entries',
           }
         : {}),
       changed,
@@ -357,7 +357,7 @@ export class HookConfigManager {
       version: HOOK_CONFIG_VERSION,
       provider,
       configPath: this.configPaths[provider],
-      marker: WAITLAYER_HOOK_MARKER,
+      marker: ATEVA_HOOK_MARKER,
       configHash: hashConfig(config),
       ...(disabled ? { disabled: true } : {}),
       updatedAt: this.now().toISOString(),
@@ -477,7 +477,7 @@ function hookCommand(
   const protocolProvider = providerDefinition(provider).protocolProvider;
   return {
     type: 'command',
-    command: `${shellQuote(executable)} hooks ingest --provider ${protocolProvider} --event ${shellQuote(event)} # ${WAITLAYER_HOOK_MARKER}`,
+    command: `${shellQuote(executable)} hooks ingest --provider ${protocolProvider} --event ${shellQuote(event)} # ${ATEVA_HOOK_MARKER}`,
   };
 }
 
@@ -499,11 +499,11 @@ function isOwnedHook(hook: HookCommand, provider: IntegrationProvider, event: st
   // The executable path is intentionally variable across npm/global installs,
   // but the complete argument shape and terminal ownership marker must match.
   // This avoids treating an arbitrary command that merely mentions the marker
-  // as a WaitLayer-owned hook.
+  // as a Ateva-owned hook.
   const escapedProvider = escapeRegExp(protocolProvider);
   const escapedEvent = escapeRegExp(event);
   return new RegExp(
-    `^.+\\s+hooks\\s+ingest\\s+--provider\\s+${escapedProvider}\\s+--event\\s+'${escapedEvent}'\\s+#\\s+${escapeRegExp(WAITLAYER_HOOK_MARKER)}$`,
+    `^.+\\s+hooks\\s+ingest\\s+--provider\\s+${escapedProvider}\\s+--event\\s+'${escapedEvent}'\\s+#\\s+${escapeRegExp(ATEVA_HOOK_MARKER)}$`,
   ).test(hook.command.trim());
 }
 
@@ -519,7 +519,7 @@ function hasManagedLock(config: ConfigShape): boolean {
 }
 
 function createBackup(file: string, contents: string, now: Date): string {
-  const backup = `${file}.waitlayer-backup.${now.toISOString().replace(/[:.]/g, '-')}-${process.pid}-${randomUUID()}`;
+  const backup = `${file}.ateva-backup.${now.toISOString().replace(/[:.]/g, '-')}-${process.pid}-${randomUUID()}`;
   fs.writeFileSync(backup, contents, { encoding: 'utf8', mode: 0o600 });
   try {
     fs.chmodSync(backup, 0o600);
@@ -533,7 +533,7 @@ function countBackups(file: string): number {
   try {
     return fs
       .readdirSync(path.dirname(file))
-      .filter((name) => name.startsWith(`${path.basename(file)}.waitlayer-backup.`)).length;
+      .filter((name) => name.startsWith(`${path.basename(file)}.ateva-backup.`)).length;
   } catch {
     return 0;
   }
@@ -548,7 +548,11 @@ function cloneRecord(value: ConfigShape): ConfigShape {
 }
 
 function resolveExecutable(): string {
-  return process.env.WAITLAYER_CLI_EXECUTABLE?.trim() || process.argv[1] || 'waitlayer';
+  return (
+    (process.env.ATEVA_CLI_EXECUTABLE ?? process.env.WAITLAYER_CLI_EXECUTABLE)?.trim() ||
+    process.argv[1] ||
+    'ateva'
+  );
 }
 
 function shellQuote(value: string): string {

@@ -8,7 +8,7 @@
 
 ## 1. Prerequisites
 
-- Admin access to the WaitLayer admin dashboard (`/admin`)
+- Admin access to the Ateva admin dashboard (`/admin`)
 - Listed `admin` or `super_admin` role in the database
 - Familiarity with the campaign state machine:
   `draft → submitted → approved → active → paused → active → archived`
@@ -27,13 +27,13 @@
 
 For each submitted campaign, verify:
 
-| Check | What to Look For | Action if Failed |
-|-------|------------------|------------------|
-| **Budget** | Minimum $50, maximum $1,000,000 | Reject with reason |
-| **CPM/CPC bid** | Must be positive integer (cents) | Reject with reason |
-| **Category** | Must be on allowed categories list | Reject — prohibited category |
-| **Targeting** | Country targeting must include valid ISO codes | Request correction |
-| **Creatives** | At least one creative present; review each | Reject individual creatives |
+| Check           | What to Look For                               | Action if Failed             |
+| --------------- | ---------------------------------------------- | ---------------------------- |
+| **Budget**      | Minimum $50, maximum $1,000,000                | Reject with reason           |
+| **CPM/CPC bid** | Must be positive integer (cents)               | Reject with reason           |
+| **Category**    | Must be on allowed categories list             | Reject — prohibited category |
+| **Targeting**   | Country targeting must include valid ISO codes | Request correction           |
+| **Creatives**   | At least one creative present; review each     | Reject individual creatives  |
 
 ### 2.3 Creative Review
 
@@ -48,6 +48,7 @@ For each creative (`status: pending_review`):
 - [ ] No claims about earnings, health benefits, or regulated industries without evidence
 
 **Actions:**
+
 - **Approve** → creative becomes `approved`, eligible for serving
 - **Reject** → creative moves to `rejected`, advertiser must submit a new version
 
@@ -64,12 +65,12 @@ After at least one creative is approved:
 
 ## 3. Troubleshooting
 
-| Symptom | Likely Cause | Resolution |
-|---------|-------------|------------|
-| Campaign won't approve | No approved creatives | Appraise creatives first |
-| Campaign approved but not serving | Budget exhausted, paused, or not active | Check campaign status in overview |
-| Creative stuck in `pending_review` | Race condition with admin approval | Refresh page and re-submit if needed |
-| Country targeting error | Invalid country code | Use ISO 3166-1 alpha-2 codes (US, CA, GB, etc.) |
+| Symptom                            | Likely Cause                            | Resolution                                      |
+| ---------------------------------- | --------------------------------------- | ----------------------------------------------- |
+| Campaign won't approve             | No approved creatives                   | Appraise creatives first                        |
+| Campaign approved but not serving  | Budget exhausted, paused, or not active | Check campaign status in overview               |
+| Creative stuck in `pending_review` | Race condition with admin approval      | Refresh page and re-submit if needed            |
+| Country targeting error            | Invalid country code                    | Use ISO 3166-1 alpha-2 codes (US, CA, GB, etc.) |
 
 ---
 
@@ -84,6 +85,7 @@ After at least one creative is approved:
 ## 5. Audit Trail
 
 All approve/reject actions are automatically recorded in the audit log (`/admin/audit`). Each entry includes:
+
 - Admin who performed the action
 - Campaign ID
 - Decision (approved/rejected)

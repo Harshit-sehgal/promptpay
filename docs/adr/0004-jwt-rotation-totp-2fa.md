@@ -1,7 +1,7 @@
 # ADR 0004: JWT Refresh Rotation + TOTP 2FA
 
 - **Status:** Accepted (2026)
-- **Deciders:** WaitLayer engineering
+- **Deciders:** Ateva engineering
 
 ## Context
 

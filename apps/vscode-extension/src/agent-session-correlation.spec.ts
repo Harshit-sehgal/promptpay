@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
+import type { AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 import { AgentSessionCorrelation } from './agent-session-correlation';
 

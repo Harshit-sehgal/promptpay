@@ -14,8 +14,8 @@ import type { Metadata } from 'next';
  * title and have it suffixed consistently.
  */
 export const metadata: Metadata = {
-  title: { template: '%s · WaitLayer', default: 'Developer · WaitLayer' },
-  description: 'Earnings, payouts, referrals and trust for your WaitLayer developer account.',
+  title: { template: '%s · Ateva', default: 'Developer · Ateva' },
+  description: 'Earnings, payouts, referrals and trust for your Ateva developer account.',
   // Defence in depth alongside robots.ts — an authenticated surface.
   robots: { index: false, follow: false },
 };

@@ -112,9 +112,7 @@ describe('runSupervisedCommand', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(JSON.stringify(bridge.send.mock.calls[0]?.[0].event)).not.toContain('--version');
-    expect(stderrSpy).toHaveBeenCalledWith(
-      expect.stringContaining('supervised session completed'),
-    );
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('supervised session completed'));
   });
 
   it('keeps the completion summary off stdout', async () => {
@@ -178,6 +176,6 @@ describe('runSupervisedCommand', () => {
   });
 
   it('requires a command', async () => {
-    await expect(runSupervisedCommand([])).rejects.toThrow('Usage: waitlayer run');
+    await expect(runSupervisedCommand([])).rejects.toThrow('Usage: ateva run');
   });
 });

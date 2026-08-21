@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Tool Comparison — WaitLayer',
+  title: 'Tool Comparison — Ateva',
   description:
-    'Compare WaitLayer beta telemetry clients and planned reward-marketplace capabilities across platforms.',
+    'Compare Ateva beta telemetry clients and planned reward-marketplace capabilities across platforms.',
 };
 
 const IconCheck = () => (
@@ -36,7 +36,7 @@ const IconMinus = () => (
 );
 // A-033: The six "Live" tool entries below are marketing labels over just two
 // real client codebases. Cursor, Windsurf, and Cline are VS Code forks that
-// reuse the same WaitLayer VS Code extension ('vscode-extension'), and Claude
+// reuse the same Ateva VS Code extension ('vscode-extension'), and Claude
 // Code + Terminal are both the same CLI ('cli'). The claims are legitimate
 // (those tools do run the shared code) but they are NOT six independent
 // integrations. See claims.test.ts for the codebase mapping that anchors this.
@@ -111,64 +111,64 @@ const TOOL_FEATURES = [
 const PLATFORM_COMPARE = [
   {
     feature: 'Privacy-first (no code/prompt tracking)',
-    waitlayer: true,
+    ateva: true,
     carbon: false,
     braze: false,
     google: false,
   },
   {
     feature: 'Developer-targeted ad network (planned)',
-    waitlayer: false,
+    ateva: false,
     carbon: true,
     braze: false,
     google: false,
   },
   {
     feature: 'AI wait-state monetization (planned)',
-    waitlayer: false,
+    ateva: false,
     carbon: false,
     braze: false,
     google: false,
   },
   {
     feature: 'Fraud-resistant trust scoring',
-    waitlayer: true,
+    ateva: true,
     carbon: false,
     braze: false,
     google: false,
   },
   {
     feature: 'Published reward schedule (planned)',
-    waitlayer: false,
+    ateva: false,
     carbon: false,
     braze: false,
     google: false,
   },
   {
     feature: 'PayPal-first payouts (planned)',
-    waitlayer: false,
+    ateva: false,
     carbon: true,
     braze: false,
     google: false,
   },
   {
     feature: 'Self-serve campaign creation',
-    waitlayer: true,
+    ateva: true,
     carbon: true,
     braze: true,
     google: true,
   },
   {
     feature: 'Real-time invalid traffic filtering',
-    waitlayer: true,
+    ateva: true,
     carbon: false,
     braze: false,
     google: false,
   },
-  { feature: 'Open-source extension', waitlayer: true, carbon: false, braze: false, google: false },
+  { feature: 'Open-source extension', ateva: true, carbon: false, braze: false, google: false },
   {
     feature: 'Multiple tool support (IDE + CLI)',
-    waitlayer: true,
+    ateva: true,
     carbon: false,
     braze: true,
     google: false,
@@ -185,7 +185,7 @@ export default function ComparisonPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <Link
@@ -230,7 +230,7 @@ export default function ComparisonPage() {
               Tool & platform comparison
             </h1>
             <p className="text-surface-500 text-lg max-w-xl mx-auto">
-              See which tools WaitLayer supports and how we compare to other ad platforms.
+              See which tools Ateva supports and how we compare to other ad platforms.
             </p>
           </div>
         </section>
@@ -242,7 +242,7 @@ export default function ComparisonPage() {
               Supported tools
             </h2>
             <p className="text-surface-500 text-sm mb-8">
-              WaitLayer integrates directly into popular AI coding tools as a VS Code extension or
+              Ateva integrates directly into popular AI coding tools as a VS Code extension or
               terminal CLI.
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -321,7 +321,7 @@ export default function ComparisonPage() {
               How we compare
             </h2>
             <p className="text-surface-500 text-sm mb-8">
-              WaitLayer vs other ad platforms. We focus on privacy, developer trust, and AI-native
+              Ateva vs other ad platforms. We focus on privacy, developer trust, and AI-native
               integrations.
             </p>
             <div className="overflow-hidden rounded-2xl border border-surface-200/80">
@@ -331,9 +331,7 @@ export default function ComparisonPage() {
                     <th className="text-left px-5 py-4 text-surface-600 font-medium w-1/3">
                       Feature
                     </th>
-                    <th className="text-center px-3 py-4 text-brand-700 font-semibold">
-                      WaitLayer
-                    </th>
+                    <th className="text-center px-3 py-4 text-brand-700 font-semibold">Ateva</th>
                     <th className="text-center px-3 py-4 text-surface-400 font-medium">
                       Carbon Ads
                     </th>
@@ -347,7 +345,7 @@ export default function ComparisonPage() {
                   {PLATFORM_COMPARE.map((row) => (
                     <tr key={row.feature} className="hover:bg-surface-50/50 transition-colors">
                       <td className="px-5 py-4 text-surface-700">{row.feature}</td>
-                      {[row.waitlayer, row.carbon, row.braze, row.google].map((supported, i) => (
+                      {[row.ateva, row.carbon, row.braze, row.google].map((supported, i) => (
                         <td key={i} className="text-center px-3 py-4">
                           <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
                             {supported ? <IconCheck /> : <IconMinus />}
@@ -366,7 +364,7 @@ export default function ComparisonPage() {
         <section className="py-24 px-6 bg-brand-500">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold text-white tracking-tight mb-4">
-              Join the WaitLayer beta
+              Join the Ateva beta
             </h2>
             <p className="text-white text-sm mb-8 max-w-sm mx-auto">
               Install the extension or CLI in under 2 minutes. No credit card required.
@@ -399,7 +397,7 @@ export default function ComparisonPage() {
                 <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-xs">
                   W
                 </div>
-                <span className="text-surface-900 font-semibold text-sm">WaitLayer</span>
+                <span className="text-surface-900 font-semibold text-sm">Ateva</span>
               </div>
               <p className="text-surface-400 text-sm max-w-xs leading-relaxed">
                 Private beta for AI wait-state verification. Rewards and advertiser billing are not
@@ -468,7 +466,7 @@ export default function ComparisonPage() {
             </div>
           </div>
           <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-xs">
-            © 2026 WaitLayer. All rights reserved.
+            © 2026 Ateva. All rights reserved.
           </div>
         </div>
       </footer>

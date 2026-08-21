@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Changelog — WaitLayer',
-  description: 'WaitLayer release history, feature updates, improvements, and system patches.',
+  title: 'Changelog — Ateva',
+  description: 'Ateva release history, feature updates, improvements, and system patches.',
 };
 
 export default function ChangelogPage() {
@@ -25,7 +25,7 @@ export default function ChangelogPage() {
       title: 'Public Launch',
       changes: [
         'Released official VS Code extension supporting Cursor, Windsurf, and Cline.',
-        'Released WaitLayer CLI tool for terminal-based developer environments.',
+        'Released Ateva CLI tool for terminal-based developer environments.',
         'Shipped full advertiser dashboard with real-time budget, click, and impression analytics.',
         'Completed privacy audits ensuring 100% compliance with local allowlist rules.',
       ],
@@ -41,14 +41,7 @@ export default function ChangelogPage() {
         >
           ← Back to home
         </Link>
-        <h1
-          className="text-4.5xl font-bold text-surface-900 tracking-tight mb-10"
-          style={{
-            fontFamily: "'Instrument Serif', Georgia, serif",
-            fontSize: '42px',
-            fontWeight: 400,
-          }}
-        >
+        <h1 className="font-serif text-[42px] font-normal text-surface-900 tracking-tight mb-10">
           Changelog
         </h1>
         <div className="space-y-12">
@@ -68,7 +61,7 @@ export default function ChangelogPage() {
               >
                 <span
                   style={{
-                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontFamily: 'var(--font-mono), ui-monospace, monospace',
                     fontSize: '14px',
                     fontWeight: 600,
                     // --accent (#16a34a) measures 3.30:1 on white and fails WCAG AA

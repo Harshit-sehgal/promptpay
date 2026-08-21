@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 
-import { Prisma, RecoveryDebtCaseStatus } from '@waitlayer/db';
+import { Prisma, RecoveryDebtCaseStatus } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { getErrorCode } from '../common/utils/errors';

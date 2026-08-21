@@ -202,7 +202,7 @@ async function checkProductionGuards() {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({
-      email: `smoke-${Date.now()}@waitlayer.test`,
+      email: `smoke-${Date.now()}@ateva.test`,
       password: 'Str0ng!Passw0rd#2026',
       role: 'admin',
       ageConfirmed: true,
@@ -278,8 +278,8 @@ async function checkAuthentication() {
   if (!header.kid) fail('token-kid', 'no key id — rotation and JWKS selection would break');
   else pass('token-kid', header.kid.slice(0, 16));
 
-  const expectedIssuer = process.env.JWT_ISSUER ?? 'waitlayer';
-  const expectedAudience = process.env.JWT_AUDIENCE ?? 'waitlayer-client';
+  const expectedIssuer = process.env.JWT_ISSUER ?? 'ateva';
+  const expectedAudience = process.env.JWT_AUDIENCE ?? 'ateva-client';
   if (payload.iss !== expectedIssuer) fail('token-issuer', `${payload.iss} !== ${expectedIssuer}`);
   else pass('token-issuer', String(payload.iss));
 

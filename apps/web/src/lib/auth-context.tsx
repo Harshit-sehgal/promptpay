@@ -208,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
     } catch (err: unknown) {
       console.warn(
-        '[WaitLayer] logout failed — keeping the session active:',
+        '[Ateva] logout failed — keeping the session active:',
         err instanceof Error ? err.message : String(err),
       );
       throw err;

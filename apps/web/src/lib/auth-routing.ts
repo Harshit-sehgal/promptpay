@@ -28,7 +28,7 @@ export function resolvePostLoginPath(
   }
 
   try {
-    const base = new URL('https://waitlayer.local');
+    const base = new URL('https://ateva.local');
     const candidate = new URL(requestedPath, base);
     if (candidate.origin !== base.origin) return dashboardPath;
     if (

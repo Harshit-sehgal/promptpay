@@ -1,4 +1,4 @@
-# WaitLayer
+# Ateva
 
 Privacy-first beta for independently verifiable AI wait time and developer attention.
 
@@ -27,16 +27,16 @@ This monorepo (pnpm workspaces + Turborepo) contains:
 pnpm install --frozen-lockfile
 
 # Generate Prisma client
-pnpm --filter @waitlayer/db generate
+pnpm --filter @ateva/db generate
 
 # Start database and Redis-backed local rate limiting
 docker compose up -d postgres redis
 
 # Start API dev server
-pnpm --filter waitlayer-api dev
+pnpm --filter ateva-api dev
 
 # Start web dev server (in another terminal)
-pnpm --filter waitlayer-web dev
+pnpm --filter ateva-web dev
 ```
 
 The API serves interactive **OpenAPI docs at `/api/v1/docs`** (spec:
@@ -65,8 +65,8 @@ pnpm audit --prod    # production dependency vulnerability audit
 
 ## Private beta wait telemetry
 
-Use `waitlayer run -- <AI command> [arguments...]` to let the CLI supervise a
-real local AI-tool process lifecycle, for example `waitlayer run -- claude
+Use `ateva run -- <AI command> [arguments...]` to let the CLI supervise a
+real local AI-tool process lifecycle, for example `ateva run -- claude
 --version`. It sends only a normalized tool type and lifecycle timing—never the
 command arguments, prompt, or command output.
 

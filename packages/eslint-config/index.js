@@ -21,13 +21,16 @@ const config = [
       'simple-import-sort': simpleImportSort,
     },
     rules: {
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-require-imports': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
       // Enforce a consistent import order: side-effect imports, then external
-      // (with `node:`-prefixed builtins first), then internal `@waitlayer/*`
+      // (with `node:`-prefixed builtins first), then internal `@ateva/*`
       // and relative imports. Keeping this in the shared config means every
       // package sorts identically — see docs/STYLE_GUIDE.md.
       'simple-import-sort/imports': [
@@ -36,7 +39,7 @@ const config = [
           groups: [
             ['^\\u0000'],
             ['^(node:.*|node:.*|\\w.*)$', '\\w.*'],
-            ['^@waitlayer/(.*)$'],
+            ['^@ateva/(.*)$'],
             ['^\\.\\.(.*)$', '^\\.(.*)$'],
           ],
         },

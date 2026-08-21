@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Create the first WaitLayer administrator (A-088).
+ * Create the first Ateva administrator (A-088).
  *
  * WHY THIS EXISTS
  * ---------------
@@ -24,7 +24,7 @@
  *      database URL alone is not sufficient.
  *   2. Refuses if any admin/super_admin already exists.
  *   3. Enforces the same password rules as the public signup path, reusing
- *      `passwordValidationError` from @waitlayer/shared — one source of truth.
+ *      `passwordValidationError` from @ateva/shared — one source of truth.
  *   4. Hashes with bcrypt cost 12, identical to `auth-core.trait.ts`.
  *   5. Writes an `audit_logs` row in the same transaction as the user, so the
  *      creation of the most privileged account in the system cannot succeed
@@ -49,9 +49,9 @@ import { createInterface } from 'node:readline';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 const bcrypt = require('bcryptjs');
-const { passwordValidationError, PASSWORD_RULES } = require('@waitlayer/shared');
+const { passwordValidationError, PASSWORD_RULES } = require('@ateva/shared');
 
 const BCRYPT_COST = 12;
 const ADMIN_ROLE = 'super_admin';

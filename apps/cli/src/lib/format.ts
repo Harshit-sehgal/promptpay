@@ -38,7 +38,7 @@ export function parseMinor(value: string | number | bigint | null | undefined): 
  * (cents), but 0-decimal currencies (JPY, KRW, etc.) use 0, and 3-decimal
  * currencies (BHD, KWD, TND, etc.) use 3.
  *
- * Mirrors `minorUnitExponent` in @waitlayer/shared/src/format.ts; duplicated
+ * Mirrors `minorUnitExponent` in @ateva/shared/src/format.ts; duplicated
  * here because the CLI does not depend on the shared package.
  */
 export function minorUnitExponent(currency: string): number {

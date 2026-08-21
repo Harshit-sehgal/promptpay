@@ -7,7 +7,7 @@
  * ledger discrepancy or provider failure is detected.
  *
  * Usage (from repo root, with API deps available):
- *   pnpm --filter waitlayer-api exec node scripts/enforce-health-metrics.mjs
+ *   pnpm --filter ateva-api exec node scripts/enforce-health-metrics.mjs
  *
  * Required env:
  *   DATABASE_URL - Postgres connection string
@@ -24,19 +24,19 @@ import { createRequire } from 'module';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Anchor bare-specifier resolution to the API package so this script works
 // regardless of the cwd it is launched from (pnpm exec / CI / local). pnpm does
-// not hoist @nestjs/jwt's `jsonwebtoken` or the workspace @waitlayer/db into the
+// not hoist @nestjs/jwt's `jsonwebtoken` or the workspace @ateva/db into the
 // repo root node_modules, so resolving from the script's own location would fail.
 const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.json'));
 // `jsonwebtoken` is a transitive dep of @nestjs/jwt (not a direct api dep), so
-// resolve it through @nestjs/jwt's own node_modules. @waitlayer/db is a direct
+// resolve it through @nestjs/jwt's own node_modules. @ateva/db is a direct
 // workspace dep of the api, so it resolves directly.
 const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
 const jwtRequire = createRequire(jwtPkgPath);
 const jwt = jwtRequire('jsonwebtoken');
-const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = apiRequire('@ateva/db');
 
 const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:4002';
-const CI_ADMIN_EMAIL = 'ci-admin@waitlayer.com';
+const CI_ADMIN_EMAIL = 'ci-admin@ateva.com';
 
 /**
  * Derive the JWT `kid` exactly as the API does (sha256 of the PEM public key,
@@ -130,10 +130,10 @@ async function main() {
         role: user.role,
         jti: sessionId,
         // Match the real access-token audience shape: passport-jwt verifies
-        // against JWT_AUDIENCE ('waitlayer-client'); the strategy's validate()
+        // against JWT_AUDIENCE ('ateva-client'); the strategy's validate()
         // additionally requires the 'access' audience.
-        aud: ['waitlayer-client', 'access'],
-        iss: 'waitlayer',
+        aud: ['ateva-client', 'access'],
+        iss: 'ateva',
       },
       privateKey,
       { algorithm: 'RS256', expiresIn: '5m', keyid: deriveKid(privateKey) },

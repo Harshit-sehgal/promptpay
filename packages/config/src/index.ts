@@ -118,7 +118,7 @@ function containsReferenceWaitAttestationStub(value: string | undefined): boolea
         (issuer) =>
           !!issuer &&
           typeof issuer === 'object' &&
-          (issuer as { provider?: unknown }).provider === 'waitlayer-stub-bridge',
+          (issuer as { provider?: unknown }).provider === 'ateva-stub-bridge',
       )
     );
   } catch {
@@ -203,8 +203,8 @@ const envSchema = z
     // Product/deployment identity. This is deliberately separate from
     // NODE_ENV: a sandbox may run a production-shaped build, while production
     // must never boot with sandbox facilities enabled.
-    WAITLAYER_ENVIRONMENT_KIND: z.enum(ENVIRONMENT_KINDS).default('development'),
-    WAITLAYER_ENVIRONMENT_ID: z.string().min(1).max(128).default('local'),
+    ATEVA_ENVIRONMENT_KIND: z.enum(ENVIRONMENT_KINDS).default('development'),
+    ATEVA_ENVIRONMENT_ID: z.string().min(1).max(128).default('local'),
     // Operator-only bearer for resetting one isolated sandbox environment.
     // It is intentionally optional at boot; the reset endpoint fails closed
     // until an operator explicitly configures it in a test/sandbox deployment.
@@ -292,8 +292,8 @@ const envSchema = z
     JWT_PUBLIC_KEYS: z.string().optional(),
     // Standard JWT issuer/audience. Defaults keep dev/test simple while
     // allowing production to pin tokens to a concrete deployment.
-    JWT_ISSUER: z.string().default('waitlayer'),
-    JWT_AUDIENCE: z.string().default('waitlayer-client'),
+    JWT_ISSUER: z.string().default('ateva'),
+    JWT_AUDIENCE: z.string().default('ateva-client'),
     JWT_SECRET: z
       .string()
       .min(32)
@@ -375,7 +375,7 @@ const envSchema = z
 
     // Email
     EMAIL_DRIVER: z.enum(['console', 'resend']).default('console'),
-    EMAIL_FROM: z.email().default('noreply@waitlayer.local'),
+    EMAIL_FROM: z.email().default('noreply@ateva.local'),
     // Operator alert recipient for system-generated security/financial alerts
     // (money-integrity drift, payout-account freeze, etc.). If unset, alerts
     // are only logged (dev); production must set this to a monitored mailbox.
@@ -402,7 +402,7 @@ const envSchema = z
     // default so existing developer flows are unaffected until enabled.
     PAYOUT_DESTINATION_COOLDOWN_HOURS: z.coerce.number().int().min(0).max(720).default(0),
     // Earnings hold periods (days) per trust tier — DODO_PAYMENTS_PLAN §8.11.
-    // Defaults match `PAYOUT_HOLD_DAYS` in @waitlayer/shared; an operator may
+    // Defaults match `PAYOUT_HOLD_DAYS` in @ateva/shared; an operator may
     // lengthen them (e.g. to cover Dodo's settlement cycle) without a code
     // change. The `RESTRICTED`/`BANNED` -1 ("indefinite") contract is NOT
     // overridable — these keys only admit positive integers.
@@ -423,10 +423,10 @@ const envSchema = z
     // Required in production.
     PAYOUT_HMAC_KEY: z.string().optional(),
     ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
-    // A-030: server-side mirror of the web's NEXT_PUBLIC_WAITLAYER_PAYOUT_
+    // A-030: server-side mirror of the web's NEXT_PUBLIC_ATEVA_PAYOUT_
     // PROVIDER_STATUS gate. JSON map provider -> 'available' | 'coming_soon'.
     // Operators set this on the API so registration rejects gated providers.
-    WAITLAYER_PAYOUT_PROVIDER_STATUS: optionalAllowlist(
+    ATEVA_PAYOUT_PROVIDER_STATUS: optionalAllowlist(
       validProviderStatusJson,
       'must be a valid known-provider status JSON map',
     ),
@@ -507,14 +507,14 @@ const envSchema = z
       // production so its release evidence exercises fail-closed rate limits,
       // MFA guards, key handling, email/provider checks, and disabled mocks.
       // Product identity remains separate: only the real production database
-      // may declare WAITLAYER_ENVIRONMENT_KIND=production.
+      // may declare ATEVA_ENVIRONMENT_KIND=production.
       if (
         env.NODE_ENV === 'production' &&
-        !['staging', 'production'].includes(env.WAITLAYER_ENVIRONMENT_KIND)
+        !['staging', 'production'].includes(env.ATEVA_ENVIRONMENT_KIND)
       ) {
         return false;
       }
-      if (env.WAITLAYER_ENVIRONMENT_KIND === 'production' && env.NODE_ENV !== 'production') {
+      if (env.ATEVA_ENVIRONMENT_KIND === 'production' && env.NODE_ENV !== 'production') {
         return false;
       }
       return true;
@@ -522,14 +522,14 @@ const envSchema = z
     {
       message:
         'NODE_ENV=production requires a staging or production environment kind, and production environment kind requires NODE_ENV=production.',
-      path: ['WAITLAYER_ENVIRONMENT_KIND'],
+      path: ['ATEVA_ENVIRONMENT_KIND'],
     },
   )
   .refine(
     (env) => {
       if (
         env.ENABLE_STAGING_FAUCET === 'true' &&
-        !['test', 'sandbox', 'staging'].includes(env.WAITLAYER_ENVIRONMENT_KIND)
+        !['test', 'sandbox', 'staging'].includes(env.ATEVA_ENVIRONMENT_KIND)
       ) {
         return false;
       }
@@ -542,13 +542,12 @@ const envSchema = z
   )
   .refine(
     (env) => {
-      if (env.WAITLAYER_ENVIRONMENT_KIND === 'sandbox' && env.NODE_ENV === 'production')
-        return false;
+      if (env.ATEVA_ENVIRONMENT_KIND === 'sandbox' && env.NODE_ENV === 'production') return false;
       return true;
     },
     {
       message: 'A sandbox environment cannot boot as NODE_ENV=production.',
-      path: ['WAITLAYER_ENVIRONMENT_KIND'],
+      path: ['ATEVA_ENVIRONMENT_KIND'],
     },
   )
   .refine(
@@ -595,7 +594,7 @@ const envSchema = z
   })
   .refine(
     (env) =>
-      !['sandbox', 'staging', 'production'].includes(env.WAITLAYER_ENVIRONMENT_KIND) ||
+      !['sandbox', 'staging', 'production'].includes(env.ATEVA_ENVIRONMENT_KIND) ||
       Boolean(env.PRIVACY_HASH_KEY),
     {
       message:
@@ -618,7 +617,7 @@ const envSchema = z
         !containsReferenceWaitAttestationVersion(env.VERIFIED_WAIT_ATTESTATION_VERSIONS)),
     {
       message:
-        'The reference waitlayer-stub-bridge / stub-v1 attester is local/staging-only and is forbidden in production.',
+        'The reference ateva-stub-bridge / stub-v1 attester is local/staging-only and is forbidden in production.',
       path: ['WAIT_ATTESTATION_ISSUERS'],
     },
   )
@@ -627,8 +626,8 @@ const envSchema = z
       env.NODE_ENV !== 'production' ||
       (env.EMAIL_DRIVER === 'resend' &&
         Boolean(env.RESEND_API_KEY) &&
-        !env.EMAIL_FROM.toLowerCase().includes('waitlayer.local') &&
-        !env.EMAIL_FROM.toLowerCase().includes('no-reply@waitlayer.dev')),
+        !env.EMAIL_FROM.toLowerCase().includes('ateva.local') &&
+        !env.EMAIL_FROM.toLowerCase().includes('no-reply@ateva.dev')),
     {
       message: 'Production email requires resend credentials and a non-development sender.',
       path: ['EMAIL_DRIVER'],
@@ -824,8 +823,38 @@ const envSchema = z
     },
   );
 
+/**
+ * Legacy environment-variable names from before the Ateva rename.
+ *
+ * The canonical prefix is now `ATEVA_*`, but deployed environments, CI secrets,
+ * operator `.env` files and compose files still carry `ATEVA_*`. This schema
+ * deliberately fails closed on a missing variable, so a hard cutover would take
+ * every environment down until each secret store was updated in the same moment.
+ *
+ * Instead, an unset `ATEVA_*` variable falls back to its `ATEVA_*` twin, so
+ * secrets can migrate independently of the code. `ATEVA_*` always wins when both
+ * are set. Also covers embedded occurrences such as
+ * `NEXT_PUBLIC_ATEVA_PAYOUT_*`. Delete this shim once no environment sets
+ * the old prefix.
+ */
+const LEGACY_ENV_TOKEN = 'WAITLAYER_';
+const CANONICAL_ENV_TOKEN = 'ATEVA_';
+
+export function applyLegacyEnvAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...source };
+
+  for (const [key, value] of Object.entries(source)) {
+    if (!key.includes(LEGACY_ENV_TOKEN) || value === undefined) continue;
+
+    const canonicalKey = key.split(LEGACY_ENV_TOKEN).join(CANONICAL_ENV_TOKEN);
+    if (merged[canonicalKey] === undefined) merged[canonicalKey] = value;
+  }
+
+  return merged;
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
-  const result = envSchema.safeParse(source);
+  const result = envSchema.safeParse(applyLegacyEnvAliases(source));
   if (!result.success) {
     console.error('❌ Invalid environment variables:');
     console.error(result.error.flatten().fieldErrors);

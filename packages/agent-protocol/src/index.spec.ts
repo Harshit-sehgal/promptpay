@@ -32,7 +32,7 @@ const baseEvent = {
   metadata: { toolFamily: 'test' as const, success: true },
 };
 
-describe('@waitlayer/agent-protocol', () => {
+describe('@ateva/agent-protocol', () => {
   it('reports supported, unsupported, and malformed protocol versions', () => {
     expect(getAgentProtocolCompatibility(1)).toEqual({ supported: true, version: 1 });
     expect(getAgentProtocolCompatibility('1')).toEqual({ supported: true, version: 1 });

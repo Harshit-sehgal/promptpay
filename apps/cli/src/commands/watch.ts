@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 
-import { WaitAttestationFlow } from '@waitlayer/shared';
+import { WaitAttestationFlow } from '@ateva/shared';
 
 import { runAdFlow } from '../lib/ad-flow';
 import { ApiClient } from '../lib/api-client';
@@ -10,7 +10,7 @@ import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../lib/errors';
 import { createCliWaitAssertionProvider } from '../lib/wait-attestation-provider';
 
-const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;
+const STATE_FILE = `${process.cwd()}/.ateva-wait`;
 
 interface WaitState {
   startTime: number;
@@ -19,20 +19,20 @@ interface WaitState {
 
 /**
  * Detects a "wait state" marker file (e.g. created by a script that wraps an
- * AI command) and reports it to WaitLayer. Users can integrate by writing a
+ * AI command) and reports it to Ateva. Users can integrate by writing a
  * JSON file before invoking their AI tool:
  *
- *   echo '{"startTime": $(date +%s%3N), "tool": "claude_code"}' > .waitlayer-wait
+ *   echo '{"startTime": $(date +%s%3N), "tool": "claude_code"}' > .ateva-wait
  *   claude ...                          # AI tool runs
- *   date +%s%3N > .waitlayer-wait       # complete
- *   echo '' > .waitlayer-wait           # clear
+ *   date +%s%3N > .ateva-wait       # complete
+ *   echo '' > .ateva-wait           # clear
  *
  * This CLI command tails the file and reports wait-state events to the API.
  */
 export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   const creds = await getCredentials();
   if (!creds) {
-    console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
+    console.error(chalk.red('Not logged in. Run `ateva auth` first.'));
     process.exit(1);
   }
 
@@ -42,7 +42,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   const serveAds = opts.ads ?? true;
 
   await printSandboxBanner(api);
-  console.log(chalk.cyan('WaitLayer watch') + chalk.dim(` — watching ${STATE_FILE}`));
+  console.log(chalk.cyan('Ateva watch') + chalk.dim(` — watching ${STATE_FILE}`));
   console.log(chalk.dim('Press Ctrl+C to stop.'));
 
   let lastState: WaitState | null = null;
@@ -158,7 +158,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
       if (!attestationProvider) {
         console.error(
           chalk.red(
-            'No independent attestation provider is configured. Set WAITLAYER_ATTESTATION_PROVIDER and WAITLAYER_ATTESTATION_PROVIDER_URL before starting a wait.',
+            'No independent attestation provider is configured. Set ATEVA_ATTESTATION_PROVIDER and ATEVA_ATTESTATION_PROVIDER_URL before starting a wait.',
           ),
         );
         return;
@@ -173,10 +173,10 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
 
       try {
         // P0.1: CLI marker-file evidence is user-controlled (the user writes the
-        // .waitlayer-wait file manually), NOT independently observed by the CLI.
+        // .ateva-wait file manually), NOT independently observed by the CLI.
         // Using 'inferred' means the server's payment eligibility gate (requires
         // ≥2 observed primary types) correctly classifies this as non-billable.
-        // A real CLI command wrapper (e.g. `waitlayer run -- claude ...`) that
+        // A real CLI command wrapper (e.g. `ateva run -- claude ...`) that
         // spawns and supervises the child process can later provide genuine
         // observed evidence.
         await api.reportWaitState({
@@ -231,8 +231,8 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
               console.log(
                 chalk.yellow(
                   result.mode === 'paused'
-                    ? 'WaitLayer rewards are paused by the operator.'
-                    : 'WaitLayer rewards are unavailable (telemetry-only mode).',
+                    ? 'Ateva rewards are paused by the operator.'
+                    : 'Ateva rewards are unavailable (telemetry-only mode).',
                 ),
               );
             }
@@ -263,9 +263,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         // Session is dead (refresh already failed). Spinning the loop would
         // hammer the API with a doomed token every 3s — exit with a clear
         // message instead so the user can re-authenticate.
-        console.error(
-          chalk.red('Session expired. Run `waitlayer auth` to log in again, then retry.'),
-        );
+        console.error(chalk.red('Session expired. Run `ateva auth` to log in again, then retry.'));
         process.exit(1);
       } else {
         console.error(chalk.red(`watch error: ${getErrorMessage(err)}`));

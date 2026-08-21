@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import {
   decryptPayoutDestination,

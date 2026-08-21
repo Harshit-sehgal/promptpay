@@ -16,7 +16,7 @@ Order within a file:
 1. Side-effect imports (`import 'x'`).
 2. External / builtin (`node:fs`, `express`, `@nestjs/...`) — `node:` builtins
    first.
-3. Workspace packages (`@waitlayer/*`).
+3. Workspace packages (`@ateva/*`).
 4. Relative imports (`./`, `../`), parent `../` before child `./`.
 
 Example:
@@ -25,7 +25,7 @@ Example:
 import { readFile } from 'node:fs/promises';
 import { Injectable } from '@nestjs/common';
 
-import { ConfigService } from '@waitlayer/config';
+import { ConfigService } from '@ateva/config';
 
 import { LedgerRepository } from './ledger.repository';
 import { computeSplit } from '../split';

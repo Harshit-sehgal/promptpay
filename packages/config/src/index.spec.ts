@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { envSchema, loadEnv } from './index';
+import { applyLegacyEnvAliases, envSchema, loadEnv } from './index';
 
-const BASE_ENV = { NODE_ENV: 'test', DATABASE_URL: 'postgresql://localhost:5432/waitlayer' };
+const BASE_ENV = { NODE_ENV: 'test', DATABASE_URL: 'postgresql://localhost:5432/ateva' };
 
 function validKey(): string {
   return Buffer.alloc(32, 7).toString('base64');
@@ -29,8 +29,8 @@ function samplePem(kind: 'PRIVATE' | 'PUBLIC', body: string): string {
 function fullProductionEnv(): Record<string, string> {
   return {
     NODE_ENV: 'production',
-    WAITLAYER_ENVIRONMENT_KIND: 'production',
-    DATABASE_URL: 'postgresql://localhost:5432/waitlayer',
+    ATEVA_ENVIRONMENT_KIND: 'production',
+    DATABASE_URL: 'postgresql://localhost:5432/ateva',
     REDIS_URL: 'redis://localhost:6379',
     JWT_PRIVATE_KEY: samplePem('PRIVATE', 'MIIEvQ=='),
     JWT_PUBLIC_KEY: samplePem('PUBLIC', 'MIIBIjANBg=='),
@@ -44,9 +44,9 @@ function fullProductionEnv(): Record<string, string> {
     OPS_ALERT_EMAIL: 'ops@example.com',
     EMAIL_DRIVER: 'resend',
     RESEND_API_KEY: 're_test_1234567890abcdef',
-    EMAIL_FROM: 'alerts@waitlayer.com',
-    API_BASE_URL: 'https://api.waitlayer.com',
-    WEB_BASE_URL: 'https://waitlayer.com',
+    EMAIL_FROM: 'alerts@ateva.com',
+    API_BASE_URL: 'https://api.ateva.com',
+    WEB_BASE_URL: 'https://ateva.com',
     TOTP_SECRET_ENCRYPTION_KEY: 'totp-encryption-key-1234567890abcdef',
     PAYOUT_ENCRYPTION_KEY: validKey(),
     PAYOUT_HMAC_KEY: Buffer.alloc(32, 9).toString('base64'),
@@ -58,16 +58,16 @@ function samplePublicKey(): string {
   return samplePem('PUBLIC', `MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA${'test'.repeat(30)}`);
 }
 
-describe('@waitlayer/config env schema', () => {
+describe('@ateva/config env schema', () => {
   it('loads a minimal development environment with defaults', () => {
     const env = loadEnv(BASE_ENV);
     expect(env.NODE_ENV).toBe('test');
-    expect(env.WAITLAYER_ENVIRONMENT_KIND).toBe('development');
-    expect(env.WAITLAYER_ENVIRONMENT_ID).toBe('local');
+    expect(env.ATEVA_ENVIRONMENT_KIND).toBe('development');
+    expect(env.ATEVA_ENVIRONMENT_ID).toBe('local');
     expect(env.API_PORT).toBe(4002);
     expect(env.WEB_PORT).toBe(3000);
-    expect(env.JWT_ISSUER).toBe('waitlayer');
-    expect(env.JWT_AUDIENCE).toBe('waitlayer-client');
+    expect(env.JWT_ISSUER).toBe('ateva');
+    expect(env.JWT_AUDIENCE).toBe('ateva-client');
     expect(env.THROTTLE_AUTH_SHORT_LIMIT).toBeUndefined();
   });
 
@@ -108,7 +108,7 @@ describe('@waitlayer/config env schema', () => {
     expect(() =>
       loadEnv({
         ...BASE_ENV,
-        WAITLAYER_PAYOUT_PROVIDER_STATUS: JSON.stringify({
+        ATEVA_PAYOUT_PROVIDER_STATUS: JSON.stringify({
           wise: 'available',
           paypal_email: 'coming_soon',
         }),
@@ -117,7 +117,7 @@ describe('@waitlayer/config env schema', () => {
     expect(() =>
       loadEnv({
         ...BASE_ENV,
-        WAITLAYER_PAYOUT_PROVIDER_STATUS: JSON.stringify({
+        ATEVA_PAYOUT_PROVIDER_STATUS: JSON.stringify({
           unknown_provider: 'available',
         }),
       }),
@@ -125,7 +125,7 @@ describe('@waitlayer/config env schema', () => {
     expect(() =>
       loadEnv({
         ...BASE_ENV,
-        WAITLAYER_PAYOUT_PROVIDER_STATUS: 'not-json',
+        ATEVA_PAYOUT_PROVIDER_STATUS: 'not-json',
       }),
     ).toThrow();
   });
@@ -166,20 +166,20 @@ describe('@waitlayer/config env schema', () => {
   it('accepts a production-mode staging runtime without claiming production identity', () => {
     const staging = loadEnv({
       ...fullProductionEnv(),
-      WAITLAYER_ENVIRONMENT_KIND: 'staging',
+      ATEVA_ENVIRONMENT_KIND: 'staging',
     });
     expect(staging.NODE_ENV).toBe('production');
-    expect(staging.WAITLAYER_ENVIRONMENT_KIND).toBe('staging');
+    expect(staging.ATEVA_ENVIRONMENT_KIND).toBe('staging');
   });
 
   it('requires a dedicated privacy key outside development/test', () => {
-    expect(() => loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_KIND: 'sandbox' })).toThrow(
+    expect(() => loadEnv({ ...BASE_ENV, ATEVA_ENVIRONMENT_KIND: 'sandbox' })).toThrow(
       'Invalid environment configuration',
     );
     expect(() =>
       loadEnv({
         ...BASE_ENV,
-        WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
+        ATEVA_ENVIRONMENT_KIND: 'sandbox',
         PRIVACY_HASH_KEY: validKey(),
       }),
     ).not.toThrow();
@@ -187,21 +187,21 @@ describe('@waitlayer/config env schema', () => {
 
   it('rejects mismatched environment identity and unsafe faucet settings', () => {
     expect(() =>
-      loadEnv({ ...BASE_ENV, NODE_ENV: 'production', WAITLAYER_ENVIRONMENT_KIND: 'sandbox' }),
+      loadEnv({ ...BASE_ENV, NODE_ENV: 'production', ATEVA_ENVIRONMENT_KIND: 'sandbox' }),
     ).toThrow();
-    expect(() => loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_KIND: 'production' })).toThrow();
+    expect(() => loadEnv({ ...BASE_ENV, ATEVA_ENVIRONMENT_KIND: 'production' })).toThrow();
     expect(() =>
       loadEnv({
         ...BASE_ENV,
         ENABLE_STAGING_FAUCET: 'true',
-        WAITLAYER_ENVIRONMENT_KIND: 'development',
+        ATEVA_ENVIRONMENT_KIND: 'development',
       }),
     ).toThrow();
     expect(() =>
       loadEnv({
         ...BASE_ENV,
         ENABLE_STAGING_FAUCET: 'true',
-        WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
+        ATEVA_ENVIRONMENT_KIND: 'sandbox',
         PRIVACY_HASH_KEY: validKey(),
       }),
     ).not.toThrow();
@@ -214,9 +214,9 @@ describe('@waitlayer/config env schema', () => {
         ...fullProductionEnv(),
         WAIT_ATTESTATION_ISSUERS: JSON.stringify([
           {
-            provider: 'waitlayer-stub-bridge',
+            provider: 'ateva-stub-bridge',
             issuer: 'https://stub.example.com',
-            audience: 'waitlayer-client',
+            audience: 'ateva-client',
             publicKeys: { k1: samplePublicKey() },
           },
         ]),
@@ -234,7 +234,7 @@ describe('@waitlayer/config env schema', () => {
         {
           provider: 'independent-attester',
           issuer: 'https://attest.example.com',
-          audience: 'waitlayer-client',
+          audience: 'ateva-client',
           publicKeys: { k1: samplePublicKey() },
         },
       ]),
@@ -259,23 +259,60 @@ describe('@waitlayer/config env schema', () => {
       WAIT_ATTESTATION_ISSUERS: '',
       VERIFIED_WAIT_ATTESTATION_VERSIONS: '',
       VERIFIED_DETECTOR_VERSIONS: '',
-      WAITLAYER_PAYOUT_PROVIDER_STATUS: '',
+      ATEVA_PAYOUT_PROVIDER_STATUS: '',
     });
     expect(parsed.WAIT_ATTESTATION_ISSUERS).toBeUndefined();
     expect(parsed.VERIFIED_WAIT_ATTESTATION_VERSIONS).toBeUndefined();
     expect(parsed.VERIFIED_DETECTOR_VERSIONS).toBeUndefined();
-    expect(parsed.WAITLAYER_PAYOUT_PROVIDER_STATUS).toBeUndefined();
+    expect(parsed.ATEVA_PAYOUT_PROVIDER_STATUS).toBeUndefined();
   });
 
   it('still rejects a NON-empty malformed allowlist', () => {
     // Empty means "nothing trusted". Garbage still has to fail, or this fix
     // would have turned a validation gate into a no-op.
     expect(() => envSchema.parse({ ...BASE_ENV, WAIT_ATTESTATION_ISSUERS: 'not-json' })).toThrow();
-    expect(() =>
-      envSchema.parse({ ...BASE_ENV, WAITLAYER_PAYOUT_PROVIDER_STATUS: '{oops' }),
-    ).toThrow();
+    expect(() => envSchema.parse({ ...BASE_ENV, ATEVA_PAYOUT_PROVIDER_STATUS: '{oops' })).toThrow();
     expect(() =>
       envSchema.parse({ ...BASE_ENV, VERIFIED_DETECTOR_VERSIONS: 'has space!' }),
     ).toThrow();
+  });
+});
+
+describe('legacy ATEVA_/WAITLAYER_ env aliasing', () => {
+  it('falls back to the pre-rename name when the canonical one is unset', () => {
+    const aliased = applyLegacyEnvAliases({ WAITLAYER_ENVIRONMENT_ID: 'legacy-box' });
+
+    expect(aliased.ATEVA_ENVIRONMENT_ID).toBe('legacy-box');
+    // The old name is preserved so nothing reading it directly breaks.
+    expect(aliased.WAITLAYER_ENVIRONMENT_ID).toBe('legacy-box');
+  });
+
+  it('lets the canonical name win when both are set', () => {
+    const aliased = applyLegacyEnvAliases({
+      ATEVA_ENVIRONMENT_ID: 'new',
+      WAITLAYER_ENVIRONMENT_ID: 'old',
+    });
+
+    expect(aliased.ATEVA_ENVIRONMENT_ID).toBe('new');
+  });
+
+  it('rewrites the token when it is embedded rather than a prefix', () => {
+    const aliased = applyLegacyEnvAliases({
+      NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS: '{}',
+    });
+
+    expect(aliased.NEXT_PUBLIC_ATEVA_PAYOUT_PROVIDER_STATUS).toBe('{}');
+  });
+
+  it('leaves unrelated variables untouched', () => {
+    const aliased = applyLegacyEnvAliases({ NODE_ENV: 'test', DATABASE_URL: 'x' });
+
+    expect(Object.keys(aliased).sort()).toEqual(['DATABASE_URL', 'NODE_ENV']);
+  });
+
+  it('accepts a legacy-only environment through loadEnv', () => {
+    const env = loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_ID: 'legacy-box' });
+
+    expect(env.ATEVA_ENVIRONMENT_ID).toBe('legacy-box');
   });
 });

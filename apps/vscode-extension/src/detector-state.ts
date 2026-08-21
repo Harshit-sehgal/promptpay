@@ -2,8 +2,8 @@ import type * as vscode from 'vscode';
 
 import { computeExperiment, type ExperimentAssignment, isSuppressed } from './detector-policy';
 
-const EXPERIMENT_KEY = 'waitlayer.detectorExperiment';
-const SUPPRESS_KEY = 'waitlayer.falsePositiveSuppressUntil';
+const EXPERIMENT_KEY = 'ateva.detectorExperiment';
+const SUPPRESS_KEY = 'ateva.falsePositiveSuppressUntil';
 
 /**
  * Persisted detector state — the stable experiment assignment (P1.17) and the

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { BidType, signPayload, UserRole } from '@waitlayer/shared';
+import { BidType, signPayload, UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -73,7 +73,7 @@ describe('Runtime Kill Switches', () => {
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin@waitlayer.com',
+        email: 'admin@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -106,7 +106,7 @@ describe('Runtime Kill Switches', () => {
   beforeAll(async () => {
     const adminRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'admin@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'admin@ateva.com', password: 'Password123!' })
       .expect(200);
     adminToken = adminRes.body.accessToken;
   });
@@ -120,7 +120,7 @@ describe('Runtime Kill Switches', () => {
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'dev-kill@waitlayer.com',
+          email: 'dev-kill@ateva.com',
           password: 'Password123!',
           role: UserRole.DEVELOPER,
           name: 'Kill Switch Dev',
@@ -132,7 +132,7 @@ describe('Runtime Kill Switches', () => {
 
       const devRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev-kill@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'dev-kill@ateva.com', password: 'Password123!' })
         .expect(200);
       devToken = devRes.body.accessToken;
 
@@ -145,7 +145,7 @@ describe('Runtime Kill Switches', () => {
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'adv-kill@waitlayer.com',
+          email: 'adv-kill@ateva.com',
           password: 'Password123!',
           role: UserRole.ADVERTISER,
           name: 'Kill Switch Advertiser',
@@ -157,7 +157,7 @@ describe('Runtime Kill Switches', () => {
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'adv-kill@waitlayer.com', password: 'Password123!' })
+        .send({ email: 'adv-kill@ateva.com', password: 'Password123!' })
         .expect(200);
       advertiserToken = advRes.body.accessToken;
 

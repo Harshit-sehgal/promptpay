@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { PASSWORD_MAX_UTF8_BYTES, passwordUtf8Bytes } from '@waitlayer/shared';
+import { PASSWORD_MAX_UTF8_BYTES, passwordUtf8Bytes } from '@ateva/shared';
 
 import { IsStrongPasswordConstraint, PASSWORD_RULES } from './password.validator';
 

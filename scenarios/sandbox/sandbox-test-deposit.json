@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "sandbox_advertiser",
   "environment": "sandbox",
-  "seed": "waitlayer-sandbox-deposit-v1",
+  "seed": "ateva-sandbox-deposit-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

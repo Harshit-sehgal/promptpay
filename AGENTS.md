@@ -93,7 +93,7 @@ Vercel access, and production secret verification remain operator tasks.
   `node --test scripts/ci-package-contract.test.mjs` 20/20,
   `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
 
-`docs/waitlayer-implementation-blueprint.md` now explicitly labels its
+`docs/ateva-implementation-blueprint.md` now explicitly labels its
 2026-08-04 verification basis as historical, points readers to this live
 register and the current operator issues, and preserves the architecture and
 release sequencing as planning guidance rather than current system state.
@@ -119,16 +119,16 @@ the Next 16.3 adapter's missing NFT-manifest failure.
 - Vercel deployment `76PS12GyxL2bZ69XNwccfMxHndiL` is **Ready** and the PR's
   Vercel checks pass.
 - The authenticated Preview homepage renders the current application and
-  correctly reports degraded backend status while `api.waitlayer.com` has no
+  correctly reports degraded backend status while `api.ateva.com` has no
   DNS record. This closes the Vercel build blocker, not the production
   infrastructure/deployment issue tracked in #40/#41.
 - Verification: Vercel build, Vercel Preview Comments, `node scripts/audit-claims.mjs`
   (15/15), focused replay integration (1/1), API typecheck, and API lint.
 
-## Verified 2026-08-19 — waitlayer.com attached to the current Vercel project
+## Verified 2026-08-19 — ateva.com attached to the current Vercel project
 
-Using the authenticated Vercel project session, `waitlayer.com` and
-`www.waitlayer.com` were attached to `promptpay` and assigned to Production;
+Using the authenticated Vercel project session, `ateva.com` and
+`www.ateva.com` were attached to `promptpay` and assigned to Production;
 Vercel configured the apex-to-`www` redirect. Both domains remain
 **Verification Required** because Vercel reports that they are linked to
 another Vercel account. Vercel's DNS panel requires the dashboard-provided
@@ -137,7 +137,7 @@ another Vercel account. Vercel's DNS panel requires the dashboard-provided
 publication remains operator-owned. No verification token is recorded here.
 
 - Current public probe still shows the old marketing deployment until DNS
-  verification completes; `api.waitlayer.com` remains without a DNS record.
+  verification completes; `api.ateva.com` remains without a DNS record.
 - Verification: authenticated Vercel domain panel, public DNS probe, and
   `curl` route probes on 2026-08-19.
 
@@ -191,7 +191,7 @@ operators can lengthen earnings holds at deploy time without a code change.
 
 - `PAYOUT_HOLD_DAYS_NEW_ACCOUNT`, `PAYOUT_HOLD_DAYS_NORMAL`,
   `PAYOUT_HOLD_DAYS_HIGH_TRUST`, and `PAYOUT_HOLD_DAYS_EXTENDED` are validated
-  by `@waitlayer/config` as positive integers from 1 through 365.
+  by `@ateva/config` as positive integers from 1 through 365.
 - `LedgerMathTrait.getHoldDays()` honours those values, keeps the shipped
   defaults (30/14/7/60), floors unverified-source holds to the configured
   extended value, and preserves restricted/banned `-1` as an unoverrideable
@@ -301,7 +301,7 @@ window existed for an operator-enforced `banned` level.
   secret-safe platform-side report for retained Dodo events and ledger parity;
   it deliberately does not claim live provider balance reconciliation.
 - **Attestation protocol simulator and threat model added.** The private
-  `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
+  `@ateva/wait-attestation-bridge/simulator` subpath exposes an in-memory
   `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
   misbound, timing, unknown-key, and bad-signature assertions. The protocol and
   threat-model documents define the opaque claim contract, key/replay rules,
@@ -343,7 +343,7 @@ without creating a new secret or privacy exposure.
 - The direct public probe found `/auth/login`, `/auth/signup`, `/developer`,
   `/advertiser`, and `/api/auth/config` still return 404 while `/` returns 200;
   this is an external deployment/configuration blocker, not a missing source
-  route. `api.waitlayer.com` also has no DNS answer.
+  route. `api.ateva.com` also has no DNS answer.
 
 ## Historical Status Snapshot (2026-08-08)
 
@@ -381,7 +381,7 @@ without creating a new secret or privacy exposure.
   - Pre-commit hook: deterministic `eslint --fix` + `prettier --write` on
     staged files (no lint-staged, no stash); `lint-staged` dependency removed.
   - `validateWebEnv` now runs at web server boot when
-    `WAITLAYER_REQUIRE_DEPLOY_ENV=1` (instrumentation `register()`); local/CI
+    `ATEVA_REQUIRE_DEPLOY_ENV=1` (instrumentation `register()`); local/CI
     builds unaffected.
   - `test:integration` refuses the destructive per-file `prisma migrate reset`
     unless `CI=true` or `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1`
@@ -452,7 +452,7 @@ live until the operator answers §8.1–§8.5 of that plan.
   creates Dodo Checkout Sessions over `fetch` (no SDK) at
   `POST {DODO_BASE_URL}/checkouts`, returning `{ sessionId, url }`. Config:
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
-  (added to `@waitlayer/config` schema + `.env.example`). The provider now
+  (added to `@ateva/config` schema + `.env.example`). The provider now
   requires all four at runtime: a checkout without a webhook secret could take
   money that the ledger cannot safely reconcile. The API base is restricted to
   the documented HTTPS test/live Dodo hosts, and returned checkout URLs must be
@@ -700,7 +700,7 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
 - **A-094 — `pnpm deploy:preflight` (new capability, not a bug fix).**
   Nothing validated _an environment_; the gates validate the code. The
   preflight fails closed on: the A-093 override trap, the full
-  `@waitlayer/config` production schema, `COOKIE_SECURE=false`, every mock-auth
+  `@ateva/config` production schema, `COOKIE_SECURE=false`, every mock-auth
   flag, test-only `THROTTLE_*` overrides, the reference attestation bridge,
   Postgres/Redis reachability, unfinished migrations, **no administrator**
   (A-088) or an administrator without TOTP, and it reports which money switches
@@ -711,7 +711,7 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
 - **A-096 — a fresh production database could not boot the API.**
   `EnvironmentMarkerService.verify()` refuses to start a **production**
   deployment unless `environment_markers` row 1 exists and matches
-  `WAITLAYER_ENVIRONMENT_KIND`/`WAITLAYER_ENVIRONMENT_ID`. Non-production
+  `ATEVA_ENVIRONMENT_KIND`/`ATEVA_ENVIRONMENT_ID`. Non-production
   auto-creates it; production deliberately does not, because auto-stamping
   would destroy the interlock (an API pointed at the wrong database would
   cheerfully claim it). That design is right — but **nothing created the row**:
@@ -1005,7 +1005,7 @@ viewports), `test:release-gates` exit 0, `audit-claims` 13/13,
 applied and `migrate diff --exit-code` drift-free.
 
 **Third harness defect found the same way (`pnpm smoke:production`, 21/21).**
-The smoke defaults to the SHARED `waitlayer_test` database, and the integration
+The smoke defaults to the SHARED `ateva_test` database, and the integration
 suites deliberately enable the money switches in their `beforeAll`. Running the
 smoke straight after `vitest run src/integration` therefore reported
 "money-switches unexpectedly ENABLED: payouts.requests" — a **deployment-blocking
@@ -1040,7 +1040,7 @@ comes up, all migrations apply, the entrypoint prints
 never listens on 4002, and the container sits at `health: starting` until the
 budget expires. No crash, no restart loop, no error. On the runs where it hits
 step 15 instead, it surfaces as
-`dependency failed to start: container waitlayer-api-1 is unhealthy` with the
+`dependency failed to start: container ateva-api-1 is unhealthy` with the
 health probe reporting `ExitCode 4` (connection refused).
 
 **Two earlier mis-attributions, recorded so nobody repeats them.** This failure
@@ -1308,7 +1308,7 @@ failing node; printing them turned a guessing game into a one-line change.
 **A-117 — every page but seven shipped with the marketing title.** 37 of ~44
 pages defined no metadata at all. All of them are Client Components, and a
 Client Component cannot export `metadata`, so each inherited the root layout's
-`WaitLayer — private beta for AI wait-state verification`. Every browser tab,
+`Ateva — private beta for AI wait-state verification`. Every browser tab,
 bookmark, history entry and shared link read the same string, including the
 authenticated dashboards.
 
@@ -1408,14 +1408,14 @@ mechanism over checking a string, and never assert against a file's prose.
 **A-126 — a repository could repoint the VS Code extension's API origin and
 collect the developer's tokens.** The extension stores its access and refresh
 tokens correctly, in `vscode.SecretStorage`. It then sent them to whatever
-`waitlayer.apiUrl` said — and that setting had **no `scope`**, so it defaulted to
+`ateva.apiUrl` said — and that setting had **no `scope`**, so it defaulted to
 `window`, which is workspace-overridable, and `getApiUrl()` applied **no
 validation** to the value.
 
 Opening a repository containing
 
 ```json
-{ "waitlayer.apiUrl": "https://evil.example/api/v1" }
+{ "ateva.apiUrl": "https://evil.example/api/v1" }
 ```
 
 in `.vscode/settings.json` was enough. No prompt, no interaction beyond opening
@@ -1424,7 +1424,7 @@ so it ran unrestricted in a folder VS Code itself considered untrusted.
 
 Fixed in three layers:
 
-1. **`scope: machine`** on `waitlayer.apiUrl`, `attestationProvider`,
+1. **`scope: machine`** on `ateva.apiUrl`, `attestationProvider`,
    `attestationProviderUrl` and `environmentKind` — VS Code then refuses to read
    workspace-level values for them at all. This is the actual fix.
 2. **Runtime validation** in `getApiUrl()`: the value must parse, and must be
@@ -1463,7 +1463,7 @@ whole block is skipped, and the user is told nothing at all.
 
 The default is now inverted — no keychain means refuse, and the error names both
 the risk and the way out. Development and CI opt in with
-`WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1`, a deliberate act visible in a shell
+`ATEVA_ALLOW_INSECURE_SECRET_STORE=1`, a deliberate act visible in a shell
 history or a workflow file rather than a condition that happens to be false on
 someone's laptop. Taking the fallback now warns every time.
 
@@ -1670,7 +1670,7 @@ Consequences, all measured rather than reasoned about:
 - Cold start went from **10.5s** (`dbeec08`, container Started → Healthy) to
   **46s** (`b3f95fb`, same measurement), and on the next step of the same run
   the container never became healthy at all: **272s of failing probes**, then
-  `dependency failed to start: container waitlayer-api-1 is unhealthy`.
+  `dependency failed to start: container ateva-api-1 is unhealthy`.
 - **An image built this way cannot start on a host with no egress to Prisma's
   CDN** — an ordinary production posture. That is strictly worse than the HIGH
   CVE the change was fixing.
@@ -1930,7 +1930,7 @@ invisible locally for the same reason: a previous `pnpm build` had left build
 output in the working tree, so the local runs never exercised a clean checkout.
 
 **One defect explained four of the six.** `pnpm --filter <pkg> build` does NOT
-build workspace dependencies, and `@waitlayer/db`'s package `main` is
+build workspace dependencies, and `@ateva/db`'s package `main` is
 `./dist/index.js` — produced by `tsc`, not by `prisma generate`. Every job that
 RAN the compiled app only ran `generate`. The symptoms looked unrelated:
 
@@ -1946,7 +1946,7 @@ Fixed with the dependency-aware `"pkg..."` filter the CLI/VSIX jobs already used
 correctly, plus ORDERING: both production harnesses read the environment marker
 ~80 lines before their build step, so the build had to move earlier, not just
 gain a suffix. `backup-restore` passed throughout precisely because it is the
-one job that already ran `pnpm --filter @waitlayer/db build`.
+one job that already ran `pnpm --filter @ateva/db build`.
 
 **Then fixing those revealed three more that had been shadowed.** This is the
 "one failure hides five" property in action — worth remembering that a red job
@@ -1971,7 +1971,7 @@ is a _ceiling_ on what you know, not a complete list.
   also un-breaks the staging release build, which issues the same command and
   had simply never run.
   Then the next-layer bug appeared: `config --images | grep -- '-web$'` can
-  never match, because the name always carries a tag (`waitlayer-web:local`).
+  never match, because the name always carries a tag (`ateva-web:local`).
   Now reads `services.web.image` from `config --format json`.
 - **`e2e` (after the API booted).** 113 passed, 1 "flaky", and
   `failOnFlakyTests` correctly failed the run. Not flakiness: `loginAs` hung to
@@ -2082,13 +2082,13 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    Missing values fail the gate by design.
 3. **Public production deployment remains open.** The current Vercel Preview
    is now ready, but it is not the production domain and remains protected by
-   Vercel access controls. `waitlayer.com` and `www.waitlayer.com` are now
+   Vercel access controls. `ateva.com` and `www.ateva.com` are now
    attached to the current `promptpay` project but are still Verification
    Required because Vercel reports another Vercel account association. A
-   fresh read-only recheck on **2026-08-19** confirms `www.waitlayer.com/`
+   fresh read-only recheck on **2026-08-19** confirms `www.ateva.com/`
    returns `200` from the old cached marketing deployment, `/auth/login`,
    `/auth/signup`, `/developer`, `/advertiser`, and `/api/auth/config` return
-   `404`, and `api.waitlayer.com` has no DNS record. Add the Vercel-provided
+   `404`, and `api.ateva.com` has no DNS record. Add the Vercel-provided
    `_vercel` TXT records and current A/CNAME records at the registrar, then
    recheck the rendered routes.
    The 21-route enumeration below is retained as historical evidence; cache-age
@@ -2100,7 +2100,7 @@ Verification: the focused integration spec and the API typecheck/lint gates.
      `/payout-policy`, `/advertiser-policy`, all `/legal/*`
 
    What is live is a marketing build that predates the entire application: no
-   auth, no dashboards. `api.waitlayer.com` has no DNS record at all.
+   auth, no dashboards. `api.ateva.com` has no DNS record at all.
    **Architecture note (this is the good news):** auth cookies are written by
    the Next.js BFF (`app/api/auth/_lib/cookies.ts`), not by the API, so
    `__Host-` cookies live on the web origin and the API may sit on a different
@@ -2108,7 +2108,7 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    the API is HTTPS-reachable **server-side** from the web host. Recommended
    split: web stays on Vercel (edge middleware + SRI + CSP are already tuned
    for it); API goes to a container host with managed Postgres + Redis behind
-   `api.waitlayer.com`. Set `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
+   `api.ateva.com`. Set `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
    **build** variables — Next inlines them at build time and runtime env does
    not reach middleware or the client bundle (A-083).
 
@@ -2150,7 +2150,7 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    - **Genuine `StubPayoutProvider`s** (`payout.service.ts:47,49,50`):
      `payoneer`, `razorpay`, `dodo_payments`. Registration is blocked at
      `payout-method.trait.ts:142-160`, so they cannot be persisted even if the
-     `WAITLAYER_PAYOUT_PROVIDER_STATUS` override marks them available.
+     `ATEVA_PAYOUT_PROVIDER_STATUS` override marks them available.
    - **Available today:** only `paypal_email` and `manual`
      (`packages/shared/src/payout-providers.ts:32-45`) — both "admin-processed",
      i.e. a human sends money by hand. Do not launch on `manual` at volume: it
@@ -2172,7 +2172,7 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    `gh workflow run ci.yml --ref <branch>`.
 10. **Test-DB reset consent:** full `pnpm test` integration phase needs
     `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1` (operator-only action);
-    individual specs run against the migrated `waitlayer_test` DB without it.
+    individual specs run against the migrated `ateva_test` DB without it.
 
 ## Environment & harness rules (learned the hard way)
 
@@ -2195,8 +2195,8 @@ Verification: the focused integration spec and the API typecheck/lint gates.
   (`ads.global`, `wait.earnings`, `payouts.requests`, `payouts.auto`,
   `deposits.global`) via `prisma.systemSetting.upsert` in `beforeAll`; fresh
   DBs seed them disabled. Never enable them for real money paths.
-- **Services:** Postgres `:5432` (dev, `waitlayer-dev` creds), `:5433` (test,
-  `waitlayer_test`), Redis `:6379`. Keep `migrate status` current and
+- **Services:** Postgres `:5432` (dev, `ateva-dev` creds), `:5433` (test,
+  `ateva_test`), Redis `:6379`. Keep `migrate status` current and
   `migrate diff` drift-free. **Do not hardcode a migration count in prose** —
   it was stated as both `89` and `91` in three places in this file (actual: 91,
   from `find migrations -mindepth 1 -maxdepth 1 -type d`; the `0_init` directory
@@ -2254,7 +2254,7 @@ minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
   hard-fails on explicit targets (Docker-image scan extracts `.next` from the
   built image); dist must contain 0 spec/test files.
 - **Web deploy preflight:** `verify-deploy-env.mjs` runs as web prebuild;
-  `validateWebEnv` also runs at boot under `WAITLAYER_REQUIRE_DEPLOY_ENV=1`.
+  `validateWebEnv` also runs at boot under `ATEVA_REQUIRE_DEPLOY_ENV=1`.
   `COOKIE_SECURE=false` warns + fails preflight (never silently insecure).
 
 ## Sandbox / agent-beta domain (2026-08-05/06/07)
@@ -2274,10 +2274,10 @@ minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
   `claimIdempotencyKey` + state machine; `campaign_placements` unique per
   campaign+placementType. Web panels health-gate on `environmentKind` and
   render only on sandbox/test.
-- **VSIX packaging:** `@waitlayer/agent-protocol` is a devDependency inlined
+- **VSIX packaging:** `@ateva/agent-protocol` is a devDependency inlined
   by esbuild (494KB self-contained `out/extension.js`); `package-vsix.mjs`
   stages a dependency-free manifest; `verify-isolated-artifact.cjs` rejects any
-  `@waitlayer/`/`workspace:` runtime resolution. License: `SEE LICENSE IN LICENSE`.
+  `@ateva/`/`workspace:` runtime resolution. License: `SEE LICENSE IN LICENSE`.
 - **Attention coordination:** `AttentionStateMachine` enqueues
   foreground-eligible losers and promotes the first still-eligible waiter when
   the owner releases (`promotion` reason).
@@ -2321,8 +2321,8 @@ pruned 2026-07-10; this index preserves the audit trail.
 - A-027 device recovery issuance (`admin.controller:184,190`; `devices/page.tsx`).
 - A-028 admin user lifecycle buttons (`admin/users/page.tsx:250-319`).
 - A-029 feedback backend submit (`feedback/page.tsx:20`; `feedback.service.ts`).
-- A-030 safe-seed payout provider catalogue (`payout-providers.ts`): `paypal_email` + `manual` available by default; automated rails remain gated; the API enforces `WAITLAYER_PAYOUT_PROVIDER_STATUS` and publishes runtime readiness to the web so no build-time client catalogue can drift.
-- A-031 currency helpers in UI (relocated to `@waitlayer/shared`: `formatMinorUnits`, `minorToMajorInputValue`, `depositMinimumMinor`, `payoutMinimumMinor`).
+- A-030 safe-seed payout provider catalogue (`payout-providers.ts`): `paypal_email` + `manual` available by default; automated rails remain gated; the API enforces `ATEVA_PAYOUT_PROVIDER_STATUS` and publishes runtime readiness to the web so no build-time client catalogue can drift.
+- A-031 currency helpers in UI (relocated to `@ateva/shared`: `formatMinorUnits`, `minorToMajorInputValue`, `depositMinimumMinor`, `payoutMinimumMinor`).
 - A-032 reports pagination bounds (`advertiser.service.ts:42-43`; `spec:237-295`).
 - A-033 comparison `Live` claims over 2 codebases (`comparison/page.tsx:37-51`) — **live-verified 2026-07-15** (browser E2E).
 - A-034 signup consent DTO+tx (`signup.dto.ts:43-51`; `auth.service.ts:94-97,110-172`).
@@ -2334,7 +2334,7 @@ pruned 2026-07-10; this index preserves the audit trail.
 - A-040 CLI ad flow (`watch.ts` `runAdFlow`; `ad-flow.ts` `MINIMUM_VISIBLE_DURATION_MS = 5000`) — live compiled-binary↔API link verified 2026-07-12/15.
 - A-041 referral reward earnings (`referral.service.ts:197-262`).
 - A-042 readiness 503 (`health.controller.ts:56-84`).
-- A-043 CLI packaging/shebang (`package.json` bin; `verify-cli-bin.mjs`; no `@waitlayer/shared`).
+- A-043 CLI packaging/shebang (`package.json` bin; `verify-cli-bin.mjs`; no `@ateva/shared`).
 - A-044 advertiser privacy UI (`advertiser.controller:305-317`; `settings/page.tsx`).
 - A-045 empty creative reject reason (`campaign.service.ts:219-233`).
 - A-046 fraud recompute client (`admin.controller:153-155`; `fraud/page.tsx:217-229`).
@@ -2382,7 +2382,7 @@ pruned 2026-07-10; this index preserves the audit trail.
 ## Quality gates (run from repo root)
 
 ```bash
-pnpm --filter @waitlayer/db generate
+pnpm --filter @ateva/db generate
 pnpm typecheck
 pnpm lint
 pnpm test
@@ -2393,12 +2393,12 @@ For database-backed suites, Postgres + Redis must be available and the test DB
 migrated/reset. Authoritative API result (integration tests share one Postgres):
 
 ```bash
-pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
+pnpm --filter ateva-api exec vitest run --no-file-parallelism
 ```
 
 Additional gates: `node scripts/audit-claims.mjs` (13/13), `node scripts/scan-build-secrets.mjs`,
 `node scripts/audit-dependencies.mjs`, `node scripts/check-licenses.mjs`,
-`pnpm --filter waitlayer-web exec playwright test` (e2e, 86 tests — run via
+`pnpm --filter ateva-web exec playwright test` (e2e, 86 tests — run via
 `.e2e/run-e2e.sh`), plus migration status and drift.
 
 **The migration-status command needs an explicit `DATABASE_URL`.** As previously
@@ -2409,7 +2409,7 @@ above):
 
 ```bash
 DATABASE_URL=$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"') \
-  pnpm --filter @waitlayer/db exec prisma migrate status
+  pnpm --filter @ateva/db exec prisma migrate status
 # → "N migrations found in prisma/migrations" + "Database schema is up to date!"
 ```
 

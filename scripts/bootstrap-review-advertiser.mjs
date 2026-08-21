@@ -20,16 +20,16 @@ import { createInterface } from 'node:readline';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 const bcrypt = require('bcryptjs');
-const { passwordValidationError } = require('@waitlayer/shared');
+const { passwordValidationError } = require('@ateva/shared');
 
 const BCRYPT_COST = 12;
 const DEFAULT_NAME = 'External Reviewer';
-const DEFAULT_COMPANY = 'WaitLayer Product Review';
+const DEFAULT_COMPANY = 'Ateva Product Review';
 const DEFAULT_COUNTRY = 'US';
-const DEFAULT_WEBSITE = 'https://www.waitlayer.com';
-const REVIEW_CAMPAIGN_NAME = 'WaitLayer product review — draft campaign';
+const DEFAULT_WEBSITE = 'https://www.ateva.com';
+const REVIEW_CAMPAIGN_NAME = 'Ateva product review — draft campaign';
 
 function fail(message) {
   console.error(`bootstrap-review-advertiser: ${message}`);
@@ -102,7 +102,7 @@ async function main() {
     // Keep validation feedback intentionally generic: the password itself and
     // any validator-derived detail are credential-adjacent data and must never
     // be written to CI or operator logs.
-    fail('password does not satisfy the WaitLayer password policy');
+    fail('password does not satisfy the Ateva password policy');
   }
 
   const name = String(args.name ?? DEFAULT_NAME).trim();

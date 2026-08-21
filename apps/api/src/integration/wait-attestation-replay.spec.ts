@@ -11,7 +11,7 @@ import { WaitAttestationService } from '../extension/wait-attestation.service';
 
 const PROVIDER = 'db-replay-attestor';
 const ISSUER = 'https://db-replay-attestor.example.test';
-const AUDIENCE = 'waitlayer-db-replay';
+const AUDIENCE = 'ateva-db-replay';
 const KEY_ID = 'db-replay-attestor-key';
 const ATTESTATION_VERSION = 'db-replay-v1';
 
@@ -68,7 +68,7 @@ describe('wait-attestation replay race (DB-backed)', () => {
   it('accepts one concurrent delivery and rejects the replay', async () => {
     const user = await prisma.user.create({
       data: {
-        email: `attestation-replay-${randomUUID()}@waitlayer.test`,
+        email: `attestation-replay-${randomUUID()}@ateva.test`,
         role: 'developer',
         status: 'active',
         country: 'US',

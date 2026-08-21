@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 
-const TEST_FALLBACK_KEY = 'waitlayer-test-privacy-hash-key-at-least-32-chars';
+const TEST_FALLBACK_KEY = 'ateva-test-privacy-hash-key-at-least-32-chars';
 
 /**
  * Stable, purpose-separated pseudonymization for low-entropy identifiers.
@@ -12,6 +12,6 @@ export function privacyPseudonym(value: string, purpose: string): string {
     throw new Error('PRIVACY_HASH_KEY must be set to a 32+ character secret in production');
   }
   return createHmac('sha256', key || TEST_FALLBACK_KEY)
-    .update(`waitlayer-privacy-v1:${purpose}:${value}`)
+    .update(`ateva-privacy-v1:${purpose}:${value}`)
     .digest('hex');
 }

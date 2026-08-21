@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "replay_client",
   "environment": "sandbox",
-  "seed": "waitlayer-replay-v1",
+  "seed": "ateva-replay-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

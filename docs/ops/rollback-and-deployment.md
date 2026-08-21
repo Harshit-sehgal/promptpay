@@ -63,7 +63,7 @@ the host secret manager; never commit that file.
 
 `JWT_PUBLIC_KEYS` is optional during rotation, but when present the same set
 must reach the API and web build. `JWT_ISSUER` / `JWT_AUDIENCE` default to
-`waitlayer` / `waitlayer-client`; custom values must also match on both tiers.
+`ateva` / `ateva-client`; custom values must also match on both tiers.
 The example fixes `PAYOUT_REQUIRE_2FA=true`, `WEBHOOK_RECLAIM_CRON=true`, and
 production email mode. Stripe, PayPal, Wise, and Sentry variables are required
 only when the corresponding integration is enabled.
@@ -73,11 +73,11 @@ only when the corresponding integration is enabled.
 Build and push to container registry:
 
 ```bash
-export WAITLAYER_API_IMAGE=registry.example.com/waitlayer-api:v1.0.0
-export WAITLAYER_WEB_IMAGE=registry.example.com/waitlayer-web:v1.0.0
+export ATEVA_API_IMAGE=registry.example.com/ateva-api:v1.0.0
+export ATEVA_WEB_IMAGE=registry.example.com/ateva-web:v1.0.0
 export JWT_PUBLIC_KEY="$(cat jwt-public.pem)"
-export JWT_ISSUER="${JWT_ISSUER:-waitlayer}"
-export JWT_AUDIENCE="${JWT_AUDIENCE:-waitlayer-client}"
+export JWT_ISSUER="${JWT_ISSUER:-ateva}"
+export JWT_AUDIENCE="${JWT_AUDIENCE:-ateva-client}"
 # During rotation only: export JWT_PUBLIC_KEYS="$(cat previous-jwt-public.pem)"
 export NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 export NEXT_PUBLIC_WEB_URL=https://app.example.com
@@ -90,16 +90,16 @@ docker build --target api \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
   --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
-  -t "$WAITLAYER_API_IMAGE" .
+  -t "$ATEVA_API_IMAGE" .
 docker build --target web \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
   --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
-  -t "$WAITLAYER_WEB_IMAGE" .
+  -t "$ATEVA_WEB_IMAGE" .
 
-docker push "$WAITLAYER_API_IMAGE"
-docker push "$WAITLAYER_WEB_IMAGE"
+docker push "$ATEVA_API_IMAGE"
+docker push "$ATEVA_WEB_IMAGE"
 ```
 
 Protect version tags from mutation in the registry, or deploy by digest.
@@ -116,27 +116,27 @@ named stacks behind a load balancer when zero-downtime traffic switching is
 required.
 
 ```bash
-export WAITLAYER_API_IMAGE=registry.example.com/waitlayer-api:v1.0.0
-export WAITLAYER_WEB_IMAGE=registry.example.com/waitlayer-web:v1.0.0
-export WAITLAYER_COMPOSE=docs/ops/docker-compose.images.example.yml
+export ATEVA_API_IMAGE=registry.example.com/ateva-api:v1.0.0
+export ATEVA_WEB_IMAGE=registry.example.com/ateva-web:v1.0.0
+export ATEVA_COMPOSE=docs/ops/docker-compose.images.example.yml
 
 # 1. Validate the standalone production config, then pull immutable images.
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" config --quiet
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" pull api web
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" config --quiet
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" pull api web
 
 # 2. Run database migrations
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" run --rm api \
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" run --rm api \
   sh /app/docker-entrypoint.sh true
 
 # 3. Recreate API from the pulled image
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" \
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" \
   up -d --no-deps api
 
 # 4. Health check
 curl -f http://localhost:4002/api/v1/health/ready
 
 # 5. Recreate web from the pulled image
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" \
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" \
   up -d --no-deps web
 
 # 6. Verify
@@ -175,15 +175,15 @@ Do not switch the API signing key before the running web tier accepts it:
 **Trigger:** 500 errors, performance degradation, data integrity issue, security vulnerability
 
 ```bash
-export WAITLAYER_API_IMAGE=registry.example.com/waitlayer-api:v0.9.9
-export WAITLAYER_WEB_IMAGE=registry.example.com/waitlayer-web:v0.9.9
-export WAITLAYER_COMPOSE=docs/ops/docker-compose.images.example.yml
+export ATEVA_API_IMAGE=registry.example.com/ateva-api:v0.9.9
+export ATEVA_WEB_IMAGE=registry.example.com/ateva-web:v0.9.9
+export ATEVA_COMPOSE=docs/ops/docker-compose.images.example.yml
 
 # Step 1: pull exactly the last known-good immutable tags.
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" pull api web
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" pull api web
 
 # Step 2: recreate both services from the pinned rollback images.
-docker compose --env-file .env.production -f "$WAITLAYER_COMPOSE" \
+docker compose --env-file .env.production -f "$ATEVA_COMPOSE" \
   up -d --no-deps --force-recreate api web
 
 # Step 3: Verify rollback
@@ -202,7 +202,7 @@ or mark a failed migration rolled back unless the database state has been
 manually verified. Choose one of these recovery paths:
 
 1. For a compatible defect, ship a new forward-only corrective migration and
-   run `pnpm --filter @waitlayer/db migrate:deploy`.
+   run `pnpm --filter @ateva/db migrate:deploy`.
 2. For destructive corruption, stop writes and restore the verified backup to
    a new database, run all migrations there, verify financial invariants, then
    switch `DATABASE_URL` atomically.

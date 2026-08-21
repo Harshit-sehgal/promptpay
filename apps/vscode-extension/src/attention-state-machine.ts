@@ -49,7 +49,7 @@ export type AttentionStateMachineOptions = {
  * Models human attention independently from agent processing and advertising.
  *
  * This class deliberately has no API, detector, ad, or ledger dependencies. A
- * caller must explicitly provide focus, WaitLayer-surface visibility, device
+ * caller must explicitly provide focus, Ateva-surface visibility, device
  * lock, and bridge connectivity observations. Missing observations do not get
  * promoted into proof of attention.
  *
@@ -102,7 +102,7 @@ export class AttentionStateMachine {
   }
 
   /**
-   * Claim installation attention ownership BEFORE the WaitLayer surface is
+   * Claim installation attention ownership BEFORE the Ateva surface is
    * visible, so the focus→visible transition keeps a stable owner. Returns
    * whether this surface now holds ownership (false when the window is not
    * focused or another surface already owns attention).
@@ -126,7 +126,7 @@ export class AttentionStateMachine {
     this.recompute('window_focus');
   }
 
-  /** Update whether a WaitLayer-owned surface is currently visible. */
+  /** Update whether a Ateva-owned surface is currently visible. */
   setSurfaceVisible(visible: boolean): void {
     this.surfaceVisible = visible;
     this.recompute('surface_visibility');
@@ -195,11 +195,7 @@ export class AttentionStateMachine {
    */
   private claimLease(): boolean {
     const current = AttentionStateMachine.owners.get(this.installationId);
-    if (
-      current &&
-      current.ownerId !== this.ownerId &&
-      current.leasedUntil >= this.now()
-    ) {
+    if (current && current.ownerId !== this.ownerId && current.leasedUntil >= this.now()) {
       return false;
     }
     AttentionStateMachine.owners.set(this.installationId, {

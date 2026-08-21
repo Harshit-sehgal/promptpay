@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restore a WaitLayer Postgres backup produced by scripts/backup-db.sh.
+# Restore a Ateva Postgres backup produced by scripts/backup-db.sh.
 #
 # Restores into a TARGET database (must already exist). Designed for DR drills
 # and the CI backup-restore verification job: it never clobbers the source DB
@@ -41,7 +41,7 @@ gunzip -c "$DUMP" | pg_restore \
 
 if [ "$APPLY_MIGRATIONS" -eq 1 ]; then
   echo "Applying migrations to restored DB..."
-  DATABASE_URL="$TARGET_URL" pnpm --filter @waitlayer/db migrate:deploy
+  DATABASE_URL="$TARGET_URL" pnpm --filter @ateva/db migrate:deploy
 fi
 
 echo "Restore complete: $TARGET_URL"

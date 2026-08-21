@@ -151,7 +151,7 @@ describe('ApiClient — URL / base-URL resolution', () => {
     await client.getBalance();
     const opts = mock.captured[0] as Record<string, unknown>;
 
-    expect(opts.hostname).toBe('api.waitlayer.com');
+    expect(opts.hostname).toBe('api.ateva.com');
     expect(opts.path).toBe('/api/v1/ledger/balance');
   });
 
@@ -184,7 +184,7 @@ describe('ApiClient — header shaping', () => {
 
   it('attaches a Bearer Authorization header once access tokens are loaded', async () => {
     mock.config['apiUrl'] = 'https://api.example.com/api/v1';
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'tok-123',
       refreshToken: 'rt-456',
     });
@@ -198,11 +198,11 @@ describe('ApiClient — header shaping', () => {
 
   it('shapes signed POST headers (Content-Length + auth) and posts to the event endpoint', async () => {
     mock.config['apiUrl'] = 'https://api.example.com/api/v1';
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'tok-123',
       refreshToken: 'rt-456',
     });
-    mock.secrets['waitlayer.deviceEventSecret'] = 'dev-secret';
+    mock.secrets['ateva.deviceEventSecret'] = 'dev-secret';
     const client = makeClient();
 
     await client.waitStateStart({
@@ -230,7 +230,7 @@ describe('ApiClient — header shaping', () => {
 
 describe('ApiClient — auth state ordering', () => {
   it('persists a rotated refresh token before retrying the original request', async () => {
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'old-access',
       refreshToken: 'old-refresh',
     });
@@ -253,7 +253,7 @@ describe('ApiClient — auth state ordering', () => {
     const gate = Promise.withResolvers<void>();
     let tokenStoreStarted = false;
     mock.storeHook = async (key) => {
-      if (key !== 'waitlayer.authTokens') return;
+      if (key !== 'ateva.authTokens') return;
       tokenStoreStarted = true;
       await gate.promise;
     };
@@ -266,7 +266,7 @@ describe('ApiClient — auth state ordering', () => {
 
     expect(settled).not.toHaveBeenCalled();
     expect(mock.captured).toHaveLength(2);
-    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+    expect(JSON.parse(mock.secrets['ateva.authTokens'])).toEqual({
       accessToken: 'old-access',
       refreshToken: 'old-refresh',
     });
@@ -276,7 +276,7 @@ describe('ApiClient — auth state ordering', () => {
       available: { amountMinor: 1250n, currency: 'USD' },
     });
     expect(mock.captured).toHaveLength(3);
-    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+    expect(JSON.parse(mock.secrets['ateva.authTokens'])).toEqual({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
     });
@@ -285,7 +285,7 @@ describe('ApiClient — auth state ordering', () => {
   });
 
   it('does not retry with rotated tokens when SecretStorage persistence fails', async () => {
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'old-access',
       refreshToken: 'old-refresh',
     });
@@ -297,13 +297,13 @@ describe('ApiClient — auth state ordering', () => {
       },
     ];
     mock.storeHook = async (key) => {
-      if (key === 'waitlayer.authTokens') throw new Error('secret store unavailable');
+      if (key === 'ateva.authTokens') throw new Error('secret store unavailable');
     };
     const client = makeClient();
 
     await expect(client.getBalance()).rejects.toMatchObject({ statusCode: 401 });
     expect(mock.captured).toHaveLength(2);
-    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+    expect(mock.secrets['ateva.authTokens']).toBeUndefined();
   });
 
   it('does not report login success when token persistence fails', async () => {
@@ -319,18 +319,18 @@ describe('ApiClient — auth state ordering', () => {
       },
     ];
     mock.storeHook = async (key) => {
-      if (key === 'waitlayer.authTokens') throw new Error('secret store unavailable');
+      if (key === 'ateva.authTokens') throw new Error('secret store unavailable');
     };
     const client = makeClient();
 
     await expect(client.promptLogin()).resolves.toBe(false);
-    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+    expect(mock.secrets['ateva.authTokens']).toBeUndefined();
   });
 
   it('awaits different-user device cleanup before completing login', async () => {
-    mock.secrets['waitlayer.deviceUUID'] = 'old-device';
-    mock.secrets['waitlayer.deviceEventSecret'] = 'old-secret';
-    mock.secrets['waitlayer.deviceUserId'] = 'old-user';
+    mock.secrets['ateva.deviceUUID'] = 'old-device';
+    mock.secrets['ateva.deviceEventSecret'] = 'old-secret';
+    mock.secrets['ateva.deviceUserId'] = 'old-user';
     mock.inputs = ['new@example.com', 'password'];
     mock.responses = [
       {
@@ -345,7 +345,7 @@ describe('ApiClient — auth state ordering', () => {
     const gate = Promise.withResolvers<void>();
     let cleanupStarted = false;
     mock.deleteHook = async (key) => {
-      if (key !== 'waitlayer.deviceUUID') return;
+      if (key !== 'ateva.deviceUUID') return;
       cleanupStarted = true;
       await gate.promise;
     };
@@ -357,22 +357,22 @@ describe('ApiClient — auth state ordering', () => {
     await vi.waitFor(() => expect(cleanupStarted).toBe(true));
 
     expect(settled).not.toHaveBeenCalled();
-    expect(mock.secrets['waitlayer.deviceUUID']).toBe('old-device');
-    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+    expect(mock.secrets['ateva.deviceUUID']).toBe('old-device');
+    expect(mock.secrets['ateva.authTokens']).toBeUndefined();
 
     gate.resolve();
     await expect(loginPromise).resolves.toBe(true);
-    expect(mock.secrets['waitlayer.deviceUUID']).toBeUndefined();
-    expect(mock.secrets['waitlayer.deviceEventSecret']).toBeUndefined();
-    expect(mock.secrets['waitlayer.deviceUserId']).toBeUndefined();
-    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+    expect(mock.secrets['ateva.deviceUUID']).toBeUndefined();
+    expect(mock.secrets['ateva.deviceEventSecret']).toBeUndefined();
+    expect(mock.secrets['ateva.deviceUserId']).toBeUndefined();
+    expect(JSON.parse(mock.secrets['ateva.authTokens'])).toEqual({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
     });
   });
 
   it('does not complete logout until persisted tokens are cleared', async () => {
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'access',
       refreshToken: 'refresh',
     });
@@ -380,7 +380,7 @@ describe('ApiClient — auth state ordering', () => {
     const gate = Promise.withResolvers<void>();
     let clearStarted = false;
     mock.deleteHook = async (key) => {
-      if (key !== 'waitlayer.authTokens') return;
+      if (key !== 'ateva.authTokens') return;
       clearStarted = true;
       await gate.promise;
     };
@@ -392,33 +392,33 @@ describe('ApiClient — auth state ordering', () => {
     await vi.waitFor(() => expect(clearStarted).toBe(true));
 
     expect(settled).not.toHaveBeenCalled();
-    expect(mock.secrets['waitlayer.authTokens']).toBeDefined();
+    expect(mock.secrets['ateva.authTokens']).toBeDefined();
 
     gate.resolve();
     await logoutPromise;
-    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+    expect(mock.secrets['ateva.authTokens']).toBeUndefined();
   });
 
   it('propagates logout failure when persisted tokens cannot be cleared', async () => {
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'access',
       refreshToken: 'refresh',
     });
     mock.responses = [{ status: 200, body: '{}' }];
     mock.deleteHook = async (key) => {
-      if (key === 'waitlayer.authTokens') throw new Error('secret delete unavailable');
+      if (key === 'ateva.authTokens') throw new Error('secret delete unavailable');
     };
     const client = makeClient();
 
     await expect(client.logout()).rejects.toThrow('secret delete unavailable');
-    expect(mock.secrets['waitlayer.authTokens']).toBeDefined();
+    expect(mock.secrets['ateva.authTokens']).toBeDefined();
   });
 });
 
 describe('ApiClient — flagFalsePositive', () => {
   it('POSTs to the false-positive endpoint for the given wait state with auth', async () => {
     mock.config['apiUrl'] = 'https://api.example.com/api/v1';
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'tok-123',
       refreshToken: 'rt-456',
     });
@@ -440,7 +440,7 @@ describe('ApiClient — flagFalsePositive', () => {
 
   it('includes the optional reason in the payload when provided', async () => {
     mock.config['apiUrl'] = 'https://api.example.com/api/v1';
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'tok-123',
       refreshToken: 'rt-456',
     });
@@ -454,7 +454,7 @@ describe('ApiClient — flagFalsePositive', () => {
 
   it('omits reason from the payload when not provided (backward compatible)', async () => {
     mock.config['apiUrl'] = 'https://api.example.com/api/v1';
-    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+    mock.secrets['ateva.authTokens'] = JSON.stringify({
       accessToken: 'tok-123',
       refreshToken: 'rt-456',
     });

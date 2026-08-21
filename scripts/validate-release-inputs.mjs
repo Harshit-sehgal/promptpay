@@ -7,7 +7,7 @@
 import { createPublicKey } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const REFERENCE_PROVIDER = 'waitlayer-stub-bridge';
+const REFERENCE_PROVIDER = 'ateva-stub-bridge';
 const REFERENCE_VERSION = 'stub-v1';
 const DIGEST_REFERENCE = /^[^\s@]+@sha256:[a-f0-9]{64}$/i;
 
@@ -114,7 +114,7 @@ export function validateStagingInputs(env) {
         issuer.provider === provider &&
         typeof issuer.issuer === 'string' &&
         issuer.issuer.startsWith('https://') &&
-        issuer.issuer !== 'https://waitlayer.local/attestation' &&
+        issuer.issuer !== 'https://ateva.local/attestation' &&
         issuer.publicKeys &&
         typeof issuer.publicKeys === 'object' &&
         Object.keys(issuer.publicKeys).length > 0,

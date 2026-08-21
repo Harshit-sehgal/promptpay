@@ -68,7 +68,7 @@ export default function VerifyEmailPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">

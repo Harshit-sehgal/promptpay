@@ -4,7 +4,7 @@ import { StringValue } from 'ms';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
@@ -65,8 +65,8 @@ export class AuthSessionTrait {
     const family = existingFamily || randomUUID();
     // Pre-generate a session ID to use as jti in the access token
     const jti = randomUUID();
-    const audience = this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
-    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
+    const audience = this.config.get<string>('JWT_AUDIENCE', 'ateva-client');
+    const issuer = this.config.get<string>('JWT_ISSUER', 'ateva');
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
         {
@@ -101,7 +101,7 @@ export class AuthSessionTrait {
 
   hashRefreshToken(refreshToken: string): string {
     return `v2:${createHmac('sha256', this.jwtSecret)
-      .update(`waitlayer-refresh-token-v2:${refreshToken}`)
+      .update(`ateva-refresh-token-v2:${refreshToken}`)
       .digest('hex')}`;
   }
 
@@ -129,8 +129,8 @@ export class AuthSessionTrait {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: this.publicKey,
         algorithms: ['RS256'],
-        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
-        audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
+        issuer: this.config.get<string>('JWT_ISSUER', 'ateva'),
+        audience: this.config.get<string>('JWT_AUDIENCE', 'ateva-client'),
         // Expiration is enforced: a stale or expired refresh token cannot be
         // used to perform a logout, matching the refresh endpoint's contract.
       });

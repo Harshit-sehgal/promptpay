@@ -176,7 +176,7 @@ export enum ReferralStatus {
 // `ad_rendered`, `qualified_impression`, `click`, `report_ad`) had no shared
 // TS counterpart. Every other DB enum has a mirror here; this was the sole
 // outlier, forcing client code that needs these constants to either import
-// `@waitlayer/db` (splitting the package boundary) or hardcode strings (no
+// `@ateva/db` (splitting the package boundary) or hardcode strings (no
 // single source of truth). Added as a pure additive export with a clear
 // disambiguating name (`WaitStateEventType`) — using `EventType` here would
 // shadow a common global name and risk confusion in callers. Existing

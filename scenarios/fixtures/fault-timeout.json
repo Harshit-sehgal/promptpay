@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "test_harness",
   "environment": "sandbox",
-  "seed": "waitlayer-timeout-fixture-v1",
+  "seed": "ateva-timeout-fixture-v1",
   "runner": {
     "command": "node",
     "args": ["scenarios/fixtures/fault-timeout.runner.mjs"],

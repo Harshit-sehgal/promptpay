@@ -53,9 +53,9 @@ jobs:
 
       - name: Build database dependencies
         run: |
-          pnpm --filter @waitlayer/db generate
-          pnpm --filter @waitlayer/shared build
-          pnpm --filter @waitlayer/db build
+          pnpm --filter @ateva/db generate
+          pnpm --filter @ateva/shared build
+          pnpm --filter @ateva/db build
 
       - name: Create dedicated advertiser review account
         if: ${{ inputs.bootstrap_account }}

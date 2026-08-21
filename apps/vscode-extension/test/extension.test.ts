@@ -176,7 +176,7 @@ describe('extension auth commands', () => {
     mock.api.promptLogin.mockResolvedValue(true);
     mock.api.getBalance.mockReturnValue(balance.promise);
 
-    const commandPromise = Promise.resolve(mock.commands.get('waitlayer.login')?.());
+    const commandPromise = Promise.resolve(mock.commands.get('ateva.login')?.());
     await vi.waitFor(() => expect(mock.status.setLoggedIn).toHaveBeenCalledTimes(1));
 
     expect(mock.status.setEarnings).not.toHaveBeenCalled();
@@ -192,7 +192,7 @@ describe('extension auth commands', () => {
   it('switches the status bar to logged out when logout completes', async () => {
     await activateAndClearBootState();
 
-    await mock.commands.get('waitlayer.logout')?.();
+    await mock.commands.get('ateva.logout')?.();
 
     expect(mock.api.logout).toHaveBeenCalledTimes(1);
     expect(mock.status.setLoggedOut).toHaveBeenCalledTimes(1);
@@ -259,10 +259,10 @@ describe('extension reportFalseWait command', () => {
   it('does nothing when there is no active wait', async () => {
     await activateAndClearBootState();
 
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
 
     expect(mock.api.flagFalsePositive).not.toHaveBeenCalled();
-    expect(mock.showInformationMessage).toHaveBeenCalledWith('WaitLayer: no active wait to report');
+    expect(mock.showInformationMessage).toHaveBeenCalledWith('Ateva: no active wait to report');
   });
 
   it('flags the active wait state and then reports already-flagged on repeat', async () => {
@@ -277,20 +277,20 @@ describe('extension reportFalseWait command', () => {
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
 
     expect(mock.showQuickPick).toHaveBeenCalledTimes(1);
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-wait-1', 'Some reason');
     expect(mock.showInformationMessage).toHaveBeenCalledWith(
-      'WaitLayer: thanks — this wait has been flagged as a false detection',
+      'Ateva: thanks — this wait has been flagged as a false detection',
     );
 
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
     expect(mock.showInformationMessage).toHaveBeenCalledWith(
-      'WaitLayer: this wait has already been reported as a false detection',
+      'Ateva: this wait has already been reported as a false detection',
     );
   });
 
@@ -307,7 +307,7 @@ describe('extension reportFalseWait command', () => {
         signals: [{ type: 'active_task' }, { type: 'command_execution' }],
       },
     });
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-a', 'Some reason');
 
@@ -322,7 +322,7 @@ describe('extension reportFalseWait command', () => {
         signals: [{ type: 'active_task' }, { type: 'command_execution' }],
       },
     });
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-b', 'Some reason');
@@ -339,7 +339,7 @@ describe('extension reportFalseWait command', () => {
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
-    await mock.commands.get('waitlayer.reportFalseWait')?.('no_ai_generation');
+    await mock.commands.get('ateva.reportFalseWait')?.('no_ai_generation');
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason', 'no_ai_generation');
@@ -356,7 +356,7 @@ describe('extension reportFalseWait command', () => {
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
-    await mock.commands.get('waitlayer.reportFalseWait')?.('Just reading docs, not AI');
+    await mock.commands.get('ateva.reportFalseWait')?.('Just reading docs, not AI');
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason-unknown', 'other');
   });
@@ -388,7 +388,7 @@ describe('extension showEarnings command — per-currency breakdown (P1.4)', () 
       },
     });
 
-    await mock.commands.get('waitlayer.showEarnings')?.();
+    await mock.commands.get('ateva.showEarnings')?.();
 
     const callArg = mock.showInformationMessage.mock.calls
       .map((c) => c[0])
@@ -406,17 +406,17 @@ describe('extension detector controls (P1.17)', () => {
   it('toggleDetectorSource toggles the source and reports the new state', async () => {
     await activateAndClearBootState();
     mock.config.toggleDetectorSource.mockResolvedValue(['inactivity']);
-    await mock.commands.get('waitlayer.toggleDetectorSource')?.('inactivity');
+    await mock.commands.get('ateva.toggleDetectorSource')?.('inactivity');
     expect(mock.config.toggleDetectorSource).toHaveBeenCalledWith('inactivity');
     expect(mock.showInformationMessage).toHaveBeenCalledWith(
-      "WaitLayer: detector source 'inactivity' is now disabled",
+      "Ateva: detector source 'inactivity' is now disabled",
     );
   });
 
   it('showExperimentAssignment reports enrollment at default rollout', async () => {
     await activateAndClearBootState();
     mock.config.detectorRolloutPercent.mockReturnValue(100);
-    await mock.commands.get('waitlayer.showExperimentAssignment')?.();
+    await mock.commands.get('ateva.showExperimentAssignment')?.();
     const msg = mock.showInformationMessage.mock.calls
       .map((c) => c[0])
       .find((m): m is string => typeof m === 'string' && m.includes('detector experiment'));
@@ -429,11 +429,11 @@ describe('extension detector controls (P1.17)', () => {
 describe('extension triggerManualWait command (P1 #12)', () => {
   it('registers the manifest-advertised command and reports a shadow-only manual wait', async () => {
     await activateAndClearBootState();
-    expect(mock.commands.has('waitlayer.triggerManualWait')).toBe(true);
+    expect(mock.commands.has('ateva.triggerManualWait')).toBe(true);
 
     mock.detector.triggerManualWait.mockReturnValue('ws-manual-1');
     mock.showQuickPick.mockResolvedValue('codex');
-    await mock.commands.get('waitlayer.triggerManualWait')?.();
+    await mock.commands.get('ateva.triggerManualWait')?.();
 
     expect(mock.showQuickPick).toHaveBeenCalled();
     expect(mock.detector.triggerManualWait).toHaveBeenCalledWith('codex');
@@ -450,9 +450,7 @@ describe('extension triggerManualWait command (P1 #12)', () => {
     mock.detector.triggerManualWait.mockReturnValue('');
 
     // Pass the tool directly — skips the quick-pick.
-    await (mock.commands.get('waitlayer.triggerManualWait') as (t?: string) => Promise<void>)(
-      'claude',
-    );
+    await (mock.commands.get('ateva.triggerManualWait') as (t?: string) => Promise<void>)('claude');
 
     expect(mock.detector.triggerManualWait).toHaveBeenCalledWith('claude');
     const msg = mock.showInformationMessage.mock.calls
@@ -476,7 +474,7 @@ describe('extension reportFalseWait — reason + suppression (P1.18)', () => {
         signals: [{ type: 'active_task' }, { type: 'command_execution' }],
       },
     });
-    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    await mock.commands.get('ateva.reportFalseWait')?.();
     expect(mock.showQuickPick).toHaveBeenCalled();
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith(
       'fp-pick',
@@ -505,7 +503,7 @@ describe('extension reportFalseWait — reason + suppression (P1.18)', () => {
       },
     });
     await vi.waitFor(() =>
-      expect(mock.executeCommand).toHaveBeenCalledWith('waitlayer.reportFalseWait'),
+      expect(mock.executeCommand).toHaveBeenCalledWith('ateva.reportFalseWait'),
     );
     // And the triggered report flow flags the active wait with the chosen reason.
     await vi.waitFor(() =>

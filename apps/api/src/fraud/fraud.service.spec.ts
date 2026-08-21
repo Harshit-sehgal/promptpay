@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FraudFlagStatus } from '@waitlayer/db';
+import { FraudFlagStatus } from '@ateva/db';
 
 import { AlertsService } from '../observability/alerts.service';
 import { MetricsService } from '../observability/metrics.service';

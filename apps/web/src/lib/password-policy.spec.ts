@@ -5,14 +5,14 @@ import {
   PASSWORD_MAX_UTF8_BYTES,
   passwordUtf8Bytes,
   passwordValidationError,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 describe('shared password policy', () => {
   it('accepts a strong password used consistently by clients and API', () => {
     expect(isStrongPassword('Correct-Horse-9!')).toBe(true);
   });
 
-  it.each(['alllowercase1!', 'ALLUPPERCASE1!', 'NoDigitsHere!', 'NoSymbols123']) (
+  it.each(['alllowercase1!', 'ALLUPPERCASE1!', 'NoDigitsHere!', 'NoSymbols123'])(
     'rejects a password missing a required class: %s',
     (password) => expect(passwordValidationError(password)).not.toBeNull(),
   );

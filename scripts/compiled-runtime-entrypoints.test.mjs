@@ -22,6 +22,6 @@ test('root web launcher delegates start through the workspace web package', () =
   const pkg = packageJson('package.json');
   assert.equal(
     pkg.scripts['start:web'],
-    'pnpm --filter waitlayer-web build && cd apps/web && next start',
+    'pnpm --filter ateva-web build && cd apps/web && next start',
   );
 });

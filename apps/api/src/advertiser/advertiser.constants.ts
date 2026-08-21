@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { CampaignStatus } from '@waitlayer/shared';
+import { CampaignStatus } from '@ateva/shared';
 
 /**
  * Build the Prisma `createdAt` filter for advertiser reports (issue A-050).

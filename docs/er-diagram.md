@@ -1,6 +1,6 @@
 # Entity-Relationship Diagram
 
-Mermaid ER diagram of the core WaitLayer schema. Mirrors `docs/03-database-schema.md`
+Mermaid ER diagram of the core Ateva schema. Mirrors `docs/03-database-schema.md`
 (prose column definitions) — this is the visual complement.
 
 ```mermaid

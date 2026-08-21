@@ -25,14 +25,14 @@ const independentIssuer = JSON.stringify([
   {
     provider: 'independent-attestor',
     issuer: 'https://attestor.example.test',
-    audience: 'waitlayer-client',
+    audience: 'ateva-client',
     publicKeys: { current: '-----BEGIN PUBLIC KEY-----example-----END PUBLIC KEY-----' },
   },
 ]);
 
 const validStagingUrls = {
-  STAGING_API_URL: 'https://staging-api.waitlayer.example',
-  STAGING_WEB_URL: 'https://staging.waitlayer.example',
+  STAGING_API_URL: 'https://staging-api.ateva.example',
+  STAGING_WEB_URL: 'https://staging.ateva.example',
 };
 
 const testPublicKey = `-----BEGIN PUBLIC KEY-----
@@ -60,11 +60,11 @@ test('accepts an independent staging attester', () => {
 test('rejects the repository reference attester and version', () => {
   const errors = validateStagingInputs({
     ...validStagingUrls,
-    STAGING_WAIT_ATTESTATION_PROVIDER: 'waitlayer-stub-bridge',
+    STAGING_WAIT_ATTESTATION_PROVIDER: 'ateva-stub-bridge',
     STAGING_WAIT_ATTESTATION_ISSUERS: JSON.stringify([
       {
-        provider: 'waitlayer-stub-bridge',
-        issuer: 'https://waitlayer.local/attestation',
+        provider: 'ateva-stub-bridge',
+        issuer: 'https://ateva.local/attestation',
         publicKeys: { stub: 'key' },
       },
     ]),
@@ -81,11 +81,11 @@ test('requires canonical HTTPS staging origins before building public URLs', () 
     STAGING_WAIT_ATTESTATION_VERSIONS: 'attestor-v2',
   };
   for (const [name, value] of [
-    ['STAGING_API_URL', 'https://staging-api.waitlayer.example/api/v1'],
-    ['STAGING_API_URL', 'https://staging-api.waitlayer.example/'],
-    ['STAGING_API_URL', 'http://staging-api.waitlayer.example'],
-    ['STAGING_WEB_URL', 'https://user:pass@staging.waitlayer.example'],
-    ['STAGING_WEB_URL', 'https://staging.waitlayer.example/path'],
+    ['STAGING_API_URL', 'https://staging-api.ateva.example/api/v1'],
+    ['STAGING_API_URL', 'https://staging-api.ateva.example/'],
+    ['STAGING_API_URL', 'http://staging-api.ateva.example'],
+    ['STAGING_WEB_URL', 'https://user:pass@staging.ateva.example'],
+    ['STAGING_WEB_URL', 'https://staging.ateva.example/path'],
   ]) {
     const env = { ...validStagingUrls, ...base, [name]: value };
     assert.ok(
@@ -114,18 +114,18 @@ test('requires immutable image digests for promotion', () => {
 
 test('validates the exact public URLs and RSA key embedded in the production web image', () => {
   const valid = {
-    NEXT_PUBLIC_API_URL: 'https://api.waitlayer.example/api/v1',
-    NEXT_PUBLIC_WEB_URL: 'https://www.waitlayer.example',
+    NEXT_PUBLIC_API_URL: 'https://api.ateva.example/api/v1',
+    NEXT_PUBLIC_WEB_URL: 'https://www.ateva.example',
     NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
     JWT_PUBLIC_KEY: testPublicKey,
   };
   assert.deepEqual(validateProductionWebInputs(valid), []);
 
   for (const [name, value] of [
-    ['NEXT_PUBLIC_API_URL', 'https://api.waitlayer.example'],
-    ['NEXT_PUBLIC_API_URL', 'https://api.waitlayer.example/prefix/api/v1'],
-    ['NEXT_PUBLIC_API_URL', 'https://user:pass@api.waitlayer.example/api/v1'],
-    ['NEXT_PUBLIC_WEB_URL', 'https://www.waitlayer.example/path'],
+    ['NEXT_PUBLIC_API_URL', 'https://api.ateva.example'],
+    ['NEXT_PUBLIC_API_URL', 'https://api.ateva.example/prefix/api/v1'],
+    ['NEXT_PUBLIC_API_URL', 'https://user:pass@api.ateva.example/api/v1'],
+    ['NEXT_PUBLIC_WEB_URL', 'https://www.ateva.example/path'],
     ['NEXT_PUBLIC_WEB_URL', 'https://localhost'],
     ['JWT_PUBLIC_KEY', 'not-a-public-key'],
   ]) {
@@ -167,22 +167,22 @@ test('release workflow configures Buildx and signs every pushed image digest', (
 });
 
 test('release workflow serializes deploys and builds a production-specific web digest', () => {
-  assert.match(releaseWorkflow, /group: waitlayer-release/);
+  assert.match(releaseWorkflow, /group: ateva-release/);
   assert.doesNotMatch(releaseWorkflow, /group: staging-release-\$\{\{/);
   assert.match(releaseWorkflow, /cancel-in-progress: false/);
   assert.doesNotMatch(releaseWorkflow, /cancel-in-progress: true/);
   assert.match(releaseWorkflow, /Build and push production-specific web image/);
   assert.match(releaseWorkflow, /JWT_PUBLIC_KEY: \$\{\{ secrets\.PRODUCTION_JWT_PUBLIC_KEY \}\}/);
-  assert.match(releaseWorkflow, /NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: production/);
+  assert.match(releaseWorkflow, /NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: production/);
   assert.match(releaseWorkflow, /NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'/);
   assert.match(
     releaseWorkflow,
     /PRODUCTION_WEB_DIGEST: \$\{\{ steps\.production-web\.outputs\.digest \}\}/,
   );
-  assert.match(releaseWorkflow, /export WAITLAYER_ENVIRONMENT_KIND=production/);
+  assert.match(releaseWorkflow, /export ATEVA_ENVIRONMENT_KIND=production/);
   assert.match(releaseWorkflow, /export ENABLE_STAGING_FAUCET=false/);
   assert.doesNotMatch(releaseWorkflow, /docker tag "\$STAGING_WEB_DIGEST"/);
-  assert.doesNotMatch(releaseWorkflow, /WAITLAYER_WEB_IMAGE='\$STAGING_WEB_DIGEST'/);
+  assert.doesNotMatch(releaseWorkflow, /ATEVA_WEB_IMAGE='\$STAGING_WEB_DIGEST'/);
   assert.doesNotMatch(releaseWorkflow, /PRODUCTION_WEB_DIGEST="?\$STAGING_WEB_DIGEST/);
 });
 
@@ -192,7 +192,7 @@ test('staging boots the shipped artifacts under production Node semantics', () =
     releaseWorkflow.indexOf('  cleanup-staging-schema:'),
   );
   assert.match(stagingJob, /export NODE_ENV=production/);
-  assert.match(stagingJob, /export WAITLAYER_ENVIRONMENT_KIND=staging/);
+  assert.match(stagingJob, /export ATEVA_ENVIRONMENT_KIND=staging/);
   assert.doesNotMatch(stagingJob, /export NODE_ENV=development/);
 });
 
@@ -222,7 +222,7 @@ test('production promotion has an approval-gated first-deploy path and real web 
 
 test('production image Compose declares the full fail-closed runtime contract', () => {
   for (const name of [
-    'WAITLAYER_ENVIRONMENT_ID',
+    'ATEVA_ENVIRONMENT_ID',
     'DATABASE_URL',
     'REDIS_URL',
     'API_BASE_URL',
@@ -251,7 +251,7 @@ test('production image Compose declares the full fail-closed runtime contract', 
 
   assert.match(
     productionCompose,
-    /WAITLAYER_ENVIRONMENT_KIND: \$\{WAITLAYER_ENVIRONMENT_KIND:-production\}/,
+    /ATEVA_ENVIRONMENT_KIND: \$\{ATEVA_ENVIRONMENT_KIND:-production\}/,
   );
   assert.equal(
     [...productionCompose.matchAll(/^\s+NODE_ENV: production$/gm)].length,
@@ -261,7 +261,7 @@ test('production image Compose declares the full fail-closed runtime contract', 
   assert.doesNotMatch(productionCompose, /NODE_ENV: \$\{/);
   assert.match(productionCompose, /WAIT_ATTESTATION_ISSUERS:\n/);
   assert.doesNotMatch(productionCompose, /WAIT_ATTESTATION_ISSUERS: \$\{/);
-  assert.match(productionCompose, /WAITLAYER_REQUIRE_DEPLOY_ENV: '1'/);
+  assert.match(productionCompose, /ATEVA_REQUIRE_DEPLOY_ENV: '1'/);
   assert.match(
     productionCompose,
     /NEXT_PUBLIC_GOOGLE_CLIENT_ID: \$\{NEXT_PUBLIC_GOOGLE_CLIENT_ID:\?/,

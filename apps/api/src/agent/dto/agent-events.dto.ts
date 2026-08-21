@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
+import type { AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 export class AgentEventsBatchDto {
   @ApiProperty({ description: 'Canonical protocol schema version.', example: 1 })
@@ -41,7 +41,9 @@ export class AgentEventsBatchDto {
   @ArrayMaxSize(100)
   events!: AgentLifecycleEventV1[];
 
-  @ApiProperty({ description: 'HMAC over the canonical batch envelope using the registered device secret.' })
+  @ApiProperty({
+    description: 'HMAC over the canonical batch envelope using the registered device secret.',
+  })
   @IsString()
   @MinLength(64)
   @MaxLength(128)

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
+import { PAYOUT_HOLD_DAYS } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 
@@ -59,9 +59,10 @@ export class LedgerMathTrait {
         `calculateSplit requires a positive bid amount (got ${bidAmountMinor})`,
       );
     }
-    // Split percentages expressed as basis points (1 bps = 0.01%). Sum to 10000
-    // (100.00%) for both REVENUE_SPLIT and LAUNCH_INCENTIVE_SPLIT at the source —
-    // no float round-trip through the constants.
+    // Split percentages expressed as basis points (1 bps = 0.01%). Both the
+    // standard and launch-incentive splits sum to 10000 (100.00%) and are
+    // declared here as integers — this is the single source of truth for the
+    // split, with no float round-trip.
     const USER_BPS = 6000n;
     const PLATFORM_BPS = 3000n;
     const RESERVE_BPS = 1000n;
@@ -132,7 +133,7 @@ export class LedgerMathTrait {
 
   /**
    * Read an operator-overridable hold-day env var. Values are validated at
-   * boot by the `@waitlayer/config` production schema (positive integers
+   * boot by the `@ateva/config` production schema (positive integers
    * within 1..365); any unparseable value here falls back to the shipped
    * default rather than propagating NaN into `availableAt` (A-121 class).
    */

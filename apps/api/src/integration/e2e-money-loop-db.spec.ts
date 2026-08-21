@@ -19,7 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { MINIMUM_VISIBLE_DURATION_MS, ToolType } from '@waitlayer/shared';
+import { MINIMUM_VISIBLE_DURATION_MS, ToolType } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -35,7 +35,7 @@ import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 const DEV_SECRET = 'test-device-secret-e2e-money-loop';
 const ATTESTATION_PROVIDER = 'db-money-loop-attestor';
 const ATTESTATION_ISSUER = 'https://db-money-loop-attestor.example.test';
-const ATTESTATION_AUDIENCE = 'waitlayer-db-money-loop';
+const ATTESTATION_AUDIENCE = 'ateva-db-money-loop';
 const ATTESTATION_KID = 'db-money-loop-attestor-key';
 const ATTESTATION_VERSION = 'db-money-loop-v1';
 
@@ -147,7 +147,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     // ── Persistent identities ──
     const dev = await prisma.user.create({
       data: {
-        email: `dev-${randomUUID()}@waitlayer.test`,
+        email: `dev-${randomUUID()}@ateva.test`,
         passwordHash: 'hash',
         name: 'Dev',
         role: 'developer',
@@ -179,7 +179,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
 
     const adv = await prisma.user.create({
       data: {
-        email: `adv-${randomUUID()}@waitlayer.test`,
+        email: `adv-${randomUUID()}@ateva.test`,
         passwordHash: 'hash',
         name: 'Adv',
         role: 'advertiser',

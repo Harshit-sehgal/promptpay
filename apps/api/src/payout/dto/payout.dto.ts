@@ -16,7 +16,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { payoutMinimumMinor, PayoutProvider } from '@waitlayer/shared';
+import { payoutMinimumMinor, PayoutProvider } from '@ateva/shared';
 
 import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
@@ -46,7 +46,7 @@ export class RequestPayoutDto {
   @ApiProperty()
   @IsBigInt()
   // The per-currency payout minimum (see `payoutMinimumMinor()` in
-  // @waitlayer/shared) is enforced in the service once the currency is
+  // @ateva/shared) is enforced in the service once the currency is
   // parsed. The static floor below is a defensive lower bound. See A-031.
   @MinBigInt(BigInt(payoutMinimumMinor(null)), {
     message: (args) =>

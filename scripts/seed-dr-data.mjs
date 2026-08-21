@@ -16,7 +16,7 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.json'));
-const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = apiRequire('@ateva/db');
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -32,7 +32,7 @@ async function main() {
     update: {},
     create: {
       id: 'dr-user-1',
-      email: 'dr@waitlayer.com',
+      email: 'dr@ateva.com',
       role: 'developer',
       status: 'active',
       emailVerified: true,
@@ -47,7 +47,7 @@ async function main() {
       id: 'dr-adv-1',
       userId: user.id,
       companyName: 'DR Co',
-      billingEmail: 'dr@waitlayer.com',
+      billingEmail: 'dr@ateva.com',
     },
   });
 

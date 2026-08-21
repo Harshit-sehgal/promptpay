@@ -1,12 +1,7 @@
-import type { AgentIntegrationMode, AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
+import type { AgentIntegrationMode, AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 export type CorrelatedSessionStatus =
-  | 'active'
-  | 'waiting_for_input'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'ended';
+  'active' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled' | 'ended';
 
 export type CorrelatedAgentSession = {
   key: string;
@@ -109,7 +104,9 @@ export class AgentSessionCorrelation {
       if (session.deviceId && event.deviceId && session.deviceId !== event.deviceId) return false;
       if (session.providerFamily !== providerFamily(event)) return false;
       const sessionTime = Date.parse(session.lastOccurredAt);
-      return Number.isFinite(sessionTime) && Math.abs(eventTime - sessionTime) <= FALLBACK_WINDOW_MS;
+      return (
+        Number.isFinite(sessionTime) && Math.abs(eventTime - sessionTime) <= FALLBACK_WINDOW_MS
+      );
     });
     return candidates.length === 1 ? candidates[0] : undefined;
   }
@@ -190,12 +187,15 @@ function providerFamily(event: AgentLifecycleEventV1): string {
 function isNewer(event: AgentLifecycleEventV1, existing: CorrelatedAgentSession): boolean {
   if (event.sequence !== undefined && existing.lastSequence !== undefined) {
     if (event.sequence !== existing.lastSequence) return event.sequence > existing.lastSequence;
-    if (event.occurredAt !== existing.lastOccurredAt) return event.occurredAt > existing.lastOccurredAt;
+    if (event.occurredAt !== existing.lastOccurredAt)
+      return event.occurredAt > existing.lastOccurredAt;
     return event.eventId > existing.lastEventId;
   }
   const eventTime = Date.parse(event.occurredAt);
   const existingTime = Date.parse(existing.lastOccurredAt);
-  return Number.isFinite(eventTime) && (!Number.isFinite(existingTime) || eventTime >= existingTime);
+  return (
+    Number.isFinite(eventTime) && (!Number.isFinite(existingTime) || eventTime >= existingTime)
+  );
 }
 
 function isTerminal(status: CorrelatedSessionStatus): boolean {

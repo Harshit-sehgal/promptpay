@@ -12,14 +12,14 @@ fuser -k 3000/tcp 4002/tcp 2>/dev/null || true
 sleep 1
 
 # Build API and web so E2E tests run against the latest source
-pnpm --filter "waitlayer-api..." build
-pnpm --filter "waitlayer-web..." build
+pnpm --filter "ateva-api..." build
+pnpm --filter "ateva-web..." build
 
 # Load keys
 export JWT_PRIVATE_KEY="$(cat .e2e/jwt-private.pem)"
 export JWT_PUBLIC_KEY="$(cat .e2e/jwt-public.pem)"
 export JWT_SECRET="local-e2e-jwt-secret-at-least-32-characters-long"
-export DATABASE_URL="postgresql://waitlayer:waitlayer-dev@localhost:5432/waitlayer?schema=public"
+export DATABASE_URL="postgresql://ateva:ateva-dev@localhost:5432/ateva?schema=public"
 export REDIS_URL="redis://localhost:6379"
 export NODE_ENV="development"
 export API_PORT=4002
@@ -75,12 +75,12 @@ for i in {1..60}; do
 done
 
 # Run Playwright tests
-pnpm --filter waitlayer-web exec playwright test
+pnpm --filter ateva-web exec playwright test
 
 # The VS Code extension's ApiClient live smoke is gated on RUN_LIVE_TESTS, which
 # was set nowhere — so it had never run, and the extension's only live API path
 # was unverified. The API is already up on :4002, so prove it here: the spec
 # signs up a developer over HTTP and asserts the balance arrives as a BIGINT,
 # which the mocked unit tests cannot show.
-RUN_LIVE_TESTS=true WAITLAYER_API_URL="http://localhost:4002/api/v1" \
-  pnpm --filter waitlayer-vscode exec vitest run test/api-client.live.spec.ts
+RUN_LIVE_TESTS=true ATEVA_API_URL="http://localhost:4002/api/v1" \
+  pnpm --filter ateva-vscode exec vitest run test/api-client.live.spec.ts

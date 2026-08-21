@@ -271,7 +271,7 @@ describe('DeveloperService', () => {
         where: { id: 'user_123' },
         data: expect.objectContaining({
           status: 'deleted',
-          email: 'deleted-user_123@waitlayer.com',
+          email: 'deleted-user_123@ateva.com',
           passwordHash: null,
           googleId: null,
           githubId: null,
