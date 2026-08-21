@@ -1,12 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { CURRENCY_POLICY, depositMinimumMinor, formatMinorUnits } from '@waitlayer/shared';
+import {
+  CURRENCY_POLICY,
+  depositMinimumMinor,
+  formatMinorUnits,
+  payoutMinimumMinor,
+} from '@waitlayer/shared';
 
 export const metadata: Metadata = {
   title: 'Pricing — WaitLayer',
   description:
-    'WaitLayer private beta — free wait-state verification. Rewards, advertiser billing, and payouts are not yet enabled.',
+    'WaitLayer private beta — wait-state verification is free and live advertiser billing and participant payouts are not yet enabled.',
 };
 
 const IconCheck = () => (
@@ -19,45 +24,33 @@ const IconCheck = () => (
     strokeWidth="2.5"
     strokeLinecap="round"
     strokeLinejoin="round"
+    aria-hidden="true"
   >
     <polyline points="20 6 9 17 4 12" />
   </svg>
 );
-const IconMinus = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-  >
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-);
 
-const PLAN_FEATURES = [
-  { label: 'Installation & setup', dev: true, adv: true },
-  { label: 'Wait-state verification beta', dev: true, adv: false },
-  { label: 'Rewards launch waitlist', dev: true, adv: false },
-  { label: 'Trust score & fraud protection', dev: true, adv: true },
-  { label: 'Ad frequency & quiet mode controls', dev: true, adv: false },
-  { label: 'Campaign creation & management', dev: false, adv: true },
-  { label: 'Country & category targeting', dev: false, adv: true },
-  { label: 'Real-time performance reports', dev: false, adv: true },
-  { label: 'Invalid traffic credits', dev: false, adv: true },
-  { label: 'Priority support', dev: false, adv: false },
-  { label: 'API access', dev: false, adv: false },
-  { label: 'Custom integrations', dev: false, adv: false },
+const DEVELOPER_FEATURES = [
+  'Wait-state verification beta',
+  'Privacy-first telemetry controls',
+  'Trust and fraud-status visibility',
+  'Client connection and API tooling',
+];
+
+const ADVERTISER_FEATURES = [
+  'Campaign creation and draft management',
+  'Creative review workflow',
+  'Country and category targeting',
+  'Verified-delivery reporting surfaces',
 ];
 
 export default function PricingPage() {
   const minDeposit = formatMinorUnits(depositMinimumMinor('USD'), 'USD');
+  const minPayout = formatMinorUnits(payoutMinimumMinor('USD'), 'USD');
   const supportedCurrencies = Object.keys(CURRENCY_POLICY);
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
         <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -66,28 +59,10 @@ export default function PricingPage() {
             </div>
             <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <Link href="/pricing" className="text-surface-900 font-medium text-sm">
-              Pricing
-            </Link>
-            <Link
-              href="/comparison"
-              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-            >
-              Comparison
-            </Link>
-            <Link
-              href="/#how-it-works"
-              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-            >
-              How it works
-            </Link>
-          </div>
-
           <div className="flex items-center gap-3">
             <Link
               href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-sm font-medium transition-colors px-3 py-1.5"
+              className="text-surface-600 hover:text-surface-900 text-sm font-medium px-3 py-1.5"
             >
               Log in
             </Link>
@@ -102,30 +77,32 @@ export default function PricingPage() {
       </nav>
 
       <main id="main-content" tabIndex={-1}>
-        {/* Hero */}
         <section className="pt-36 pb-16 px-6">
           <div className="mx-auto max-w-3xl text-center">
+            <div className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 mb-5">
+              Private beta · real-money switches disabled
+            </div>
             <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-              Private beta, not commercial pricing
+              Beta access, not commercial pricing
             </h1>
-            <p className="text-surface-500 text-lg max-w-xl mx-auto">
-              Beta wait-state verification is free. Rewards, advertiser billing, and payouts remain
-              disabled pending independent attestation.
+            <p className="text-surface-500 text-lg max-w-2xl mx-auto">
+              Wait-state verification is free during beta. Advertisers can evaluate campaign
+              tooling, but live billing and participant payouts stay disabled until their production
+              reviews are complete.
             </p>
           </div>
         </section>
 
-        {/* Pricing cards */}
         <section className="px-6 pb-20">
           <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Developer */}
-            <div className="bg-white border-2 border-surface-200/80 rounded-2xl p-8 relative">
-              <div className="inline-flex items-center gap-1.5 bg-brand-50 border border-brand-200/60 rounded-full px-3 py-1 text-brand-700 text-[11px] font-medium mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
-                For developers
-              </div>
+            <div className="bg-white border-2 border-surface-200/80 rounded-2xl p-8">
+              <p className="text-xs uppercase tracking-wider text-brand-700 font-semibold mb-4">
+                Developers
+              </p>
               <p className="text-5xl font-bold text-surface-900 mb-2">Free</p>
-              <p className="text-surface-400 text-sm mb-8">Always. No credit card needed.</p>
+              <p className="text-surface-400 text-sm mb-8">
+                No card required for the private beta.
+              </p>
               <Link
                 href="/auth/signup?role=developer"
                 className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8"
@@ -133,53 +110,38 @@ export default function PricingPage() {
                 Join beta →
               </Link>
               <ul className="space-y-4">
-                {PLAN_FEATURES.map((f) => (
-                  <li
-                    key={f.label}
-                    className={`flex items-center gap-3 text-sm ${f.dev ? 'text-surface-700' : 'text-surface-400'}`}
-                  >
-                    <span
-                      className={f.dev ? 'text-emerald-500 shrink-0' : 'text-surface-300 shrink-0'}
-                    >
-                      {f.dev ? <IconCheck /> : <IconMinus />}
+                {DEVELOPER_FEATURES.map((feature) => (
+                  <li key={feature} className="flex items-center gap-3 text-sm text-surface-700">
+                    <span className="text-emerald-500 shrink-0">
+                      <IconCheck />
                     </span>
-                    {f.label}
+                    {feature}
                   </li>
                 ))}
               </ul>
             </div>
 
-            {/* Advertiser */}
             <div className="bg-surface-900 rounded-2xl p-8 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
-              <div className="inline-flex items-center gap-1.5 bg-white/10 border border-white/20 rounded-full px-3 py-1 text-white text-[11px] font-medium mb-6">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                For advertisers
-              </div>
-              <p className="text-5xl font-bold text-white mb-2">
-                No spend<span className="text-lg text-white/50 font-normal"> during beta</span>
+              <p className="text-xs uppercase tracking-wider text-brand-300 font-semibold mb-4">
+                Advertisers
               </p>
-              <p className="text-white/50 text-sm mb-8">
-                Campaign tooling can be evaluated, but billing is disabled.
+              <p className="text-4xl font-bold text-white mb-2">Review access</p>
+              <p className="text-white/60 text-sm mb-8">
+                Create and inspect campaigns without enabling live spend.
               </p>
               <Link
                 href="/auth/signup?role=advertiser"
-                className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:outline-none"
+                className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8"
               >
-                Join advertiser waitlist →
+                Join advertiser beta →
               </Link>
               <ul className="space-y-4">
-                {PLAN_FEATURES.map((f) => (
-                  <li
-                    key={f.label}
-                    className={`flex items-center gap-3 text-sm ${f.adv ? 'text-white' : 'text-white/50'}`}
-                  >
-                    <span
-                      className={f.adv ? 'text-emerald-400 shrink-0' : 'text-white/20 shrink-0'}
-                    >
-                      {f.adv ? <IconCheck /> : <IconMinus />}
+                {ADVERTISER_FEATURES.map((feature) => (
+                  <li key={feature} className="flex items-center gap-3 text-sm text-white">
+                    <span className="text-emerald-400 shrink-0">
+                      <IconCheck />
                     </span>
-                    {f.label}
+                    {feature}
                   </li>
                 ))}
               </ul>
@@ -187,109 +149,62 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* Revenue split detail */}
-        <section className="py-24 px-6 bg-surface-50/60">
+        <section className="py-20 px-6 bg-surface-50/70">
           <div className="mx-auto max-w-4xl">
-            <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-5">
-              Planned launch economics
+            <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-4">
+              How money will move after approval
             </h2>
-            <p className="text-surface-500 text-center max-w-lg mx-auto mb-16">
-              If sponsor-funded rewards launch, every qualified advertiser dollar will be split
-              transparently.
+            <p className="text-surface-500 text-center max-w-2xl mx-auto mb-12">
+              Advertiser billing and participant compensation are intentionally separate. There is
+              no automatic customer-payment split.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <p className="text-5xl font-bold text-brand-500 mb-2">60%</p>
-                <p className="text-surface-900 font-semibold mb-2">
-                  Planned developer revenue share
-                </p>
-                <p className="text-surface-500 text-sm">
-                  The intended launch policy gives developers the majority of qualified revenue.
-                </p>
-              </div>
-              <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <p className="text-5xl font-bold text-surface-900 mb-2">30%</p>
-                <p className="text-surface-900 font-semibold mb-2">Planned platform fee</p>
-                <p className="text-surface-500 text-sm">
-                  Infrastructure, fraud detection, payment processing, and support.
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white border border-surface-200 rounded-2xl p-7">
+                <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money in</p>
+                <h3 className="font-semibold text-surface-900 text-lg mb-3">
+                  Advertiser → Dodo → WaitLayer
+                </h3>
+                <p className="text-surface-600 text-sm leading-relaxed">
+                  An advertiser purchases campaign delivery from WaitLayer. Dodo Payments handles
+                  that customer transaction and settles it to WaitLayer. Dodo does not pay
+                  participants.
                 </p>
               </div>
-              <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <p className="text-5xl font-bold text-surface-400 mb-2">10%</p>
-                <p className="text-surface-900 font-semibold mb-2">Planned reserve fund</p>
-                <p className="text-surface-500 text-sm">
-                  Fraud reserve, payment failures, and disputed charges buffer.
+              <div className="bg-white border border-surface-200 rounded-2xl p-7">
+                <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money out</p>
+                <h3 className="font-semibold text-surface-900 text-lg mb-3">
+                  WaitLayer → separate payout provider → participant
+                </h3>
+                <p className="text-surface-600 text-sm leading-relaxed">
+                  If rewards launch, WaitLayer independently calculates eligible fiat compensation
+                  after verification and pays it through a separately approved payout provider.
                 </p>
               </div>
-            </div>
-            <div className="mt-10 text-center">
-              <p className="text-surface-400 text-sm">
-                These economics are not active in beta. A reviewed launch campaign may use a
-                promotional split (e.g. <strong className="text-surface-600">80/10/10</strong>); the
-                intended standard is 60/30/10.
-              </p>
             </div>
           </div>
         </section>
 
-        {/* Payout thresholds */}
-        <section className="py-24 px-6">
+        <section className="py-20 px-6">
           <div className="mx-auto max-w-4xl">
-            <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-5">
-              Planned payout schedule
+            <h2 className="text-2xl font-bold text-surface-900 text-center mb-4">
+              Current beta controls
             </h2>
-            <p className="text-surface-500 text-center max-w-lg mx-auto mb-16">
-              No payouts are available in beta. The following holds and thresholds apply only after
-              a reviewed rewards launch.
+            <p className="text-surface-500 text-center text-sm mb-10">
+              These values describe policy/configuration, not currently available real-money
+              actions.
             </p>
-            <div className="overflow-hidden rounded-2xl border border-surface-200/80">
-              <table className="w-full text-sm">
-                <thead className="bg-surface-100">
-                  <tr>
-                    <th className="text-left px-6 py-4 text-surface-600 font-medium">
-                      Trust level
-                    </th>
-                    <th className="text-left px-6 py-4 text-surface-600 font-medium">
-                      Hold period
-                    </th>
-                    <th className="text-left px-6 py-4 text-surface-600 font-medium">
-                      Minimum payout
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-100">
-                  <tr className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-6 py-4 text-surface-900 font-medium">High trust</td>
-                    <td className="px-6 py-4 text-surface-600">7 days</td>
-                    <td className="px-6 py-4 text-surface-600">$10.00</td>
-                  </tr>
-                  <tr className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-6 py-4 text-surface-900 font-medium">Normal</td>
-                    <td className="px-6 py-4 text-surface-600">14 days</td>
-                    <td className="px-6 py-4 text-surface-600">$10.00</td>
-                  </tr>
-                  <tr className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-6 py-4 text-surface-900 font-medium">New account</td>
-                    <td className="px-6 py-4 text-surface-600">30 days</td>
-                    <td className="px-6 py-4 text-surface-600">$10.00</td>
-                  </tr>
-                  <tr className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-6 py-4 text-surface-900 font-medium">Low trust</td>
-                    <td className="px-6 py-4 text-surface-600">Extended review</td>
-                    <td className="px-6 py-4 text-surface-600">$10.00</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Minimum deposit', value: minDeposit },
-                { label: 'Payout currency', value: supportedCurrencies.join(', ') },
-                { label: 'Revenue split', value: '60/30/10' },
-                { label: 'Platform reserve', value: '10%' },
+                { label: 'Minimum deposit policy', value: minDeposit },
+                { label: 'Minimum payout policy', value: minPayout },
+                { label: 'Configured currencies', value: supportedCurrencies.join(', ') },
+                { label: 'Beta money state', value: 'Disabled' },
               ].map((item) => (
-                <div key={item.label} className="bg-surface-50 rounded-xl p-4 text-center">
-                  <p className="text-surface-400 text-[12px] uppercase tracking-wider mb-1">
+                <div
+                  key={item.label}
+                  className="bg-surface-50 rounded-xl p-5 text-center border border-surface-100"
+                >
+                  <p className="text-surface-400 text-[11px] uppercase tracking-wider mb-2">
                     {item.label}
                   </p>
                   <p className="text-surface-900 font-semibold text-sm">{item.value}</p>
@@ -299,165 +214,31 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* Payout providers */}
-        <section className="py-20 px-6 bg-surface-50/60">
-          <div className="mx-auto max-w-4xl">
-            <h2 className="text-2xl font-bold text-surface-900 tracking-tight text-center mb-3">
-              Payment providers
-            </h2>
-            <p className="text-surface-500 text-center text-sm mb-12">
-              We start with PayPal and expand from there.
+        <section className="py-20 px-6 bg-surface-900 text-white">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-3xl font-bold mb-4">Validate the product before monetization</h2>
+            <p className="text-white/60 mb-8">
+              The beta is designed to prove the wait-state signal, advertiser workflow, fraud
+              controls, and reporting before any participant reward or live campaign billing is
+              enabled.
             </p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                {
-                  name: 'PayPal',
-                  status: 'Live',
-                  color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-                },
-                {
-                  name: 'Stripe Connect',
-                  status: 'Coming Q3',
-                  color: 'text-amber-700 bg-amber-50 border-amber-200',
-                },
-                {
-                  name: 'Payoneer',
-                  status: 'Planned',
-                  color: 'text-surface-400 bg-surface-100 border-surface-200',
-                },
-                {
-                  name: 'Wise',
-                  status: 'Planned',
-                  color: 'text-surface-400 bg-surface-100 border-surface-200',
-                },
-              ].map((p) => (
-                <div
-                  key={p.name}
-                  className="bg-white border border-surface-200/80 rounded-xl p-5 text-center"
-                >
-                  <p className="text-surface-900 font-semibold text-base mb-2">{p.name}</p>
-                  <span
-                    className={`inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${p.color}`}
-                  >
-                    {p.status}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* CTA */}
-        <section className="py-24 px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold text-surface-900 tracking-tight mb-4">
-              Ready to get started?
-            </h2>
-            <p className="text-surface-500 text-sm mb-8 max-w-sm mx-auto">
-              Join developers earning from AI wait time, or advertisers reaching them while they
-              build.
-            </p>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <Link
                 href="/auth/signup?role=developer"
-                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-sm transition-colors shadow-sm shadow-brand-500/20"
+                className="rounded-lg bg-white text-surface-900 px-5 py-3 text-sm font-semibold"
               >
-                Join beta →
+                Join developer beta
               </Link>
               <Link
                 href="/auth/signup?role=advertiser"
-                className="bg-surface-900 hover:bg-surface-700 text-white font-medium px-7 py-3 rounded-xl text-sm transition-colors"
+                className="rounded-lg border border-white/30 px-5 py-3 text-sm font-semibold text-white"
               >
-                Start advertising →
-              </Link>
-              <Link
-                href="/comparison"
-                className="text-surface-500 hover:text-surface-700 font-medium px-5 py-3 text-sm transition-colors"
-              >
-                Compare tools
+                Review advertiser tooling
               </Link>
             </div>
           </div>
         </section>
-
-        {/* Footer */}
       </main>
-
-      <footer className="py-16 px-6 border-t border-surface-200/60">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-start justify-between gap-10">
-            <div>
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-xs">
-                  W
-                </div>
-                <span className="text-surface-900 font-semibold text-sm">WaitLayer</span>
-              </div>
-              <p className="text-surface-400 text-sm max-w-xs leading-relaxed">
-                Private beta for AI wait-state verification. Rewards and advertiser billing are not
-                yet enabled.
-              </p>
-            </div>
-            <div className="flex gap-16">
-              <div>
-                <h4 className="text-surface-900 font-semibold text-xs mb-3">Product</h4>
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/pricing"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Pricing
-                  </Link>
-                  <Link
-                    href="/comparison"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Comparison
-                  </Link>
-                  <Link
-                    href="/#how-it-works"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    How it works
-                  </Link>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-surface-900 font-semibold text-xs mb-3">Legal</h4>
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/privacy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Privacy
-                  </Link>
-                  <Link
-                    href="/terms"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Terms
-                  </Link>
-                  <Link
-                    href="/advertiser-policy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Advertiser Policy
-                  </Link>
-                  <Link
-                    href="/payout-policy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Payout Policy
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-xs">
-            © 2026 WaitLayer. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

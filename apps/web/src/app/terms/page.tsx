@@ -20,6 +20,15 @@ export default function TermsPage() {
         <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-10">
           Terms of Service
         </h1>
+
+        <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+          <p className="font-semibold">Private beta</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            Advertiser billing and participant rewards are disabled during the private beta. The
+            compensation and payout sections below describe the planned launch policy, not an active
+            entitlement.
+          </p>
+        </div>
         <div className="text-surface-600 text-sm leading-relaxed space-y-6">
           <p>
             <strong className="text-surface-900">Last updated:</strong> July 2026
@@ -36,9 +45,10 @@ export default function TermsPage() {
           </h2>
           <p>
             WaitLayer is currently a privacy-first private beta for AI tool wait-state verification.
-            Rewards and advertiser billing are disabled during the beta. Once independently
-            attestable rewards are enabled, developers may earn from validated ad impressions and
-            advertisers may reach a high-intent developer audience.
+            Rewards and advertiser billing are disabled during the beta. If rewards are approved and
+            enabled, developers may receive compensation for verified eligible activity under a
+            separately published schedule, and advertisers may reach a high-intent developer
+            audience.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
@@ -67,16 +77,28 @@ export default function TermsPage() {
             integrity.
           </p>
 
-          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">6. Revenue sharing</h2>
+          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
+            6. Participant compensation
+          </h2>
           <p>
-            Developers receive 60% of ad revenue (80% during launch incentive period). The platform
-            retains 30% (10% during launch) with 10% allocated to fraud and payment reserves.
+            Participant rewards are disabled during the private beta. If rewards launch, WaitLayer
+            will publish a compensation schedule for verified eligible activity. That reward rate is
+            set independently by WaitLayer and is not a percentage of, or a claim on, any individual
+            advertiser payment: an advertiser transaction settles in full to WaitLayer, and
+            participant compensation is a separate WaitLayer obligation. See the{' '}
+            <Link href="/payout-policy" className="text-brand-700 font-medium hover:underline">
+              Payout Policy
+            </Link>{' '}
+            for the full schedule.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">7. Payout terms</h2>
           <p>
-            Earnings must reach the minimum threshold to be eligible for payout. New accounts are
-            subject to a 30-day hold period. Payout processing times vary by provider.
+            No payouts are processed during the private beta. Under the planned launch policy,
+            confirmed eligible rewards must reach the published minimum threshold, new accounts are
+            subject to a 30-day hold period, and processing times vary by the approved payout
+            provider. Dodo Payments processes advertiser transactions only and is not used to
+            distribute participant rewards.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">8. Disclaimer</h2>

@@ -20,9 +20,9 @@ const FAQS: FAQItem[] = [
       'No rewards or payouts are available during the beta. For a future launch, the safe defaults are operator-processed manual and PayPal email payouts; automated provider rails remain disabled until their credentials and operational reviews are complete.',
   },
   {
-    question: 'How does the revenue split work?',
+    question: 'How is participant compensation determined?',
     answer:
-      'If sponsor-funded rewards launch, the standard split will be 60% to the developer, 30% to the platform, and 10% held in a fraud and payment reserve. A reviewed early-adopter launch campaign may use an 80% user, 10% platform, 10% reserve split.',
+      'Rewards are disabled in the private beta. If they launch, WaitLayer will publish a reward schedule for verified eligible activity. That rate is set independently by WaitLayer and is not a percentage of any individual advertiser payment: an advertiser transaction settles in full to WaitLayer, and participant compensation is paid separately through an approved fiat payout provider.',
   },
   {
     question: 'Will WaitLayer collect my code or private information?',
