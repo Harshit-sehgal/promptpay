@@ -38,12 +38,7 @@ export default function AdvertiserLayout({ children }: { children: React.ReactNo
     <ProtectedRoute allowedRoles={['advertiser']}>
       <StepUpProvider>
         <div className="dark min-h-screen bg-ink-900 flex flex-col lg:flex-row">
-          <Sidebar
-            brand="Ateva"
-            brandLetter="W"
-            brandColor="bg-brand-500"
-            navItems={ADVERTISER_NAV}
-          />
+          <Sidebar brand="Ateva" navItems={ADVERTISER_NAV} />
           <main
             id="main-content"
             tabIndex={-1}

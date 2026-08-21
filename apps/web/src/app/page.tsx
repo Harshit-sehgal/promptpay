@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { BackendStatus } from '@/components/backend-status';
 import { BetaSignalPlanner } from '@/components/beta-signal-planner';
+import { BrandMark } from '@/components/brand-mark';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
@@ -26,11 +27,7 @@ export default function HomePage() {
             href="/"
             className="flex items-center gap-2.5 rounded focus-visible:ring-2 focus-visible:ring-brand-600"
           >
-            <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="0" y="1.5" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
-              <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
-              <rect x="0" y="12.1" width="11" height="2.4" rx="0.4" fill="var(--accent,#16a34a)" />
-            </svg>
+            <BrandMark />
             <span className="text-base font-semibold tracking-tight">Ateva</span>
           </Link>
 

@@ -293,11 +293,7 @@ export default function AdminFencedPayoutAccountsPage() {
       )}
 
       {/* Release fence modal */}
-      <ModalDialog
-        open={!!releaseFor}
-        onClose={closeRelease}
-        labelledBy="release-fence-title"
-      >
+      <ModalDialog open={!!releaseFor} onClose={closeRelease} labelledBy="release-fence-title">
         {releaseFor && (
           <>
             <h3 id="release-fence-title" className="text-white font-semibold mb-2">

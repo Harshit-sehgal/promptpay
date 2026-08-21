@@ -22,6 +22,39 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-22 — the rename left the old mark on 16 surfaces
+
+The WaitLayer→Ateva rename was string-based, so it could not see a bare letter.
+Fifteen pages plus the OpenGraph card still rendered a rounded badge holding a
+green **`W`**: `/pricing`, `/faq`, `/status`, `/security`, `/contact`,
+`/comparison` (x2), `/advertisers`, `/advertiser-policy`, `/payout-policy`, all
+five `/auth/*` pages, and the developer/advertiser dashboard sidebars (via
+`Sidebar`'s `brandLetter = 'W'` default). Every text gate passed throughout —
+typecheck, lint, 2163 unit tests, the a11y sweep and the public-content gate all
+assert on copy, and the copy said "Ateva". Only opening the pages showed it.
+
+- **`components/brand-mark.tsx`** is now the single source for the mark (three
+  bars, accent on the short one). Upper bars use `currentColor` so it works on
+  light and dark surfaces; the homepage's previously inlined SVG now uses it too.
+- **`Sidebar`** renders the mark by default. `brandLetter` is now opt-in and
+  carries no default, reserved for a sub-brand that must read as distinct —
+  `/admin`'s red "A" is the only caller.
+- **`opengraph-image.tsx`** had drifted furthest and is rewritten: it carried the
+  `W`, an indigo palette (`#6366f1`/`#4f46e5`/`#a5b4fc`) used nowhere on the
+  site, and pre-repositioning copy ("Verify AI wait states", "No code
+  tracking"). It now matches the homepage headline and the trust-boundary
+  wording. Drawn with divs, not the shared SVG, because Satori supports only a
+  flexbox subset.
+
+Guard note: no test asserts on the mark, so this can regress silently again. The
+cheap check is a grep for a bare `W` inside a `bg-brand-500`/`from-brand-500`
+badge.
+
+- Verification: `pnpm typecheck` 17/17, `pnpm lint` 11/11, web vitest 274/274,
+  `next build` clean, and the OG route rendered over HTTP for real
+  (`GET /opengraph-image` → 200 `image/png`, 1200x630) — a build alone does not
+  prove Satori can render it, since Satori fails at request time.
+
 ## Verified 2026-08-21 — staging provider inventory and OCI host state
 
 The operator-provided service locations were checked without reading or
