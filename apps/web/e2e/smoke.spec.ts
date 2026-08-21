@@ -43,12 +43,36 @@ test.describe('Landing page', () => {
 
   test('has no console errors', async ({ page }) => {
     const errors: string[] = [];
+    const unauthorized: string[] = [];
     page.on('console', (msg) => {
       if (msg.type() === 'error') errors.push(msg.text());
     });
+    page.on('response', (res) => {
+      if (res.status() === 401) unauthorized.push(new URL(res.url()).pathname);
+    });
+
     await page.goto('/');
-    // Allow hydration warnings but fail on actual JS errors
-    expect(errors.filter((e) => !e.includes('hydrat'))).toHaveLength(0);
+    // Assert only once the client bundle has mounted and gone quiet. Asserting
+    // straight after `goto` raced the bundler: whether AuthProvider's bootstrap
+    // had fired yet depended on the chunk graph, so this passed under Turbopack
+    // and failed under webpack for reasons that had nothing to do with the page.
+    await page.waitForLoadState('networkidle');
+
+    // AuthProvider calls `/api/auth/me` on mount; on 401 the client interceptor
+    // makes one `/api/auth/refresh` attempt. For an anonymous visitor both
+    // legitimately return 401 and the browser logs each as a console error —
+    // that is the logged-out bootstrap path, not a defect. The console text
+    // carries no URL, so pin the tolerance to the observed response paths
+    // instead of blanket-filtering the message; a 401 from anywhere else still
+    // fails this test.
+    expect(unauthorized, 'unexpected 401 outside the auth bootstrap').toEqual(
+      unauthorized.filter((path) => /^\/api\/auth\/(me|refresh)$/.test(path)),
+    );
+
+    // Allow hydration warnings and those bootstrap 401s; fail on real JS errors.
+    const tolerated = (message: string) =>
+      message.includes('hydrat') || message.includes('401 (Unauthorized)');
+    expect(errors.filter((e) => !tolerated(e))).toHaveLength(0);
   });
 });
 
@@ -170,8 +194,8 @@ test.describe('Developer dashboard (authenticated)', () => {
   test('renders the trust and payout status section', async ({ page }) => {
     await page.goto('/developer');
     await expect(page.getByText('Trust & Payout Status').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Revenue Split').first()).toBeVisible();
-    await expect(page.getByText('60%').first()).toBeVisible();
+    await expect(page.getByText('Reward schedule').first()).toBeVisible();
+    await expect(page.getByText(/Rewards are disabled during the private beta/i)).toBeVisible();
   });
 
   test('developer settings page renders', async ({ page }) => {

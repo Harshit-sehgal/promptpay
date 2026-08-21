@@ -138,7 +138,7 @@ const PLATFORM_COMPARE = [
     google: false,
   },
   {
-    feature: 'Transparent revenue split (planned)',
+    feature: 'Published reward schedule (planned)',
     waitlayer: false,
     carbon: false,
     braze: false,
