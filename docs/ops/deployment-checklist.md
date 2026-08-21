@@ -37,7 +37,7 @@ fails closed on everything below that can be checked mechanically.
 
 ```bash
 pnpm deploy:doctor                   # secret-safe config diagnosis
-pnpm deploy:doctor --with-network    # also probe API health + Redis socket
+   pnpm deploy:doctor --with-network    # also probe API/web routes + Redis socket
 pnpm deploy:doctor --with-db         # also check migrations + money switches (read-only)
 pnpm deploy:preflight                # env/config only — safe before migrations
 pnpm deploy:preflight --with-db      # after migrations: probes Postgres/Redis + operator readiness

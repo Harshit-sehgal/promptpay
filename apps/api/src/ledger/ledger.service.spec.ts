@@ -297,6 +297,63 @@ describe('LedgerService', () => {
       expect(service.getHoldDays('restricted', true)).toBe(-1);
       expect(service.getHoldDays('banned', true)).toBe(-1);
     });
+
+    describe('operator overrides (PAYOUT_HOLD_DAYS_*, §8.11)', () => {
+      const ORIGINAL: Record<string, string | undefined> = {};
+      const KEYS = [
+        'PAYOUT_HOLD_DAYS_NEW_ACCOUNT',
+        'PAYOUT_HOLD_DAYS_NORMAL',
+        'PAYOUT_HOLD_DAYS_HIGH_TRUST',
+        'PAYOUT_HOLD_DAYS_EXTENDED',
+      ];
+
+      beforeEach(() => {
+        for (const key of KEYS) ORIGINAL[key] = process.env[key];
+      });
+
+      afterEach(() => {
+        for (const key of KEYS) {
+          if (ORIGINAL[key] === undefined) delete process.env[key];
+          else process.env[key] = ORIGINAL[key];
+        }
+      });
+
+      it('honours a lengthened hold for each tier', () => {
+        process.env.PAYOUT_HOLD_DAYS_NEW_ACCOUNT = '45';
+        process.env.PAYOUT_HOLD_DAYS_NORMAL = '21';
+        process.env.PAYOUT_HOLD_DAYS_HIGH_TRUST = '10';
+        expect(service.getHoldDays('new')).toBe(45);
+        expect(service.getHoldDays('normal')).toBe(21);
+        expect(service.getHoldDays('high_trust')).toBe(10);
+      });
+
+      it('honours a lengthened extended hold, floored to the base tier', () => {
+        process.env.PAYOUT_HOLD_DAYS_NORMAL = '21';
+        process.env.PAYOUT_HOLD_DAYS_EXTENDED = '90';
+        expect(service.getHoldDays('normal', true)).toBe(90);
+        // Extended below the tier hold is a no-op (Math.max floor).
+        process.env.PAYOUT_HOLD_DAYS_EXTENDED = '5';
+        expect(service.getHoldDays('normal', true)).toBe(21);
+      });
+
+      it('never lets an override turn restricted/banned into a finite hold', () => {
+        process.env.PAYOUT_HOLD_DAYS_NEW_ACCOUNT = '45';
+        expect(service.getHoldDays('restricted')).toBe(-1);
+        expect(service.getHoldDays('banned')).toBe(-1);
+        expect(service.getHoldDays('restricted', true)).toBe(-1);
+      });
+
+      it('falls back to defaults on malformed values (A-121 class)', () => {
+        process.env.PAYOUT_HOLD_DAYS_NORMAL = 'abc';
+        process.env.PAYOUT_HOLD_DAYS_HIGH_TRUST = '0';
+        process.env.PAYOUT_HOLD_DAYS_NEW_ACCOUNT = '999';
+        process.env.PAYOUT_HOLD_DAYS_EXTENDED = '-3';
+        expect(service.getHoldDays('normal')).toBe(14);
+        expect(service.getHoldDays('high_trust')).toBe(7);
+        expect(service.getHoldDays('new')).toBe(30);
+        expect(service.getHoldDays('normal', true)).toBe(60);
+      });
+    });
   });
 
   describe('recordImpressionEarnings', () => {

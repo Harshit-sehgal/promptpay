@@ -48,9 +48,24 @@ function securityHeaders() {
   ];
 }
 
+/**
+ * Bundler note: `package.json` builds with `next build --webpack`.
+ *
+ * Next 16 defaults `next build` to Turbopack, and under Vercel's build the
+ * Turbopack path does not emit `.next/next-server.js.nft.json`. Vercel's
+ * `onBuildComplete` hook reads that file, so the build fails after reporting
+ * "Compiled successfully". Deploys appeared healthy only while the restored
+ * build cache still carried the file from an older build — the first full
+ * rebuild (2.2s incremental → 19.9s cold) broke every deployment after it.
+ * `dev` already runs on webpack for the Sentry webpack options below.
+ */
 const nextConfig = {
   transpilePackages: ['@waitlayer/ui', '@waitlayer/shared', '@waitlayer/config'],
-  output: 'standalone',
+  // Vercel's Next 16 adapter expects the normal build output. Keeping
+  // standalone for container builds is useful, but enabling it on Vercel
+  // makes the adapter look for the NFT manifest that Next 16.3 no longer
+  // emits when the adapter is active.
+  output: process.env.VERCEL ? undefined : 'standalone',
   typedRoutes: true,
   crossOrigin: 'anonymous',
   experimental: { sri: { algorithm: 'sha384' } },

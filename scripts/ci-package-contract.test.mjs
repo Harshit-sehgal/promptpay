@@ -63,6 +63,33 @@ function assertNoPrivateRuntimeDependencies(pkg) {
 
 test('CI blocks on production browser E2E and recovered Playwright flakes', () => {
   const workflow = read('.github/workflows/ci.yml');
+  assert.equal(
+    (workflow.match(/actions\/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57/g) ?? []).length,
+    2,
+    'both browser jobs must cache their Playwright browser installation',
+  );
+  assert.equal(
+    (workflow.match(/id: playwright-cache/g) ?? []).length,
+    2,
+    'both browser jobs must expose the browser cache result',
+  );
+  assert.equal(
+    (
+      workflow.match(
+        /timeout 6m pnpm --filter waitlayer-web exec playwright install --with-deps chromium/g,
+      ) ?? []
+    ).length,
+    2,
+    'cache misses must still install the OS dependencies',
+  );
+  assert.equal(
+    (
+      workflow.match(/^\s+run: pnpm --filter waitlayer-web exec playwright install chromium$/gm) ??
+      []
+    ).length,
+    2,
+    'cache hits must verify the browser without re-running the OS installer',
+  );
   const productionJob = workflow.match(/\n  e2e-production:\n([\s\S]*?)\n  package-clients:/)?.[1];
   assert.ok(productionJob, 'missing blocking e2e-production job');
   assert.match(productionJob, /5433:5432/);
@@ -72,6 +99,41 @@ test('CI blocks on production browser E2E and recovered Playwright flakes', () =
 
   const playwright = read('apps/web/playwright.config.ts');
   assert.match(playwright, /failOnFlakyTests:\s*!!process\.env\.CI/);
+});
+
+test('security workflow keeps version-coupled action pins coherent', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const codeqlPins = [
+    ...workflow.matchAll(
+      /github\/codeql-action\/(?:init|autobuild|analyze)@([0-9a-f]+)\s+#\s+(v[^\s]+)/g,
+    ),
+  ];
+  assert.equal(codeqlPins.length, 3, 'security must pin init, autobuild, and analyze');
+  assert.equal(
+    new Set(codeqlPins.map(([, sha]) => sha)).size,
+    1,
+    'CodeQL init, autobuild, and analyze must use one shared commit',
+  );
+  assert.equal(
+    new Set(codeqlPins.map(([, , version]) => version)).size,
+    1,
+    'CodeQL init, autobuild, and analyze must advertise one shared version',
+  );
+
+  const trivyPins = [
+    ...workflow.matchAll(/aquasecurity\/trivy-action@([0-9a-f]+)\s+#\s+(v[^\s]+)/g),
+  ];
+  assert.equal(trivyPins.length, 3, 'runtime and filesystem scans must all use Trivy');
+  assert.equal(
+    new Set(trivyPins.map(([, sha]) => sha)).size,
+    1,
+    'all Trivy scans must use one reviewed commit',
+  );
+  assert.equal(
+    new Set(trivyPins.map(([, , version]) => version)).size,
+    1,
+    'all Trivy scans must advertise one shared version',
+  );
 });
 
 test('production preflight cannot be blanket-suppressed', () => {
@@ -115,6 +177,56 @@ test('the dated launch plan cannot masquerade as current deployment status', () 
   assert.match(plan, /Use `AGENTS\.md` for the live residual blocker register/);
   assert.match(plan, /historical verified state/i);
   assert.doesNotMatch(plan, /One real code bug is live right now/);
+});
+
+test('the implementation blueprint labels its audit basis as historical', () => {
+  const blueprint = read('docs/waitlayer-implementation-blueprint.md');
+  assert.match(blueprint, /Verification-status marker — historical audit basis, current strategy/i);
+  assert.match(blueprint, /current[\s>]+live register is \[`AGENTS\.md`\]\(/i);
+  assert.match(
+    blueprint,
+    /architecture,\s*gap taxonomy, and[\s>]+release[\s>]+sequencing below remain planning guidance/i,
+  );
+});
+
+test('active evidence pointers do not use the superseded open-items register', () => {
+  const signupJourney = read('apps/web/e2e/signup-flow.spec.ts');
+  const blueprint = read('docs/waitlayer-implementation-blueprint.md');
+  assert.doesNotMatch(signupJourney, /docs\/ops\/remaining-open-items\.md/);
+  assert.doesNotMatch(blueprint, /docs\/ops\/remaining-open-items\.md/);
+});
+
+test('public exposure audit distinguishes current artifact scans from old gitleaks evidence', () => {
+  const audit = read('docs/ops/public-exposure-audit.md');
+  assert.match(audit, /Verification-status marker — split evidence/i);
+  assert.match(audit, /verified full-history gitleaks scan in run[\s>]+`32287316349`/i);
+  assert.match(audit, /historical supplementary snapshot at `407b001`/i);
+  assert.match(audit, /historical supplementary evidence/i);
+});
+
+test('current documentation points to the live register', () => {
+  const readme = read('README.md');
+  assert.match(readme, /live residual register in \[`AGENTS\.md`\]\(AGENTS\.md\)/i);
+  assert.match(
+    readme,
+    /LAUNCH_PLAN\.md`? and the A-087…A-090 audit entries\s+are historical records/i,
+  );
+  assert.match(readme, /Launch Plan.*superseded 2026-08-18/i);
+
+  const definitionOfDone = read('docs/12-definition-of-done.md');
+  assert.match(definitionOfDone, /Status marker.*product-definition and acceptance template/i);
+  assert.match(
+    definitionOfDone,
+    /unchecked items are not claims about the current[\s>]+source state/i,
+  );
+  assert.match(definitionOfDone, /\[`AGENTS\.md`\]\(\.\.\/AGENTS\.md\)/i);
+
+  const runbooks = read('docs/16-operational-runbooks.md');
+  assert.match(runbooks, /former[\s>]+`FOUNDATION_STATUS\.md` companion is superseded/i);
+  assert.match(
+    runbooks,
+    /current release status and[\s>]+residual blockers live in \[`AGENTS\.md`\]/i,
+  );
 });
 
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {

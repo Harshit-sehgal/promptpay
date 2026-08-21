@@ -106,9 +106,9 @@ Only an `admin`/`super_admin` can flip them. Payout rails: `paypal_email` and
 Connect and Wise are complete but credential-gated; Payoneer, Razorpay and Dodo
 Payments are stubs that are refused at registration.
 
-**Launch readiness:** see [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md) for the audited gap
-list and phasing, and `AGENTS.md` → "Open Source-Fixable Items" (A-087…A-090)
-for the code-level blockers.
+**Launch readiness:** use the live residual register in [`AGENTS.md`](AGENTS.md)
+and its linked GitHub issues. `LAUNCH_PLAN.md` and the A-087…A-090 audit entries
+are historical records, not current release status.
 
 ## Documentation
 
@@ -132,6 +132,7 @@ for the code-level blockers.
 - [API Changelog](docs/17-api-changelog.md)
 - [Architecture Decision Records](docs/adr/0001-record-architecture-decisions.md)
 - [Wait-attestation Launch Gate](docs/ops/wait-attestation-launch-gate.md)
-- [Launch Plan](LAUNCH_PLAN.md) — 2026-08-07 launch-readiness audit and phasing
+- [Launch Plan](LAUNCH_PLAN.md) — **superseded 2026-08-18**, kept as a historical
+  launch-readiness audit and phasing record
 - [Foundation Status](FOUNDATION_STATUS.md) — **superseded 2026-08-07**, kept as
   a historical record of the July hardening pass; do not plan against it

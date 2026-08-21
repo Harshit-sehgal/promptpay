@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "prebuild": "node scripts/verify-deploy-env.mjs",
-    "build": "NODE_ENV=production next build",
+    "build": "NODE_ENV=production next build --webpack",
     "start": "next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",

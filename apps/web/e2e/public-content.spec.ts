@@ -62,14 +62,14 @@ const PUBLIC_ROUTES: PublicRoute[] = [
     path: '/legal/gdpr-dpa',
     expect: ['Standard Contractual Clauses', 'Art. 6(1)(b)', 'Sub-processors'],
   },
-  { path: '/terms', expect: ['Acceptance', 'Fraud policy', 'Revenue sharing'] },
+  { path: '/terms', expect: ['Acceptance', 'Fraud policy', 'Participant compensation'] },
   {
     path: '/privacy',
     expect: ['We never read your source code or prompts', 'consent records'],
   },
   {
     path: '/pricing',
-    expect: ['Private beta, not commercial pricing', 'Trust score & fraud protection'],
+    expect: ['Beta access, not commercial pricing', 'Current beta controls'],
   },
   {
     path: '/faq',
@@ -77,11 +77,15 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: '/payout-policy',
-    expect: ['Earnings Release', 'estimated, confirmed, and held'],
+    expect: ['Release and fraud review', 'estimated, confirmed, held'],
   },
   {
     path: '/advertiser-policy',
-    expect: ['Ad Content Guidelines', 'truthful, non-deceptive'],
+    expect: ['Sponsored content', 'truthful, non-deceptive'],
+  },
+  {
+    path: '/advertisers',
+    expect: ['Join the advertiser waitlist', 'founding sponsor', 'Billing is closed'],
   },
   {
     path: '/security',

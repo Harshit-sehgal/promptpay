@@ -1,8 +1,12 @@
 # Operational Runbooks — Backup, Restore & Retention
 
-> Companion to `FOUNDATION_STATUS.md`. Covers the production data-safety
-> procedures that were previously undocumented: database backups, restore,
-> and the data-retention cron introduced with the compliance module.
+> **Status marker:** These procedures are operational guidance. The former
+> `FOUNDATION_STATUS.md` companion is superseded; current release status and
+> residual blockers live in [`AGENTS.md`](../AGENTS.md).
+
+This document covers the production data-safety procedures that were
+previously undocumented: database backups, restore, and the data-retention
+cron introduced with the compliance module.
 
 ## 1. Database backups (PostgreSQL)
 
@@ -10,6 +14,7 @@ The ledger, payout, fraud, and recovery-debt tables are the financial source
 of truth. **Back them up before every deploy and on a scheduled cadence.**
 
 ### Automated (recommended)
+
 Schedule a `pg_dump` from a secondary/cron pod or the host:
 
 ```bash
@@ -25,6 +30,7 @@ For point-in-time recovery, run Postgres in WAL archiving / managed
 (replica) mode and snapshot the volume (`pgdata`) rather than logical dumps.
 
 ### Docker Compose (local/dev)
+
 The compose `postgres` service persists to the `pgdata` volume. Snapshot the
 volume, or run `pg_dump` against the running container:
 
@@ -55,12 +61,12 @@ confirm the `earnings_ledger` confirmed/paid totals match the
 `RetentionCronService` (compliance module) enforces operator-tunable retention
 windows stored in `data_retention_config` (days). Categories:
 
-| Category        | Default | Purged when older than |
-|-----------------|---------|------------------------|
-| `webhook_events`| 90d     | `createdAt`            |
-| `audit_logs`    | 365d    | `createdAt`            |
-| `sessions`      | 30d     | `expiresAt`            |
-| `export_cache`  | 7d      | (no server-side table) |
+| Category         | Default | Purged when older than |
+| ---------------- | ------- | ---------------------- |
+| `webhook_events` | 90d     | `createdAt`            |
+| `audit_logs`     | 365d    | `createdAt`            |
+| `sessions`       | 30d     | `expiresAt`            |
+| `export_cache`   | 7d      | (no server-side table) |
 
 - Seeds defaults on bootstrap (`ensureRetentionDefaults`) and runs every 24h.
 - `retainDays = null` means **retain indefinitely** (never purge).
