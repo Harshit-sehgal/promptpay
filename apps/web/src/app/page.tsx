@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { BackendStatus } from '@/components/backend-status';
-import { EarningsCalculator } from '@/components/earnings-calculator';
+import { BetaSignalPlanner } from '@/components/beta-signal-planner';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
@@ -205,7 +205,7 @@ export default function HomePage() {
               </ul>
             </div>
           </div>
-          <EarningsCalculator />
+          <BetaSignalPlanner />
         </section>
 
         <section
