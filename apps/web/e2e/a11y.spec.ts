@@ -131,26 +131,22 @@ test('skip link bypasses navigation and enters the page-local main landmark', as
 test('homepage planner controls have accessible names in both modes', async ({ page }) => {
   await page.goto('/');
 
-  // Developer mode is a preset radiogroup plus two steppers and a switch. It
-  // used to be three sliders whose output never changed; the names moved with
-  // the controls.
+  // Developer mode is a preset radiogroup plus two typed number fields and a
+  // switch. Both modes have now been through two control changes — sliders
+  // whose output never moved, then steppers — so the names are asserted here
+  // rather than left to drift with the widget of the day.
   await expect(page.getByRole('radiogroup', { name: 'Typical day' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Typical' })).toBeVisible();
 
   for (const name of ['Eligible waits per day', 'Units per hour you allow']) {
-    await expect(
-      page.getByRole('button', { name: `Decrease ${name.toLowerCase()}` }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: `Increase ${name.toLowerCase()}` }),
-    ).toBeVisible();
+    await expect(page.getByRole('spinbutton', { name })).toBeVisible();
   }
 
   await expect(page.getByRole('switch', { name: 'Quiet hours' })).toBeVisible();
 
   await page.getByRole('button', { name: 'For advertisers' }).click();
-  for (const name of ['Campaign Budget', 'Target CPM', 'Expected Click-Through Rate (CTR)']) {
-    await expect(page.getByRole('slider', { name })).toBeVisible();
+  for (const name of ['Campaign budget', 'Target CPM', 'Expected click-through rate']) {
+    await expect(page.getByRole('spinbutton', { name })).toBeVisible();
   }
 });
 
@@ -160,7 +156,7 @@ test('homepage planner recomputes instead of showing a fixed sentence', async ({
   const output = page.getByText('verified signals a day').locator('..');
   const before = await output.innerText();
 
-  // The regression this guards: the previous component's three sliders left the
+  // The regression this guards: the original component's three sliders left the
   // output identical no matter what was moved.
   await page.getByRole('radio', { name: 'Heavy' }).click();
   await expect(output).not.toHaveText(before);
@@ -169,4 +165,23 @@ test('homepage planner recomputes instead of showing a fixed sentence', async ({
   await expect(
     page.getByText(/eligible waits would pass unused|nothing is turned away/),
   ).toBeVisible();
+
+  // A typed value must drive the result too, not just the presets.
+  const waits = page.getByRole('spinbutton', { name: 'Eligible waits per day' });
+  await waits.fill('20');
+  await expect(output).toContainText('20');
+
+  // Out of range is corrected on blur rather than accepted or silently ignored.
+  await waits.fill('9999');
+  await waits.blur();
+  await expect(waits).toHaveValue('500');
+
+  // The advertiser side is a calculator as well: typing a budget moves reach.
+  await page.getByRole('button', { name: 'For advertisers' }).click();
+  // Anchor on the result caption, not the unit — "qualified impressions" also
+  // appears in the Target CPM hint.
+  const reach = page.getByText(/You.d reach/).locator('..');
+  const reachBefore = await reach.innerText();
+  await page.getByRole('spinbutton', { name: 'Campaign budget' }).fill('4000');
+  await expect(reach).not.toHaveText(reachBefore);
 });

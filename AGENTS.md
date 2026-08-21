@@ -22,6 +22,52 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-22 — the planner takes typed values in both modes
+
+Both halves of the homepage planner now accept typed numbers instead of dragged
+ones (`components/beta-signal-planner.tsx`). The advertiser side had three
+sliders; the developer side had +/- steppers. Neither suits a quantity the
+visitor already knows — a slider cannot be typed or pasted, is imprecise across
+a wide range, and hides its value until grabbed.
+
+- `NumberField` holds the raw text while the field is being edited and clamps
+  only on blur, so a half-typed value is never fought mid-keystroke — clearing
+  "45" to type "120" would otherwise snap to the minimum the instant it went
+  empty. Out-of-range input is stated and corrected, not silently discarded.
+  The wheel is blurred off the input: scrolling the page over a focused number
+  field otherwise changes it silently.
+- Advertiser ranges are now `AD_SERVING.MIN/MAX_CAMPAIGN_BUDGET_MINOR` ($50 –
+  $1,000,000) rather than the slider's invented 100–100,000, so the form cannot
+  promise a campaign the API would reject.
+- Both modes now share one two-column layout: inputs left, results right.
+
+Gate note: `e2e/a11y.spec.ts` asserted `getByRole('slider')` and the stepper's
+Decrease/Increase buttons; both now assert `spinbutton`. The recompute test also
+covers a typed value driving the result, blur-clamping 9999 → 500, and the
+advertiser column recomputing — the original bug was a control whose output
+never moved, and that class of bug is now checked on both sides.
+
+- Verification: `pnpm typecheck` 17/17, `pnpm lint` 11/11, web vitest 274/274,
+  and the four planner e2e tests pass in chromium and mobile-chromium. The axe
+  page sweep cannot run locally — it waits for `networkidle`, which never
+  settles without an API — so that sweep is left to CI.
+
+## Added 2026-08-22 — a way to place a secret without an agent seeing it
+
+`scripts/set-host-secret.sh <VAR>` reads one value from the clipboard, checks it
+against the shape that variable must have, and streams it to the OCI host's
+`.env.production` over stdin — never in argv, so it stays out of the remote
+process list, and never printed, so it stays out of the transcript.
+
+This exists because an agent cannot sign in to Upstash, Supabase or Resend, and
+reading a live credential off a dashboard would copy it into the conversation.
+The clipboard goes provider → host directly.
+
+The shape checks catch the failures that otherwise appear only at runtime: a
+pooled URL in `DIRECT_URL` is refused outright (migrations cannot use the
+transaction pooler), a `redis://` Upstash URL is flagged for missing TLS, and a
+dashboard URL pasted in place of a `re_…` key is rejected.
+
 ## Resolved 2026-08-22 — the rename left the old mark on 16 surfaces
 
 The WaitLayer→Ateva rename was string-based, so it could not see a bare letter.
