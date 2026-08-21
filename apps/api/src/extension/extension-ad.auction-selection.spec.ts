@@ -125,6 +125,51 @@ const baseDto = {
 describe('requestAd — incomplete-budget fallback (#2)', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('requires the attestation session to be issued before the wait started', async () => {
+    const waitStartCreatedAt = new Date('2026-08-19T10:00:00.000Z');
+    const postStartSession = {
+      id: 'post-start-attestation-session',
+      createdAt: new Date(waitStartCreatedAt.getTime() + 1_000),
+      operationStartDeadline: new Date(waitStartCreatedAt.getTime() + 5 * 60_000),
+    };
+    const prisma = basePrisma([]);
+    prisma.waitStateEvent.findFirst = vi.fn(async (args: any) =>
+      args.where.eventType === 'wait_state_start'
+        ? {
+            id: 'ws-evt',
+            createdAt: waitStartCreatedAt,
+            signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+            detectorVersion: VERIFIED_DETECTOR_VERSION,
+          }
+        : null,
+    );
+    prisma.waitAttestationSession.findFirst = vi.fn(async ({ where }: any) => {
+      // Model Prisma's lte filter: the only available row was created after
+      // the wait, so it must be excluded by the server-side predicate.
+      if (where.createdAt?.lte && postStartSession.createdAt > where.createdAt.lte) {
+        return null;
+      }
+      return postStartSession;
+    });
+    const { service, claimSpy } = buildService(prisma, async () => ({
+      status: 'claimed',
+      impressionId: 'imp-1',
+    }));
+
+    const result = await service.requestAd('user-1', baseDto);
+
+    expect(result).toEqual({ ad: null, reason: 'wait_attestation_session_required' });
+    expect(prisma.waitAttestationSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          createdAt: { lte: waitStartCreatedAt },
+          operationStartDeadline: { gt: waitStartCreatedAt },
+        }),
+      }),
+    );
+    expect(claimSpy).not.toHaveBeenCalled();
+  });
+
   it('skips a campaign that has remaining budget but NOT enough for its next charge', async () => {
     // budget 1000, already spent 100 → remaining 900, but bid is 1000.
     // 100 + 0 + 1000 > 1000 → excluded by the pre-charge budget filter.

@@ -9,6 +9,18 @@
 **Document status:** Implementation-ready for Release 0.x  
 **Commercial status:** No real advertiser billing, withdrawable earnings, or payouts are authorized by this plan.
 
+> **Verification-status marker — historical audit basis, current strategy.**
+> The source audit and verification limitations in this document are dated
+> 2026-08-04 and must not be read as the current repository state. The current
+> live register is [`AGENTS.md`](../AGENTS.md); the current operator backlog is
+> tracked in GitHub issues #39, #40, #41, and #45. As of 2026-08-19, the exact
+> branch SHA `99703ab` passed the complete CI matrix in
+> [run 32252613390](https://github.com/Harshit-sehgal/promptpay/actions/runs/32252613390),
+> branch protection is API-verified, and the Vercel preview still fails as an
+> external deployment/configuration check. The architecture, gap taxonomy, and
+> release sequencing below remain planning guidance; their dated baseline
+> claims require re-verification before reuse.
+
 ---
 
 ## 1. Purpose of this document
@@ -59,7 +71,7 @@ The most important inspected sources were:
 - `.github/workflows/ci.yml`
 - `.github/workflows/staging.yml`
 - legal and policy pages under `apps/web/src/app`
-- `docs/ops/remaining-open-items.md`
+- `docs/ops/deployment-checklist.md`
 
 Current official lifecycle-hook documentation for Claude Code and Codex, and current VS Code shell-integration APIs, were also checked because those external interfaces can change.
 
@@ -3386,7 +3398,7 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 | `package.json`                                          | Ateva monorepo, Node/pnpm versions, gate scripts                                                  |
 | `README.md`                                             | telemetry-only beta, no rewards, current CLI wrapper behavior                                     |
 | `AGENTS.md`                                             | previous source-audit closure, gate history, destructive-test warning, remaining external work    |
-| `docs/ops/remaining-open-items.md`                      | provider, credentials, branch protection, CI, legal, and infra operator items                     |
+| `docs/ops/deployment-checklist.md`                      | cold-start, bootstrap, migration, health, and rollback deployment procedure                       |
 | `packages/db/prisma/schema.prisma`                      | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
 | `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches                                                        |
 | `apps/api/src/extension/extension-wait.trait.ts`        | wait start/end ingestion, signed evidence, server classification, duration and idempotency        |

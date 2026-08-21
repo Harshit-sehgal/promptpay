@@ -206,6 +206,32 @@ describe('FraudService', () => {
       const score = await service.computeTrustScore('u-4');
       expect(score).toBe(0);
     });
+
+    it.each(['restricted', 'banned'] as const)(
+      'preserves operator-enforced %s trust levels during recomputation',
+      async (trustLevel) => {
+        mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags({ trustLevel }));
+        mockPrisma.device.count.mockResolvedValue(0);
+        mockPrisma.waitStateEvent.groupBy.mockResolvedValue([]);
+        mockPrisma.payoutRequest.count.mockResolvedValue(0);
+        mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+        mockPrisma.user.update.mockResolvedValue({});
+
+        await expect(service.computeTrustScore(`u-${trustLevel}`)).resolves.toBeGreaterThanOrEqual(
+          40,
+        );
+        expect(mockPrisma.trustScore.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({ level: trustLevel }),
+            update: expect.objectContaining({ level: trustLevel }),
+          }),
+        );
+        expect(mockPrisma.user.update).toHaveBeenCalledWith({
+          where: { id: `u-${trustLevel}` },
+          data: { trustLevel },
+        });
+      },
+    );
   });
 
   describe('checkImpressionRateLimit', () => {

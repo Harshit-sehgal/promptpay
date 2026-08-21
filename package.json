@@ -44,7 +44,8 @@
     "start:api": "pnpm --filter ateva-api build && node apps/api/dist/apps/api/src/main.js",
     "start:web": "pnpm --filter ateva-web build && cd apps/web && next start",
     "payout:encrypt-legacy": "pnpm exec tsx scripts/encrypt-legacy-payout-destinations.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "erase:waitlist": "node scripts/erase-waitlist-signup.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

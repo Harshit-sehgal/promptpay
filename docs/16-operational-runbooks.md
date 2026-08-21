@@ -1,8 +1,12 @@
 # Operational Runbooks — Backup, Restore & Retention
 
-> Companion to `FOUNDATION_STATUS.md`. Covers the production data-safety
-> procedures that were previously undocumented: database backups, restore,
-> and the data-retention cron introduced with the compliance module.
+> **Status marker:** These procedures are operational guidance. The former
+> `FOUNDATION_STATUS.md` companion is superseded; current release status and
+> residual blockers live in [`AGENTS.md`](../AGENTS.md).
+
+This document covers the production data-safety procedures that were
+previously undocumented: database backups, restore, and the data-retention
+cron introduced with the compliance module.
 
 ## 1. Database backups (PostgreSQL)
 

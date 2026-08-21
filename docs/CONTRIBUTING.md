@@ -41,10 +41,11 @@ footer.
 
 ## Pre-commit hooks
 
-[Husky](https://typicode.github.io/husky/) + [lint-staged](https://github.com/lint-staged/lint-staged)
-run `eslint --fix` and `prettier --write` on staged files automatically once
-you've installed dependencies (`pnpm install`, which sets up the hook via the
-`prepare` script). Do not bypass them with `--no-verify` except in emergencies.
+[Husky](https://typicode.github.io/husky/) runs the deterministic
+`.husky/pre-commit` hook once you've installed dependencies (`pnpm install`,
+which sets up the hook via the `prepare` script). The hook runs `eslint --fix`
+and `prettier --write` directly on staged files and has no stash/restore step.
+Do not bypass it with `--no-verify` except in emergencies.
 
 ## Before opening a PR
 

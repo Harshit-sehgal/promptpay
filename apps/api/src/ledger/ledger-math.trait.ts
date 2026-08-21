@@ -93,20 +93,27 @@ export class LedgerMathTrait {
    * versions) receive a longer hold even if the user is otherwise trusted.
    * The extended hold gives the platform time to review behavioural signals
    * before the earnings mature and become payout-eligible.
+   *
+   * The per-tier values are operator-overridable via the validated
+   * `PAYOUT_HOLD_DAYS_*` env vars (packages/config schema, DODO_PAYMENTS_PLAN
+   * §8.11 — an operator may lengthen holds to cover Dodo's settlement cycle).
+   * The validated schema guarantees positive integers, so the
+   * `RESTRICTED = -1` / `BANNED = -1` "indefinite hold" contract below cannot
+   * be accidentally turned into a finite hold by an env misconfiguration.
    */
   getHoldDays(trustLevel: string, unverifiedSource = false): number {
-    const EXTENDED_HOLD_DAYS = 60;
+    const EXTENDED_HOLD_DAYS = this.configHoldDays('PAYOUT_HOLD_DAYS_EXTENDED', 60);
     let base: number;
     switch (trustLevel) {
       case 'high_trust':
-        base = PAYOUT_HOLD_DAYS.HIGH_TRUST;
+        base = this.configHoldDays('PAYOUT_HOLD_DAYS_HIGH_TRUST', PAYOUT_HOLD_DAYS.HIGH_TRUST);
         break;
       case 'normal':
-        base = PAYOUT_HOLD_DAYS.NORMAL;
+        base = this.configHoldDays('PAYOUT_HOLD_DAYS_NORMAL', PAYOUT_HOLD_DAYS.NORMAL);
         break;
       case 'new':
       case 'low_trust':
-        base = PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+        base = this.configHoldDays('PAYOUT_HOLD_DAYS_NEW_ACCOUNT', PAYOUT_HOLD_DAYS.NEW_ACCOUNT);
         break;
       // `RESTRICTED = -1` and `BANNED = -1` are the contract for "indefinite
       // hold — never mature". Falling through to the default here would
@@ -116,11 +123,24 @@ export class LedgerMathTrait {
       case 'banned':
         return PAYOUT_HOLD_DAYS.RESTRICTED;
       default:
-        base = PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+        base = this.configHoldDays('PAYOUT_HOLD_DAYS_NEW_ACCOUNT', PAYOUT_HOLD_DAYS.NEW_ACCOUNT);
     }
     if (unverifiedSource) {
       return Math.max(base, EXTENDED_HOLD_DAYS);
     }
     return base;
+  }
+
+  /**
+   * Read an operator-overridable hold-day env var. Values are validated at
+   * boot by the `@ateva/config` production schema (positive integers
+   * within 1..365); any unparseable value here falls back to the shipped
+   * default rather than propagating NaN into `availableAt` (A-121 class).
+   */
+  private configHoldDays(key: string, fallback: number): number {
+    const raw = process.env[key];
+    if (raw === undefined || raw === '') return fallback;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 365 ? parsed : fallback;
   }
 }

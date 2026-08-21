@@ -50,6 +50,13 @@ enum CampaignStatus {
   archived
 }
 
+enum AdvertiserWaitlistStatus {
+  pending
+  invited
+  onboarded
+  declined
+}
+
 enum CreativeStatus {
   draft
   pending_review
@@ -1790,4 +1797,33 @@ model EmailQueue {
   @@index([nextRetryAt])
   @@index([expiresAt])
   @@map("email_queue")
+}
+
+// ══════════════════════════════════════════════════════════
+// Advertiser Waitlist
+// ══════════════════════════════════════════════════════════
+
+// Marketing interest capture for advertisers while billing is not yet open
+// (LAUNCH_PLAN Phase 2 step 11). The email is PII and is stored ONLY here —
+// the audit trail deliberately records a row reference, not the address, so
+// GDPR erasure (`scripts/erase-waitlist-signup.mjs`) is a single-row delete
+// plus an indexed audit scrub by targetId.
+model AdvertiserWaitlist {
+  id        String                   @id @default(uuid())
+  email     String                   @unique
+  company   String?
+  country   String?
+  status    AdvertiserWaitlistStatus @default(pending)
+  // GDPR marketing-consent flag. Signup refuses `consent: false`; the stored
+  // value documents that the address may be contacted.
+  consent   Boolean                  @default(false)
+  source    String                   @default("advertisers_page")
+  // Privacy pseudonym of the submitter IP (privacyPseudonym), never the raw
+  // IP. The admin surface omits it.
+  ipHash    String?                  @map("ip_hash")
+  createdAt DateTime                 @default(now()) @map("created_at")
+  updatedAt DateTime                 @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@map("advertiser_waitlist")
 }

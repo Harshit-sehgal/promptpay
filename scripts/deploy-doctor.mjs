@@ -24,6 +24,7 @@ import { isIP } from 'node:net';
 
 const DEFAULT_TIMEOUT_MS = 4_000;
 const DODO_HOSTS = new Set(['test.dodopayments.com', 'live.dodopayments.com']);
+const WEB_SMOKE_PATHS = ['/', '/auth/login', '/api/auth/config'];
 const MONEY_SWITCHES = [
   ['ads', 'global'],
   ['wait', 'earnings'],
@@ -55,7 +56,11 @@ function isSingleLabel(hostname) {
   return !hostname.includes('.') && !isIP(hostname);
 }
 
-function parseUrl(value, name, { production = false, path = null, allowInternalHttp = false } = {}) {
+function parseUrl(
+  value,
+  name,
+  { production = false, path = null, allowInternalHttp = false } = {},
+) {
   if (!value) return { finding: fail(name, `${name} is required`) };
   let url;
   try {
@@ -67,7 +72,8 @@ function parseUrl(value, name, { production = false, path = null, allowInternalH
   const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   const httpAllowed =
     url.protocol === 'https:' ||
-    (url.protocol === 'http:' && (isLoopback(hostname) || (allowInternalHttp && isSingleLabel(hostname))));
+    (url.protocol === 'http:' &&
+      (isLoopback(hostname) || (allowInternalHttp && isSingleLabel(hostname))));
   if (!httpAllowed || url.username || url.password || url.search || url.hash) {
     return {
       finding: fail(
@@ -79,13 +85,17 @@ function parseUrl(value, name, { production = false, path = null, allowInternalH
   }
   if (production && url.protocol !== 'https:') {
     return { finding: fail(name, `${name} must use HTTPS in production`) };
-  }  if (path === '' && url.pathname !== '' && url.pathname !== '/') {
+  }
+  if (path === '' && url.pathname !== '' && url.pathname !== '/') {
     return { finding: fail(name, `${name} must be an origin without a path`) };
   }
   if (path !== null && path !== '' && url.pathname !== path) {
     return { finding: fail(name, `${name} must end exactly in ${path}`) };
   }
-  return { url, finding: pass(name, `${url.protocol}//${hostname}${url.port ? `:${url.port}` : ''}`) };
+  return {
+    url,
+    finding: pass(name, `${url.protocol}//${hostname}${url.port ? `:${url.port}` : ''}`),
+  };
 }
 
 function checkDatabaseUrl(env) {
@@ -101,7 +111,12 @@ function checkDatabaseUrl(env) {
       if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname) {
         findings.push(fail(name.toLowerCase(), `${name} must be a PostgreSQL connection URL`));
       } else {
-        findings.push(pass(name.toLowerCase(), `PostgreSQL target ${url.hostname}${url.port ? `:${url.port}` : ''}`));
+        findings.push(
+          pass(
+            name.toLowerCase(),
+            `PostgreSQL target ${url.hostname}${url.port ? `:${url.port}` : ''}`,
+          ),
+        );
       }
     } catch {
       findings.push(fail(name.toLowerCase(), `${name} must be a valid PostgreSQL connection URL`));
@@ -123,7 +138,9 @@ function checkRedisUrl(env, production) {
     if (!['redis:', 'rediss:'].includes(url.protocol) || url.username) {
       return [fail('redis-config', 'REDIS_URL must use redis:// or rediss:// without a username')];
     }
-    return [pass('redis-config', `${url.protocol}//${url.hostname}${url.port ? `:${url.port}` : ''}`)];
+    return [
+      pass('redis-config', `${url.protocol}//${url.hostname}${url.port ? `:${url.port}` : ''}`),
+    ];
   } catch {
     return [fail('redis-config', 'REDIS_URL must be a valid redis:// or rediss:// URL')];
   }
@@ -133,7 +150,9 @@ function checkJwt(env, production) {
   const findings = [];
   const supplied = ['JWT_PRIVATE_KEY', 'JWT_PUBLIC_KEY'].filter((name) => env[name]);
   if (production && supplied.length !== 2) {
-    findings.push(fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY are both required in production'));
+    findings.push(
+      fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY are both required in production'),
+    );
     return findings;
   }
   if (supplied.length === 0) {
@@ -141,7 +160,9 @@ function checkJwt(env, production) {
     return findings;
   }
   if (supplied.length !== 2) {
-    findings.push(fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured together'));
+    findings.push(
+      fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be configured together'),
+    );
     return findings;
   }
 
@@ -155,7 +176,9 @@ function checkJwt(env, production) {
     const derivedPublic = createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
     const suppliedPublic = configuredPublic.export({ type: 'spki', format: 'der' });
     if (!Buffer.from(derivedPublic).equals(Buffer.from(suppliedPublic))) {
-      findings.push(fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY do not form one key pair'));
+      findings.push(
+        fail('jwt-keys', 'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY do not form one key pair'),
+      );
       return findings;
     }
     findings.push(pass('jwt-keys', 'RSA signing and verification keys parse and match'));
@@ -164,14 +187,19 @@ function checkJwt(env, production) {
   }
 
   if (env.JWT_PUBLIC_KEYS) {
-    const blocks = normalizedPem(env.JWT_PUBLIC_KEYS).split(/(?=-----BEGIN PUBLIC KEY-----)/g).filter(Boolean);
-    if (blocks.length === 0 || blocks.some((block) => {
-      try {
-        return createPublicKey(block).asymmetricKeyType !== 'rsa';
-      } catch {
-        return true;
-      }
-    })) {
+    const blocks = normalizedPem(env.JWT_PUBLIC_KEYS)
+      .split(/(?=-----BEGIN PUBLIC KEY-----)/g)
+      .filter(Boolean);
+    if (
+      blocks.length === 0 ||
+      blocks.some((block) => {
+        try {
+          return createPublicKey(block).asymmetricKeyType !== 'rsa';
+        } catch {
+          return true;
+        }
+      })
+    ) {
       findings.push(fail('jwt-public-keys', 'JWT_PUBLIC_KEYS contains an invalid public key'));
     } else {
       findings.push(pass('jwt-public-keys', `${blocks.length} additional RSA public key(s) parse`));
@@ -222,7 +250,12 @@ function checkUrls(env, production) {
         const publicUrl = new URL(publicApi);
         const internalUrl = new URL(internalApi);
         if (publicUrl.pathname !== internalUrl.pathname) {
-          findings.push(fail('web-api-url-consistency', 'public and internal API URLs must use the same /api/v1 path'));
+          findings.push(
+            fail(
+              'web-api-url-consistency',
+              'public and internal API URLs must use the same /api/v1 path',
+            ),
+          );
         } else {
           findings.push(pass('web-api-url-consistency', 'public and internal API paths agree'));
         }
@@ -232,9 +265,13 @@ function checkUrls(env, production) {
     }
   }
   if (production && !env.NEXT_PUBLIC_WEB_URL) {
-    findings.push(fail('next-public-web-url', 'NEXT_PUBLIC_WEB_URL is required for the production web build'));
+    findings.push(
+      fail('next-public-web-url', 'NEXT_PUBLIC_WEB_URL is required for the production web build'),
+    );
   } else if (env.NEXT_PUBLIC_WEB_URL) {
-    findings.push(parseUrl(env.NEXT_PUBLIC_WEB_URL, 'next-public-web-url', { production, path: '' }).finding);
+    findings.push(
+      parseUrl(env.NEXT_PUBLIC_WEB_URL, 'next-public-web-url', { production, path: '' }).finding,
+    );
   }
   return findings;
 }
@@ -245,12 +282,20 @@ function checkOAuth(env, production) {
   if (!apiId && !webId) {
     return [
       production
-        ? fail('google-oauth', 'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID are required in production')
+        ? fail(
+            'google-oauth',
+            'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID are required in production',
+          )
         : warn('google-oauth', 'Google OAuth is not configured outside production'),
     ];
   }
   if (!apiId || !webId) {
-    return [fail('google-oauth', 'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID must be configured together')];
+    return [
+      fail(
+        'google-oauth',
+        'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID must be configured together',
+      ),
+    ];
   }
   if (apiId !== webId) {
     return [fail('google-oauth', 'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID do not match')];
@@ -285,7 +330,9 @@ function checkDodo(env, production) {
     } else if (production && url.hostname.toLowerCase() !== 'live.dodopayments.com') {
       findings.push(fail('dodo', 'production Dodo deposits must use live.dodopayments.com'));
     } else {
-      findings.push(pass('dodo', `${url.hostname} configured with webhook verification and product id`));
+      findings.push(
+        pass('dodo', `${url.hostname} configured with webhook verification and product id`),
+      );
     }
   } catch {
     findings.push(fail('dodo', 'DODO_BASE_URL must be a valid Dodo API URL'));
@@ -297,24 +344,41 @@ function checkEnvironment(env) {
   const production = env.NODE_ENV === 'production';
   const findings = [];
   findings.push(
-    production ? pass('node-env', 'production') : warn('node-env', `NODE_ENV=${env.NODE_ENV ?? 'unset'}; production-only checks are advisory`),
+    production
+      ? pass('node-env', 'production')
+      : warn(
+          'node-env',
+          `NODE_ENV=${env.NODE_ENV ?? 'unset'}; production-only checks are advisory`,
+        ),
   );
-  if (env.COOKIE_SECURE === 'false') findings.push(fail('cookie-secure', 'COOKIE_SECURE=false is unsafe for deployment'));
+  if (env.COOKIE_SECURE === 'false')
+    findings.push(fail('cookie-secure', 'COOKIE_SECURE=false is unsafe for deployment'));
   else findings.push(pass('cookie-secure', 'not explicitly disabled'));
   for (const name of ['ALLOW_MOCK_GOOGLE', 'MOCK_GOOGLE_ENABLED', 'NEXT_PUBLIC_ALLOW_MOCK_AUTH']) {
     if (['1', 'true'].includes(String(env[name] ?? '').toLowerCase())) {
       findings.push(fail('mock-auth', `${name} is enabled`));
     }
   }
-  if (!findings.some((finding) => finding.name === 'mock-auth')) findings.push(pass('mock-auth', 'no mock-auth flag enabled'));
-  const throttleOverrides = Object.keys(env).filter((name) => name.startsWith('THROTTLE_') && env[name] !== undefined && env[name] !== '');
+  if (!findings.some((finding) => finding.name === 'mock-auth'))
+    findings.push(pass('mock-auth', 'no mock-auth flag enabled'));
+  const throttleOverrides = Object.keys(env).filter(
+    (name) => name.startsWith('THROTTLE_') && env[name] !== undefined && env[name] !== '',
+  );
   findings.push(
     throttleOverrides.length > 0
-      ? fail('throttle-overrides', `${throttleOverrides.join(', ')} must not be present on a public deployment`)
+      ? fail(
+          'throttle-overrides',
+          `${throttleOverrides.join(', ')} must not be present on a public deployment`,
+        )
       : pass('throttle-overrides', 'none set'),
   );
   if (production && env.ATEVA_ENVIRONMENT_KIND !== 'production') {
-    findings.push(fail('environment-kind', 'production NODE_ENV requires ATEVA_ENVIRONMENT_KIND=production'));
+    findings.push(
+      fail(
+        'environment-kind',
+        'production NODE_ENV requires ATEVA_ENVIRONMENT_KIND=production',
+      ),
+    );
   } else {
     findings.push(pass('environment-kind', env.ATEVA_ENVIRONMENT_KIND ?? 'unset'));
   }
@@ -338,10 +402,15 @@ export function diagnoseEnvironment(env = process.env) {
 export function diagnoseMoneySwitches(settings) {
   const enabled = new Set(
     settings
-      .filter((setting) => setting?.value && typeof setting.value === 'object' && setting.value.enabled === true)
+      .filter(
+        (setting) =>
+          setting?.value && typeof setting.value === 'object' && setting.value.enabled === true,
+      )
       .map((setting) => `${setting.scope}.${setting.target}`),
   );
-  const unexpected = MONEY_SWITCHES.map(([scope, target]) => `${scope}.${target}`).filter((key) => enabled.has(key));
+  const unexpected = MONEY_SWITCHES.map(([scope, target]) => `${scope}.${target}`).filter((key) =>
+    enabled.has(key),
+  );
   return unexpected.length === 0
     ? pass('money-switches', 'all five switches are OFF')
     : fail('money-switches', `ENABLED: ${unexpected.join(', ')}`);
@@ -353,10 +422,13 @@ async function probeRedis(env) {
     const url = new URL(env.REDIS_URL);
     const net = await import('node:net');
     await new Promise((resolvePromise, rejectPromise) => {
-      const socket = net.createConnection({ host: url.hostname, port: Number(url.port || 6379) }, () => {
-        socket.end();
-        resolvePromise();
-      });
+      const socket = net.createConnection(
+        { host: url.hostname, port: Number(url.port || 6379) },
+        () => {
+          socket.end();
+          resolvePromise();
+        },
+      );
       socket.setTimeout(DEFAULT_TIMEOUT_MS, () => {
         socket.destroy();
         rejectPromise(new Error('timeout'));
@@ -400,10 +472,14 @@ async function probeDatabase(env) {
     const prisma = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
     try {
       await prisma.$queryRaw`SELECT 1`;
-      const appliedRows = await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL`;
-      const failedRows = await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL`;
+      const appliedRows =
+        await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL`;
+      const failedRows =
+        await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL`;
       const applied = new Set(
-        (Array.isArray(appliedRows) ? appliedRows : []).map((row) => row?.migration_name).filter(Boolean),
+        (Array.isArray(appliedRows) ? appliedRows : [])
+          .map((row) => row?.migration_name)
+          .filter(Boolean),
       );
       const failed = (Array.isArray(failedRows) ? failedRows : [])
         .map((row) => row?.migration_name)
@@ -467,16 +543,69 @@ export async function probeNetwork(env, fetchImpl = fetch, timeoutMs = DEFAULT_T
   }
 }
 
-export async function runDoctor({ env = process.env, withNetwork = false, withDb = false, fetchImpl = fetch } = {}) {
+/**
+ * Probe the deployed web shell and its same-origin auth discovery route. A
+ * homepage 200 is not enough evidence: a stale or misconfigured deployment
+ * can serve marketing content while the login route or BFF cannot reach the
+ * API. This probe reads status codes only and never consumes response bodies.
+ */
+export async function probeWeb(env, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const raw = env.WEB_BASE_URL || env.NEXT_PUBLIC_WEB_URL;
+  if (!raw) return fail('web-reachability', 'WEB_BASE_URL/NEXT_PUBLIC_WEB_URL is unavailable');
+  const parsed = parseUrl(raw, 'web-reachability', {
+    production: env.NODE_ENV === 'production',
+    path: '',
+  });
+  if (!parsed.url) return parsed.finding;
+
+  const failures = [];
+  for (const path of WEB_SMOKE_PATHS) {
+    const url = new URL(path, parsed.url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(url, {
+        method: 'GET',
+        headers: { Accept: 'text/html,application/json' },
+        signal: controller.signal,
+      });
+      if (!response.ok) failures.push(`${path} HTTP ${response.status}`);
+    } catch {
+      failures.push(`${path} unreachable`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return failures.length > 0
+    ? fail('web-reachability', failures.join('; '))
+    : pass('web-reachability', `${WEB_SMOKE_PATHS.length} web routes returned 2xx`);
+}
+
+export async function runDoctor({
+  env = process.env,
+  withNetwork = false,
+  withDb = false,
+  fetchImpl = fetch,
+} = {}) {
   const findings = diagnoseEnvironment(env);
   if (withNetwork) {
     findings.push(await probeNetwork(env, fetchImpl));
+    findings.push(await probeWeb(env, fetchImpl));
     findings.push(await probeRedis(env));
   } else {
-    findings.push(warn('network-probes', 'skipped; re-run with --with-network to probe API and Redis'));
+    findings.push(
+      warn('network-probes', 'skipped; re-run with --with-network to probe API and Redis'),
+    );
   }
   if (withDb) findings.push(...(await probeDatabase(env)));
-  else findings.push(warn('database-probes', 'skipped; re-run with --with-db to probe migrations and money switches'));
+  else
+    findings.push(
+      warn(
+        'database-probes',
+        'skipped; re-run with --with-db to probe migrations and money switches',
+      ),
+    );
   return findings;
 }
 
@@ -488,18 +617,24 @@ function printFindings(findings) {
   }
   const failures = findings.filter((finding) => finding.level === 'FAIL').length;
   const warnings = findings.filter((finding) => finding.level === 'WARN').length;
-  console.log(`\n${findings.length - failures - warnings} passed, ${warnings} warning(s), ${failures} failure(s)`);
+  console.log(
+    `\n${findings.length - failures - warnings} passed, ${warnings} warning(s), ${failures} failure(s)`,
+  );
   if (failures > 0) {
     console.log('\nDeployment diagnosis failed. Resolve every FAIL above.');
     process.exitCode = 1;
   } else {
-    console.log('\nDeployment diagnosis passed; optional database/network probes were reported separately.');
+    console.log(
+      '\nDeployment diagnosis passed; optional database/network probes were reported separately.',
+    );
   }
 }
 
 async function main() {
   const args = new Set(process.argv.slice(2));
-  printFindings(await runDoctor({ withNetwork: args.has('--with-network'), withDb: args.has('--with-db') }));
+  printFindings(
+    await runDoctor({ withNetwork: args.has('--with-network'), withDb: args.has('--with-db') }),
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -15,7 +15,7 @@ import { createTestUser, deleteTestUser, loginAs, makeTestUser, TestUser } from 
  * Also asserts the Google sign-in control is wired (A-018): the "Continue with
  * Google" control renders whether or not a client ID is configured, so this is
  * verifiable without live Google credentials. The real Google ID-token
- * callback still requires live credentials (see docs/ops/remaining-open-items.md).
+ * callback still requires live credentials (see AGENTS.md's external register).
  *
  * Required stack (same as smoke.spec.ts):
  *   pnpm --filter ateva-web build && pnpm --filter ateva-web start
