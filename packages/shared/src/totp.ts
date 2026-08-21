@@ -21,7 +21,13 @@ function base32Encode(buffer: Buffer): string {
 }
 
 function base32Decode(input: string): Buffer {
-  const cleaned = input.replace(/=+$/, '').toUpperCase().replace(/\s/g, '');
+  // Trim base32 padding by index rather than with `/=+$/`. An anchored `+` on
+  // a long run of the padding character backtracks quadratically, so a crafted
+  // all-`=` string turns a cheap decode into a CPU sink. Scanning from the end
+  // is linear and does the same job.
+  let end = input.length;
+  while (end > 0 && input.charCodeAt(end - 1) === 61 /* '=' */) end -= 1;
+  const cleaned = input.slice(0, end).toUpperCase().replace(/\s/g, '');
   let bits = 0;
   let value = 0;
   const bytes: number[] = [];

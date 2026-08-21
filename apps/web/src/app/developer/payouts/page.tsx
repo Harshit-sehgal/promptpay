@@ -228,7 +228,13 @@ export default function DevPayoutsPage() {
     }
 
     // Client-side validation for PayPal email format
-    if (provider === 'paypal_email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
+    // Bounded before matching: `.` falls inside `[^\s@]`, so the tail of this
+    // pattern backtracks quadratically on a long dotted string. 254 is the
+    // RFC 5321 address limit, so nothing valid is turned away.
+    if (
+      provider === 'paypal_email' &&
+      (destination.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination))
+    ) {
       setError('Enter a valid email address for PayPal');
       setSubmitting(false);
       return;

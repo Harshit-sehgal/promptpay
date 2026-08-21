@@ -344,7 +344,13 @@ export function apiBaseUrl(): string {
     );
   }
 
-  return url.toString().replace(/\/+$/, '');
+  // Trim by index rather than with `/\/+$/`. An anchored `+` restarts at every
+  // position, so a URL ending in a long run of slashes costs quadratic time;
+  // this value is derived from a request, so that run is attacker-chosen.
+  const serialized = url.toString();
+  let end = serialized.length;
+  while (end > 0 && serialized.charCodeAt(end - 1) === 47 /* '/' */) end -= 1;
+  return serialized.slice(0, end);
 }
 
 function normalizeUrlHostname(hostname: string): string {
