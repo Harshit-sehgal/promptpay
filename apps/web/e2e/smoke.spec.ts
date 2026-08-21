@@ -143,6 +143,28 @@ test.describe('Protected routes redirect when unauthenticated', () => {
   });
 });
 
+// ── Advertiser waitlist (LAUNCH_PLAN Phase 2 step 11) ──
+test.describe('Advertiser waitlist', () => {
+  test('renders the waitlist page with the signup form', async ({ page }) => {
+    await page.goto('/advertisers');
+    await expect(page).toHaveTitle(/Advertisers/i);
+    await expect(page.getByText('Join the advertiser waitlist').first()).toBeVisible();
+    await expect(page.getByLabel('Work email')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Join the advertiser waitlist/i })).toBeVisible();
+  });
+
+  test('submits a signup and shows the recorded state', async ({ page }) => {
+    const email = `e2e-waitlist-${Date.now()}@waitlayer.test`;
+    await page.goto('/advertisers');
+    await page.getByLabel('Work email').fill(email);
+    await page.getByLabel(/I agree to receive email updates/i).check();
+    await page.getByRole('button', { name: /Join the advertiser waitlist/i }).click();
+    await expect(page.getByRole('status').first()).toContainText(/on the advertiser waitlist/i, {
+      timeout: 15_000,
+    });
+  });
+});
+
 // ── Developer dashboard E2E (requires authenticated session) ──
 test.describe('Developer dashboard (authenticated)', () => {
   test.beforeAll(async () => {

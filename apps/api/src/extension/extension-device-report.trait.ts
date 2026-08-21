@@ -196,8 +196,12 @@ export class ExtensionDeviceReportTrait {
         },
       });
       if (owner) {
+        // Coordinate with trust-score recomputation. Without the shared lock,
+        // a score transaction that read the pre-restriction user could commit
+        // a stale low_trust value after this financial-control update.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`trust-score:${userId}`}))`;
         await tx.user.updateMany({
-          where: { id: userId, trustLevel: { not: 'restricted' } },
+          where: { id: userId, trustLevel: { notIn: ['restricted', 'banned'] } },
           data: { trustLevel: 'restricted' },
         });
         const existingFlag = await tx.fraudFlag.findFirst({

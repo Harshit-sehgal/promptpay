@@ -22,7 +22,9 @@ export default function AdvertiserPolicyPage() {
       </nav>
 
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-6 py-16">
-        <h1 className="text-3xl font-bold text-surface-900 mb-8 tracking-tight">Advertiser Policy</h1>
+        <h1 className="text-3xl font-bold text-surface-900 mb-8 tracking-tight">
+          Advertiser Policy
+        </h1>
 
         <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
           <p className="font-semibold">Private beta</p>
@@ -61,7 +63,9 @@ export default function AdvertiserPolicyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-4">4. Participant compensation</h2>
+            <h2 className="text-xl font-semibold text-surface-900 mb-4">
+              4. Participant compensation
+            </h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               Any future participant compensation is calculated independently by WaitLayer after
               eligible activity is verified. It is paid from WaitLayer through a separate payout
@@ -71,7 +75,9 @@ export default function AdvertiserPolicyPage() {
           </section>
 
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-4">5. Verified delivery and fraud</h2>
+            <h2 className="text-xl font-semibold text-surface-900 mb-4">
+              5. Verified delivery and fraud
+            </h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               Advertiser reporting uses eligible rendered impressions and clicks that pass the
               applicable session, visibility, duplicate, budget, and fraud controls. Invalid or
@@ -89,7 +95,10 @@ export default function AdvertiserPolicyPage() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-surface-200">
-          <Link href="/" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+          <Link
+            href="/"
+            className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+          >
             Return to homepage
           </Link>
         </div>

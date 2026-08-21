@@ -63,7 +63,7 @@ describe('ExtensionDeviceReportTrait.registerDevice duplicate-device safety', ()
 
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.user.updateMany).toHaveBeenCalledWith({
-      where: { id: 'new-user-1', trustLevel: { not: 'restricted' } },
+      where: { id: 'new-user-1', trustLevel: { notIn: ['restricted', 'banned'] } },
       data: { trustLevel: 'restricted' },
     });
     expect(tx.fraudFlag.create).toHaveBeenCalledWith({

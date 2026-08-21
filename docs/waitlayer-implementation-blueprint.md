@@ -9,6 +9,18 @@
 **Document status:** Implementation-ready for Release 0.x  
 **Commercial status:** No real advertiser billing, withdrawable earnings, or payouts are authorized by this plan.
 
+> **Verification-status marker — historical audit basis, current strategy.**
+> The source audit and verification limitations in this document are dated
+> 2026-08-04 and must not be read as the current repository state. The current
+> live register is [`AGENTS.md`](../AGENTS.md); the current operator backlog is
+> tracked in GitHub issues #39, #40, #41, and #45. As of 2026-08-19, the exact
+> branch SHA `99703ab` passed the complete CI matrix in
+> [run 32252613390](https://github.com/Harshit-sehgal/promptpay/actions/runs/32252613390),
+> branch protection is API-verified, and the Vercel preview still fails as an
+> external deployment/configuration check. The architecture, gap taxonomy, and
+> release sequencing below remain planning guidance; their dated baseline
+> claims require re-verification before reuse.
+
 ---
 
 ## 1. Purpose of this document
@@ -59,7 +71,7 @@ The most important inspected sources were:
 - `.github/workflows/ci.yml`
 - `.github/workflows/staging.yml`
 - legal and policy pages under `apps/web/src/app`
-- `docs/ops/remaining-open-items.md`
+- `docs/ops/deployment-checklist.md`
 
 Current official lifecycle-hook documentation for Claude Code and Codex, and current VS Code shell-integration APIs, were also checked because those external interfaces can change.
 
@@ -467,18 +479,18 @@ Still disabled:
 
 The following current components should be extended rather than replaced:
 
-| Component | Current strength | Recommended treatment |
-|---|---|---|
-| NestJS API | mature auth, role, ledger, fraud, payout, audit and runtime modules | retain |
-| Next.js web | developer/advertiser/admin surfaces already exist | make mode-aware and sandbox-aware |
-| Prisma/Postgres | strong relational and accounting foundation | add agent-domain tables additively |
-| Redis | rate limiting and runtime invalidation | retain; add queue/lock use only where justified |
-| RuntimeConfig | fail-closed financial switches | retain and extend |
-| WaitAttestation | sound future financial boundary | retain; do not fake for sandbox |
-| CLI | authentication, device registration, wrapper, signing | evolve into integration manager and local bridge client |
-| VS Code extension | consent, UX, focus/task signals, ad panel | evolve into attention adapter and presentation client |
-| CI | unusually comprehensive for project maturity | add protocol, adapter, and agent-beta gates |
-| Ledgers | robust idempotency and reconciliation | reuse in isolated sandbox with explicit test currency/provider |
+| Component         | Current strength                                                    | Recommended treatment                                          |
+| ----------------- | ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| NestJS API        | mature auth, role, ledger, fraud, payout, audit and runtime modules | retain                                                         |
+| Next.js web       | developer/advertiser/admin surfaces already exist                   | make mode-aware and sandbox-aware                              |
+| Prisma/Postgres   | strong relational and accounting foundation                         | add agent-domain tables additively                             |
+| Redis             | rate limiting and runtime invalidation                              | retain; add queue/lock use only where justified                |
+| RuntimeConfig     | fail-closed financial switches                                      | retain and extend                                              |
+| WaitAttestation   | sound future financial boundary                                     | retain; do not fake for sandbox                                |
+| CLI               | authentication, device registration, wrapper, signing               | evolve into integration manager and local bridge client        |
+| VS Code extension | consent, UX, focus/task signals, ad panel                           | evolve into attention adapter and presentation client          |
+| CI                | unusually comprehensive for project maturity                        | add protocol, adapter, and agent-beta gates                    |
+| Ledgers           | robust idempotency and reconciliation                               | reuse in isolated sandbox with explicit test currency/provider |
 
 ### 6.2 Components that are currently too coarse
 
@@ -1062,20 +1074,10 @@ interface AgentLifecycleEventV1 {
   installationId: string;
   deviceId?: string;
 
-  provider:
-    | 'claude_code'
-    | 'codex_cli'
-    | 'aider'
-    | 'generic_wrapper'
-    | 'vscode'
-    | 'unknown';
+  provider: 'claude_code' | 'codex_cli' | 'aider' | 'generic_wrapper' | 'vscode' | 'unknown';
 
   integrationMode:
-    | 'native_hook'
-    | 'native_plugin'
-    | 'wrapper'
-    | 'vscode_observation'
-    | 'heuristic_shadow';
+    'native_hook' | 'native_plugin' | 'wrapper' | 'vscode_observation' | 'heuristic_shadow';
 
   providerSessionHash?: string;
   providerTurnHash?: string;
@@ -2298,15 +2300,15 @@ Recommended steps:
 
 Display:
 
-| State | Meaning |
-|---|---|
-| Native | lifecycle hooks active |
-| Wrapper | process lifecycle only |
-| Observed | VS Code/OS corroboration |
-| Shadow | heuristic local-only |
+| State    | Meaning                                  |
+| -------- | ---------------------------------------- |
+| Native   | lifecycle hooks active                   |
+| Wrapper  | process lifecycle only                   |
+| Observed | VS Code/OS corroboration                 |
+| Shadow   | heuristic local-only                     |
 | Degraded | integration installed but events missing |
-| Disabled | user/operator disabled |
-| Attested | reserved for future independent proof |
+| Disabled | user/operator disabled                   |
+| Attested | reserved for future independent proof    |
 
 Do not label a native hook as “verified” in the financial sense.
 
@@ -2850,28 +2852,28 @@ Before human alpha:
 
 ## 21. Risk register
 
-| Risk | Likelihood | Impact | Mitigation | Detection | Release gate |
-|---|---:|---:|---|---|---|
-| provider hook API changes | medium | high | version adapters, golden fixtures, capability matrix | canary failures | 0.3+ |
-| raw prompt/code leakage | medium | critical | local allowlist sanitizer, forbidden scanner | planted-secret tests | every release |
-| hook blocks agent | medium | high | local-only hot path, timeout, non-blocking output | latency/error metrics | 0.3 |
-| duplicate VS Code/terminal session | high | high | local correlation and source precedence | duplicate scenario | 0.4 |
-| fake events | high | critical for money | non-financial telemetry, attestation later | fraud scenarios | paid launch |
-| sandbox/production crossover | low | critical | separate infra, markers, startup guards | startup tests | 0.5 |
-| misleading earnings language | medium | high | mode-aware copy and XTS | screenshot/text scan | 0.5 |
-| agent beta overstates human readiness | high | high | mandatory human alpha | governance review | 0.9 |
-| background work monetized as attention | medium | critical | separate processing/attention/opportunity models | invariant test | 0.5 |
-| multi-agent reward multiplication | high | critical | one attention owner, opportunity dedup | fraud scenarios | 0.7 |
-| local queue privacy exposure | medium | high | sanitized-only queue, permissions, TTL | local inspection test | 0.3 |
-| autonomous test issue spam | high | medium | deterministic auto-create only, triage queue | duplicate rate | 0.8 |
-| live-agent test cost runaway | medium | medium/high | budgets, timeouts, isolated triggers | spend alerts | 0.8 |
-| Vercel/deployment drift | current | medium | choose authoritative host and gate | deployment smoke | 0.1 |
-| legal entity/contact inaccuracy | current | high externally | correct before external users | legal checklist | 0.9 |
-| extension marketplace rejection | unknown | high | policy review, signing, beta channel | package review | 0.9 |
-| device fingerprint privacy | current | medium/high | random installation ID migration | payload audit | 0.3 |
-| ad manipulates failure/permission | medium | high | defer, strict UX policy | human review | later |
-| provider outage | medium | medium | degraded mode, wrapper fallback | health status | 0.3 |
-| missing shell integration | high in some environments | low/medium | capability downgrade | client telemetry | 0.4 |
+| Risk                                   |                Likelihood |             Impact | Mitigation                                           | Detection             | Release gate  |
+| -------------------------------------- | ------------------------: | -----------------: | ---------------------------------------------------- | --------------------- | ------------- |
+| provider hook API changes              |                    medium |               high | version adapters, golden fixtures, capability matrix | canary failures       | 0.3+          |
+| raw prompt/code leakage                |                    medium |           critical | local allowlist sanitizer, forbidden scanner         | planted-secret tests  | every release |
+| hook blocks agent                      |                    medium |               high | local-only hot path, timeout, non-blocking output    | latency/error metrics | 0.3           |
+| duplicate VS Code/terminal session     |                      high |               high | local correlation and source precedence              | duplicate scenario    | 0.4           |
+| fake events                            |                      high | critical for money | non-financial telemetry, attestation later           | fraud scenarios       | paid launch   |
+| sandbox/production crossover           |                       low |           critical | separate infra, markers, startup guards              | startup tests         | 0.5           |
+| misleading earnings language           |                    medium |               high | mode-aware copy and XTS                              | screenshot/text scan  | 0.5           |
+| agent beta overstates human readiness  |                      high |               high | mandatory human alpha                                | governance review     | 0.9           |
+| background work monetized as attention |                    medium |           critical | separate processing/attention/opportunity models     | invariant test        | 0.5           |
+| multi-agent reward multiplication      |                      high |           critical | one attention owner, opportunity dedup               | fraud scenarios       | 0.7           |
+| local queue privacy exposure           |                    medium |               high | sanitized-only queue, permissions, TTL               | local inspection test | 0.3           |
+| autonomous test issue spam             |                      high |             medium | deterministic auto-create only, triage queue         | duplicate rate        | 0.8           |
+| live-agent test cost runaway           |                    medium |        medium/high | budgets, timeouts, isolated triggers                 | spend alerts          | 0.8           |
+| Vercel/deployment drift                |                   current |             medium | choose authoritative host and gate                   | deployment smoke      | 0.1           |
+| legal entity/contact inaccuracy        |                   current |    high externally | correct before external users                        | legal checklist       | 0.9           |
+| extension marketplace rejection        |                   unknown |               high | policy review, signing, beta channel                 | package review        | 0.9           |
+| device fingerprint privacy             |                   current |        medium/high | random installation ID migration                     | payload audit         | 0.3           |
+| ad manipulates failure/permission      |                    medium |               high | defer, strict UX policy                              | human review          | later         |
+| provider outage                        |                    medium |             medium | degraded mode, wrapper fallback                      | health status         | 0.3           |
+| missing shell integration              | high in some environments |         low/medium | capability downgrade                                 | client telemetry      | 0.4           |
 
 ---
 
@@ -3087,7 +3089,6 @@ It also closes the most dangerous conceptual gap:
 The next action should be to open the Release 0.1 and Release 0.2 issues and execute the first implementation batch in Section 19.
 
 ---
-
 
 ## 27. Final refinement review
 
@@ -3392,29 +3393,29 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 
 ## Appendix E — Repository evidence map
 
-| Source path | Material finding used in this plan |
-|---|---|
-| `package.json` | WaitLayer monorepo, Node/pnpm versions, gate scripts |
-| `README.md` | telemetry-only beta, no rewards, current CLI wrapper behavior |
-| `AGENTS.md` | previous source-audit closure, gate history, destructive-test warning, remaining external work |
-| `docs/ops/remaining-open-items.md` | provider, credentials, branch protection, CI, legal, and infra operator items |
-| `packages/db/prisma/schema.prisma` | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
-| `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches |
-| `apps/api/src/extension/extension-wait.trait.ts` | wait start/end ingestion, signed evidence, server classification, duration and idempotency |
-| `apps/api/src/extension/extension-ad.trait.ts` | attestation and launch-mode requirements before reward-bearing ad serving |
-| `apps/cli/src/commands/run.ts` | wrapper observes process start/exit but not rich lifecycle |
-| `apps/cli/src/lib/api-client.ts` | signed events, device registration, current host-derived fingerprint, wait/ad API shape |
-| `apps/vscode-extension/src/detector-adapters.ts` | provider names are heuristic mappings, not live integrations |
-| `apps/vscode-extension/src/wait-detector.ts` | inactivity/task/terminal/window heuristics and one-active-wait model |
-| `apps/vscode-extension/src/extension.ts` | consent, attestation, ad panel, wait start/end coupling, false-positive feedback |
-| `apps/vscode-extension/package.json` | version, provisional publisher, UNLICENSED state, production domain defaults |
-| `.env.example` | current deployment, provider, privacy, attestation, and launch configuration surface |
-| `.github/workflows/ci.yml` | current CI/security/migration/package/Docker coverage |
-| `.github/workflows/staging.yml` | attestation-dependent staging financial smoke and deployment requirements |
-| `apps/web/src/app/contact/page.tsx` | hardcoded contacts and support-response promise |
-| `apps/web/src/app/terms/page.tsx` | beta wording, split, and 30-day hold |
-| `apps/web/src/app/payout-policy/page.tsx` | planned policy and inconsistent three-day hold statement |
-| `docs/legal/gdpr-dpa.md` | unverified legal-entity name and inconsistent privacy contact domain |
+| Source path                                             | Material finding used in this plan                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `package.json`                                          | WaitLayer monorepo, Node/pnpm versions, gate scripts                                              |
+| `README.md`                                             | telemetry-only beta, no rewards, current CLI wrapper behavior                                     |
+| `AGENTS.md`                                             | previous source-audit closure, gate history, destructive-test warning, remaining external work    |
+| `docs/ops/deployment-checklist.md`                      | cold-start, bootstrap, migration, health, and rollback deployment procedure                       |
+| `packages/db/prisma/schema.prisma`                      | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
+| `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches                                                        |
+| `apps/api/src/extension/extension-wait.trait.ts`        | wait start/end ingestion, signed evidence, server classification, duration and idempotency        |
+| `apps/api/src/extension/extension-ad.trait.ts`          | attestation and launch-mode requirements before reward-bearing ad serving                         |
+| `apps/cli/src/commands/run.ts`                          | wrapper observes process start/exit but not rich lifecycle                                        |
+| `apps/cli/src/lib/api-client.ts`                        | signed events, device registration, current host-derived fingerprint, wait/ad API shape           |
+| `apps/vscode-extension/src/detector-adapters.ts`        | provider names are heuristic mappings, not live integrations                                      |
+| `apps/vscode-extension/src/wait-detector.ts`            | inactivity/task/terminal/window heuristics and one-active-wait model                              |
+| `apps/vscode-extension/src/extension.ts`                | consent, attestation, ad panel, wait start/end coupling, false-positive feedback                  |
+| `apps/vscode-extension/package.json`                    | version, provisional publisher, UNLICENSED state, production domain defaults                      |
+| `.env.example`                                          | current deployment, provider, privacy, attestation, and launch configuration surface              |
+| `.github/workflows/ci.yml`                              | current CI/security/migration/package/Docker coverage                                             |
+| `.github/workflows/staging.yml`                         | attestation-dependent staging financial smoke and deployment requirements                         |
+| `apps/web/src/app/contact/page.tsx`                     | hardcoded contacts and support-response promise                                                   |
+| `apps/web/src/app/terms/page.tsx`                       | beta wording, split, and 30-day hold                                                              |
+| `apps/web/src/app/payout-policy/page.tsx`               | planned policy and inconsistent three-day hold statement                                          |
+| `docs/legal/gdpr-dpa.md`                                | unverified legal-entity name and inconsistent privacy contact domain                              |
 
 ### External interfaces reviewed on 4 August 2026
 
