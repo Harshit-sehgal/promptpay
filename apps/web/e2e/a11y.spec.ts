@@ -128,15 +128,45 @@ test('skip link bypasses navigation and enters the page-local main landmark', as
   await expect(main.getByRole('link').first()).toBeFocused();
 });
 
-test('homepage calculator sliders have accessible names in both modes', async ({ page }) => {
+test('homepage planner controls have accessible names in both modes', async ({ page }) => {
   await page.goto('/');
 
-  for (const name of ['Daily AI Queries', 'Ad Display Frequency', 'Average Campaign CPM']) {
-    await expect(page.getByRole('slider', { name })).toBeVisible();
+  // Developer mode is a preset radiogroup plus two steppers and a switch. It
+  // used to be three sliders whose output never changed; the names moved with
+  // the controls.
+  await expect(page.getByRole('radiogroup', { name: 'Typical day' })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Typical' })).toBeVisible();
+
+  for (const name of ['Eligible waits per day', 'Units per hour you allow']) {
+    await expect(
+      page.getByRole('button', { name: `Decrease ${name.toLowerCase()}` }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: `Increase ${name.toLowerCase()}` }),
+    ).toBeVisible();
   }
 
-  await page.getByRole('button', { name: 'For Advertisers' }).click();
+  await expect(page.getByRole('switch', { name: 'Quiet hours' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'For advertisers' }).click();
   for (const name of ['Campaign Budget', 'Target CPM', 'Expected Click-Through Rate (CTR)']) {
     await expect(page.getByRole('slider', { name })).toBeVisible();
   }
+});
+
+test('homepage planner recomputes instead of showing a fixed sentence', async ({ page }) => {
+  await page.goto('/');
+
+  const output = page.getByText('verified signals a day').locator('..');
+  const before = await output.innerText();
+
+  // The regression this guards: the previous component's three sliders left the
+  // output identical no matter what was moved.
+  await page.getByRole('radio', { name: 'Heavy' }).click();
+  await expect(output).not.toHaveText(before);
+
+  // The platform's own ceiling must bind, not the visitor's imagination.
+  await expect(
+    page.getByText(/eligible waits would pass unused|nothing is turned away/),
+  ).toBeVisible();
 });
