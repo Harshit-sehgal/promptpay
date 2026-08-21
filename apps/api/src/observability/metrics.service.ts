@@ -127,7 +127,12 @@ export class MetricsService {
       process.env.PROMETHEUS_INSTANCE || process.env.POD_NAME || process.env.HOSTNAME || 'api';
     const lines: string[] = [];
     const label = `instance="${instance}"`;
-    const esc = (s: string) => s.replace(/"/g, '\\"');
+    // Prometheus label values escape three characters, and the backslash MUST
+    // go first — escaping quotes before backslashes would double-process the
+    // backslashes this step introduces. Escaping only quotes (the previous
+    // behaviour) let a value containing `\` emit a malformed exposition line
+    // that breaks the scrape for every metric after it.
+    const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
     // Convert an internal key like `ad_served{currency=USD}` into a
     // Prometheus-valid `ad_served{currency="USD",instance="..."}`.
     const promName = (key: string): { name: string; labels: string } => {
