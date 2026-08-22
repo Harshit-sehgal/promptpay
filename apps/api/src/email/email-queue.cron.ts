@@ -40,6 +40,17 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
   private intervalId?: NodeJS.Timeout;
   private readonly LEASE_TTL_MS = 55_000;
   private readonly BATCH_SIZE = 50;
+  /**
+   * How long a claimed row is hidden from other runners while this process
+   * sends it.
+   *
+   * Must exceed the worst case for a whole batch — BATCH_SIZE (50) sends at up
+   * to EMAIL_PROVIDER_TIMEOUT_MS (10s) each is ~500s — so a slow provider
+   * cannot let a second replica pick up a row this one is still sending. If
+   * the process dies mid-batch the claim expires and the rows return, which
+   * costs a bounded delay rather than a duplicate security email.
+   */
+  private readonly CLAIM_LEASE_MS = 15 * 60_000;
   private readonly MAX_RETRIES = 8;
   private readonly INTERVAL_MS = 60_000;
   // Written to `lastError` when a row exhausts retries (or is unprocessable),
@@ -104,18 +115,33 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
       this.logger.log(`Purged ${purged} expired email queue row(s)`);
     }
 
-    // SELECT ... FOR UPDATE SKIP LOCKED only holds its row locks for the life
-    // of the containing transaction — under autocommit the lock is released
-    // the instant the SELECT returns, so two replicas could each select and
-    // retry the same row. The per-row try/send/delete/update must run inside
-    // ONE $transaction so the SKIP LOCKED lease stays held until every row in
-    // the batch is resolved. The cron lease above prevents duplicate runs;
-    // this transaction is the row-level duplicate-prevention barrier the
-    // doc-comment relies on. The network send happens inside the tx by
-    // design: the batch is small (BATCH_SIZE) and the alternative (duplicate
-    // password-reset / verify emails sent twice) is worse than a slightly
-    // longer-held lock.
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    // Claim, then send, then record — three short steps instead of one long
+    // transaction.
+    //
+    // The send used to happen INSIDE the batch transaction, to hold the
+    // SKIP LOCKED lease so two replicas could not send the same email twice.
+    // The guarantee was right; the shape was not. Prisma's interactive
+    // transaction timeout defaults to 5s, and this batch is up to BATCH_SIZE
+    // (50) sequential provider calls of up to EMAIL_PROVIDER_TIMEOUT_MS (10s)
+    // each — 500s of network I/O against a 5s budget. Even at 100ms per send,
+    // 50 sends reaches the limit exactly.
+    //
+    // Observed on the live staging host: "A query cannot be executed on an
+    // expired transaction. The timeout for this transaction was 5000 ms,
+    // however 5800 ms passed". The expiry throws on the next query inside the
+    // tx, which lands in the per-row catch and is logged as "Dropping
+    // unprocessable queued email" — misleading, because the transaction then
+    // rolls back and nothing is dropped, recorded, or delivered. The run
+    // repeats every minute and fails identically: once enough rows are due,
+    // THE QUEUE CAN NEVER DRAIN, and it carries password-reset and
+    // email-verification mail.
+    //
+    // Claiming preserves the duplicate-prevention the transaction existed for:
+    // the claim pushes `next_retry_at` beyond now, so a concurrent runner's
+    // `next_retry_at <= NOW()` filter no longer sees the row. If this process
+    // dies mid-batch the claim simply expires and the rows come back — a
+    // bounded delay instead of a permanent stall.
+    const batch = await this.prisma.$transaction(async (tx) => {
       // Select an EXPLICIT aliased column list, never `SELECT *`.
       // `retryCount` is `@map("retry_count")`, so `SELECT *` returns
       // `retry_count` and `job.retryCount` was `undefined` at runtime — while
@@ -126,7 +152,7 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
       // Date, and the failure-path `update()` then aborted the whole batch
       // transaction — one undeliverable email stopped the entire queue,
       // including password-reset and email-verification mail.
-      const batch = (await tx.$queryRaw<EmailQueueRow[]>(
+      const rows = (await tx.$queryRaw<EmailQueueRow[]>(
         Prisma.sql`
           SELECT
             "id",
@@ -143,82 +169,94 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
         `,
       )) as EmailQueueRow[];
 
-      let delivered = 0;
-      let stillFailing = 0;
-      let permanentFailures = 0;
+      if (rows.length > 0) {
+        await tx.emailQueue.updateMany({
+          where: { id: { in: rows.map((row) => row.id) } },
+          data: { nextRetryAt: new Date(Date.now() + this.CLAIM_LEASE_MS) },
+        });
+      }
+      return rows;
+    });
 
-      for (const job of batch) {
-        try {
-          // Decrypt at-rest payloads before handing them to the email provider.
-          // A corrupt ciphertext (bad `v1:` prefix, GCM auth-tag mismatch after
-          // a key rotation, truncated column) throws here — wrap the whole
-          // per-row block so one poison row cannot roll back the batch tx and
-          // re-send the siblings that already succeeded this tick.
-          const html = this.queue.decrypt(job.html);
-          const text = job.text ? this.queue.decrypt(job.text) : undefined;
-          const result = await this.email.send({
-            to: job.to,
-            subject: job.subject,
-            html,
-            text,
-          });
+    let delivered = 0;
+    let stillFailing = 0;
+    let permanentFailures = 0;
 
-          if (result.delivered) {
-            await tx.emailQueue.delete({ where: { id: job.id } });
-            delivered++;
-            continue;
-          }
+    for (const job of batch) {
+      try {
+        // Decrypt at-rest payloads before handing them to the email provider.
+        // A corrupt ciphertext (bad `v1:` prefix, GCM auth-tag mismatch after
+        // a key rotation, truncated column) throws here — the per-row wrapper
+        // keeps one poison row from stopping its siblings.
+        const html = this.queue.decrypt(job.html);
+        const text = job.text ? this.queue.decrypt(job.text) : undefined;
+        const result = await this.email.send({
+          to: job.to,
+          subject: job.subject,
+          html,
+          text,
+        });
 
-          const retryCount = job.retryCount + 1;
-          if (retryCount > this.MAX_RETRIES) {
-            const recipientRef = privacyPseudonym(
-              job.to.trim().toLowerCase(),
-              'email-recipient',
-            ).slice(0, 16);
-            this.logger.warn(
-              `Giving up on queued email ${job.id} to ${recipientRef} after ${this.MAX_RETRIES} retries`,
-            );
-            // Keep the row with a terminal marker so ops can forensically
-            // inspect why a dropped security email failed — deleting silently
-            // loses that signal. Park the row out of the retry window until
-            // the `expiresAt < now()` purge eventually removes it.
-            await tx.emailQueue.update({
-              where: { id: job.id },
-              data: {
-                retryCount,
-                nextRetryAt: new Date(Date.now() + this.PERMANENT_FAILURE_PARK_MS),
-                lastError: this.PERMANENT_FAILURE_MARKER,
-              },
-            });
-            permanentFailures++;
-            continue;
-          }
+        if (result.delivered) {
+          await this.prisma.emailQueue.delete({ where: { id: job.id } });
+          delivered++;
+          continue;
+        }
 
-          const delayMs = Math.min(2 ** retryCount, 2 ** 8) * 60_000;
-          await tx.emailQueue.update({
-            where: { id: job.id },
-            data: {
-              retryCount,
-              nextRetryAt: new Date(Date.now() + delayMs),
-              lastError: `delivery_failed (${result.driver})`,
-            },
-          });
-          stillFailing++;
-        } catch (err: unknown) {
-          // Per-row isolation: a thrown decrypt()/send() must not abort the
-          // batch transaction (which would roll back already-deleted rows and
-          // cause them to be re-sent next tick). Mark the row a permanent
-          // failure and park it out of the retry window; the batch continues.
+        const retryCount = job.retryCount + 1;
+        // A permanent rejection will refuse identically on every retry, so it
+        // is terminal now rather than after MAX_RETRIES of backoff.
+        if (result.permanent || retryCount > this.MAX_RETRIES) {
           const recipientRef = privacyPseudonym(
             job.to.trim().toLowerCase(),
             'email-recipient',
           ).slice(0, 16);
           this.logger.warn(
-            `Dropping unprocessable queued email ${job.id} to ${recipientRef}: ${
-              err instanceof Error ? err.name : 'UnknownError'
-            }`,
+            result.permanent
+              ? `Permanently rejected queued email ${job.id} to ${recipientRef} (driver=${result.driver}) — not retrying; check sender domain verification`
+              : `Giving up on queued email ${job.id} to ${recipientRef} after ${this.MAX_RETRIES} retries`,
           );
-          await tx.emailQueue.update({
+          // Keep the row with a terminal marker so ops can forensically
+          // inspect why a dropped security email failed — deleting silently
+          // loses that signal. Park the row out of the retry window until
+          // the `expiresAt < now()` purge eventually removes it.
+          await this.prisma.emailQueue.update({
+            where: { id: job.id },
+            data: {
+              retryCount,
+              nextRetryAt: new Date(Date.now() + this.PERMANENT_FAILURE_PARK_MS),
+              lastError: this.PERMANENT_FAILURE_MARKER,
+            },
+          });
+          permanentFailures++;
+          continue;
+        }
+
+        const delayMs = Math.min(2 ** retryCount, 2 ** 8) * 60_000;
+        await this.prisma.emailQueue.update({
+          where: { id: job.id },
+          data: {
+            retryCount,
+            nextRetryAt: new Date(Date.now() + delayMs),
+            lastError: `delivery_failed (${result.driver})`,
+          },
+        });
+        stillFailing++;
+      } catch (err: unknown) {
+        // Per-row isolation: a thrown decrypt()/send() must not stop the rest
+        // of the batch. Mark the row a permanent failure and park it out of
+        // the retry window; the batch continues.
+        const recipientRef = privacyPseudonym(job.to.trim().toLowerCase(), 'email-recipient').slice(
+          0,
+          16,
+        );
+        this.logger.warn(
+          `Dropping unprocessable queued email ${job.id} to ${recipientRef}: ${
+            err instanceof Error ? err.name : 'UnknownError'
+          }`,
+        );
+        try {
+          await this.prisma.emailQueue.update({
             where: { id: job.id },
             data: {
               retryCount: job.retryCount + 1,
@@ -226,17 +264,20 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
               lastError: this.PERMANENT_FAILURE_MARKER,
             },
           });
-          permanentFailures++;
+        } catch (parkErr: unknown) {
+          // The row keeps its claim lease and comes back later; losing the
+          // park must not abort the remaining rows.
+          this.logger.error(
+            `Failed to park unprocessable email ${job.id}: ${
+              parkErr instanceof Error ? parkErr.name : 'UnknownError'
+            }`,
+          );
         }
+        permanentFailures++;
       }
+    }
 
-      return { processed: batch.length, delivered, stillFailing, permanentFailures };
-    });
-
-    const processed = outcome.processed;
-    const delivered = outcome.delivered;
-    const stillFailing = outcome.stillFailing;
-    const permanentFailures = outcome.permanentFailures;
+    const processed = batch.length;
 
     if (processed > 0) {
       this.logger.log(
