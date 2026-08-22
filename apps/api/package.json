@@ -52,6 +52,8 @@
     "stripe": "^22.4.0"
   },
   "devDependencies": {
+    "@ateva/eslint-config": "workspace:*",
+    "@ateva/wait-attestation-bridge": "workspace:*",
     "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.28",
@@ -62,7 +64,6 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
     "@vitest/coverage-v8": "^4.1.10",
-    "@ateva/eslint-config": "workspace:*",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
