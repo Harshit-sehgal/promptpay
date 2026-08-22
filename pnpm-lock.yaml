@@ -151,6 +151,9 @@ importers:
       '@ateva/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
+      '@ateva/wait-attestation-bridge':
+        specifier: workspace:*
+        version: link:../../tools/wait-attestation-bridge
       '@nestjs/cli':
         specifier: ^11.0.24
         version: 11.0.24(@types/node@26.1.2)(esbuild@0.28.1)(prettier@3.9.6)
