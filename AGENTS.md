@@ -22,6 +22,78 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-22 — four bugs that only a live system could show
+
+The API reached a real database for the first time on 2026-08-22. Everything
+below was found by running against it, not by reading code, and none of it was
+reachable from any test that existed.
+
+### 1. Every signed-in page was unreachable (highest severity)
+
+`platform-health` was `ok`, the database connected, login returned `200` with
+all three `__Host-` cookies, and `/api/auth/me` returned `200` — while **every
+protected page 307'd back to `/auth/login`**.
+
+`apps/web/src/middleware.ts` verifies the access token at the edge with its own
+`JWT_PUBLIC_KEY`, **inlined at build time**. Vercel's copy was 37 days old and
+marked _Sensitive_; the host signed with a different key. Ruled out everything
+else first — `iss`, `aud`, `typ`, `kid`, `sub`, `jti` all satisfy the
+middleware's checks, the `__Host-access_token` cookie name is read correctly,
+escaped `\n` is unescaped — and confirmed the token's signature verifies
+against the host key. Only the key could be wrong.
+
+Fixed by replacing the Vercel value and forcing a NEW BUILD (a redeploy reuses
+the old bundle; Edge inlines env vars). `/developer` went `307` → `200` and the
+signup-flow E2E went to 3/3 against production. Diagnosis and the two-request
+test are in `docs/ops/oci-api-deployment.md`.
+
+### 2. The email queue could never drain
+
+`EmailQueueCron` ran up to BATCH_SIZE (50) sequential provider calls of up to
+`EMAIL_PROVIDER_TIMEOUT_MS` (10s) **inside one Prisma interactive transaction**,
+whose default timeout is 5s. Live: "A query cannot be executed on an expired
+transaction ... 5800 ms passed". The expiry throws on the next query, lands in
+the per-row catch, is logged as "Dropping unprocessable queued email" — then the
+transaction rolls back, so nothing is dropped, recorded, or delivered. It
+repeated every minute: 99 failed runs, 800 provider retries.
+
+The send was inside the transaction deliberately, to hold the SKIP LOCKED lease
+against duplicate sends. The guarantee was right, the shape was not. Replaced
+with claim → send → record: a short transaction claims the batch by pushing
+`next_retry_at` past now (so a concurrent runner's `<= NOW()` filter stops
+matching), sends happen outside any transaction, each outcome is its own small
+write.
+
+**This also explains the API's intermittent instability.** 45 × "Readiness:
+database unreachable", "Connection terminated due to connection timeout" and
+"Unable to start a transaction in the given time" all cluster in the same
+minutes as the queue failures — long transactions holding pooled connections
+while making network calls. A 500 seen on `delete-account` fell in that window
+too; the endpoint itself returns 200.
+
+### 3. Permanent provider rejections retried for 24h
+
+`EmailSendResult` could not distinguish "the provider is down" from "the
+provider refused". An unverified sender domain returns 403 identically every
+time, and the queue backed off against it for a day while nothing surfaced the
+misconfiguration. 4xx is now permanent (408/429 excepted — both invite a
+retry), 5xx transient, and a permanent rejection is neither queued nor retried.
+
+### 4. A test that could not pass against production
+
+`smoke.spec.ts` tolerated the anonymous auth bootstrap by matching the console
+string `"401 (Unauthorized)"`. HTTP/2 removed the reason phrase, so Chrome logs
+`401 ()` against Vercel and `401 (Unauthorized)` against the HTTP/1.1 dev
+server. The assertion passed in CI and failed against the deployed site — the
+one environment it most needed to hold in. Now matches the status code.
+
+- Verification: `pnpm typecheck` 17/17, `pnpm lint` 11/11, API 1755/1755
+  including the full integration suite against a real database, a11y E2E 54/54
+  and signup-flow 3/3 **against the live deployment**, and live probes
+  confirming rate limiting (5×401 → 429), CORS returning the configured origin,
+  webhooks failing closed (503), prohibited data fields rejected flat and
+  nested, and no Swagger/metrics exposed.
+
 ## Resolved 2026-08-22 — the site said there was no revenue share; there always was
 
 Operator decision (2026-08-22): participation is compensated at **60% of the
