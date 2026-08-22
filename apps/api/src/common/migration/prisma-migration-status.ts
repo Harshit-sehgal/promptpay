@@ -75,15 +75,33 @@ function execFileAsync(
 }
 
 /**
- * Build a Prisma CLI runner. Tries `prisma` directly (global install in the
- * Docker runtime image, on PATH) and then `pnpm --filter @ateva/db exec
- * prisma` (local dev + CI). The first strategy that launches wins; non-zero
- * exits are surfaced as `{ code }` rather than thrown, so callers decide how to
- * react. `cwd` is set to the db package directory so Prisma finds
- * `prisma.config.ts` regardless of where the host process was started.
+ * Build a Prisma CLI runner.
+ *
+ * Strategies, in order:
+ *
+ *  1. `<dbDir>/node_modules/.bin/prisma` — the production Docker image. This is
+ *     the only one that works there, and it used to be missing: the list began
+ *     at `prisma` on PATH, described in a comment as "global install in the
+ *     Docker runtime image". That global install was removed from the
+ *     `Dockerfile` (it resolved `@prisma/dev` against an unreachable registry)
+ *     and prisma became an ordinary workspace dependency of `packages/db` — the
+ *     entrypoint has run `./node_modules/.bin/prisma migrate deploy` ever
+ *     since. This resolver was never updated to match, so on the first real
+ *     production boot every strategy ENOENT'd and the drift check threw. It
+ *     fails closed, and the throw is unhandled, so the container died *after*
+ *     applying all 97 migrations — the most confusing possible place to stop.
+ *  2. `prisma` on PATH — a global or hoisted install.
+ *  3. `pnpm --filter @ateva/db exec prisma` — local dev and CI.
+ *
+ * The first strategy that launches wins; non-zero exits are surfaced as
+ * `{ code }` rather than thrown, so callers decide how to react. `cwd` is the db
+ * package directory so Prisma finds `prisma.config.ts` regardless of where the
+ * host process was started.
  */
 export function createPrismaCli(cwd: string = resolveDbPackageDir()): PrismaCli {
-  const strategies: Array<() => { cmd: string; args: string[] }> = [
+  const localBin = path.join(cwd, 'node_modules', '.bin', 'prisma');
+  const strategies: Array<() => { cmd: string; args: string[] } | null> = [
+    () => (existsSync(localBin) ? { cmd: localBin, args: [] } : null),
     () => ({ cmd: 'prisma', args: [] }),
     () => ({ cmd: 'pnpm', args: ['--filter', '@ateva/db', 'exec', 'prisma'] }),
   ];
@@ -92,7 +110,9 @@ export function createPrismaCli(cwd: string = resolveDbPackageDir()): PrismaCli 
     async run(args: string[]) {
       let lastErr: unknown;
       for (const make of strategies) {
-        const { cmd, args: prefix } = make();
+        const strategy = make();
+        if (!strategy) continue;
+        const { cmd, args: prefix } = strategy;
         try {
           return await execFileAsync(cmd, [...prefix, ...args], cwd);
         } catch (err) {
@@ -101,7 +121,7 @@ export function createPrismaCli(cwd: string = resolveDbPackageDir()): PrismaCli 
         }
       }
       throw new Error(
-        '[migration-validation] Could not locate the Prisma CLI (tried `prisma` on PATH and `pnpm --filter @ateva/db exec prisma`).',
+        `[migration-validation] Could not locate the Prisma CLI (tried ${localBin}, \`prisma\` on PATH, and \`pnpm --filter @ateva/db exec prisma\`).`,
         { cause: lastErr },
       );
     },

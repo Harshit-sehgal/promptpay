@@ -101,7 +101,16 @@ case "$NAME" in
     [[ "$VALUE" =~ ^re_[A-Za-z0-9_-]+$ ]] || { echo "refusing: a Resend key looks like re_..." >&2; exit 1; }
     ;;
   EMAIL_FROM)
-    [[ "$VALUE" =~ [^@[:space:]]+@[^@[:space:]]+\.[A-Za-z]{2,} ]] || { echo "refusing: no email address found" >&2; exit 1; }
+    # The API validates this with `z.email()`, which rejects the RFC display
+    # form `Name <addr>`. Requiring a bare address here turns a container that
+    # boots, migrates, and only then dies on config validation into a refusal
+    # that costs nothing.
+    # The pattern lives in a variable: bash cannot parse `<>` inline inside [[ =~ ]].
+    email_re='^[^@[:space:]<>]+@[^@[:space:]<>]+\.[A-Za-z]{2,}$'
+    [[ "$VALUE" =~ $email_re ]] || {
+      echo "refusing: EMAIL_FROM must be a bare address (no \"Name <addr>\" form — the API uses z.email())" >&2
+      exit 1
+    }
     ;;
 esac
 
