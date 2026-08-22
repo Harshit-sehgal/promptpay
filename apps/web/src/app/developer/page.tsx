@@ -572,7 +572,7 @@ export default function DeveloperDashboard() {
                 {
                   label: 'Set independently',
                   detail:
-                    'If rewards launch, Ateva publishes a rate for verified eligible activity. It is not a percentage of what an advertiser pays.',
+                    "If rewards launch, the rate is 60% of the qualifying bid for a verified impression. Ateva owes that amount; it is not a claim on the advertiser's payment, which settles to Ateva in full.",
                 },
                 {
                   label: 'Paid separately',

@@ -23,7 +23,7 @@ const FAQS: FAQItem[] = [
   {
     question: 'How is participant compensation determined?',
     answer:
-      'Rewards are disabled in the private beta. If they launch, Ateva will publish a reward schedule for verified eligible activity. That rate is set independently by Ateva and is not a percentage of any individual advertiser payment: an advertiser transaction settles in full to Ateva, and participant compensation is paid separately through an approved fiat payout provider.',
+      'Rewards are disabled in the private beta. If they launch, the rate is 60% of the qualifying bid for a verified impression, with Ateva retaining 40%. That amount is owed by Ateva rather than being a claim on any individual advertiser payment: an advertiser transaction settles in full to Ateva, and participant compensation is paid separately through an approved fiat payout provider.',
   },
   {
     question: 'Will Ateva collect my code or private information?',

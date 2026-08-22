@@ -81,11 +81,12 @@ export default function TermsPage() {
             6. Participant compensation
           </h2>
           <p>
-            Participant rewards are disabled during the private beta. If rewards launch, Ateva will
-            publish a compensation schedule for verified eligible activity. That reward rate is set
-            independently by Ateva and is not a percentage of, or a claim on, any individual
-            advertiser payment: an advertiser transaction settles in full to Ateva, and participant
-            compensation is a separate Ateva obligation. See the{' '}
+            Participant rewards are disabled during the private beta. If rewards launch, the rate is
+            60% of the qualifying bid for a verified impression, with the remaining 40% retained by
+            Ateva. That amount is calculated and owed by Ateva; it is not a claim on any individual
+            advertiser payment. An advertiser transaction settles in full to Ateva, and participant
+            compensation is a separate Ateva obligation discharged through a different provider. See
+            the{' '}
             <Link href="/payout-policy" className="text-brand-700 font-medium hover:underline">
               Payout Policy
             </Link>{' '}
