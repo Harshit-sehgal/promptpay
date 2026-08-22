@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { BrandMark } from '@/components/brand-mark';
 
 export default function SecurityPage() {
   return (
@@ -9,9 +10,7 @@ export default function SecurityPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
         <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-              W
-            </div>
+            <BrandMark />
             <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <Link

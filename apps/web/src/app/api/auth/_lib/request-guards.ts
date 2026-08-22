@@ -2,13 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const MAX_API_ROUTE_BODY_BYTES = 100_000;
 
-type LimitedTextResult =
-  | { ok: true; text: string }
-  | { ok: false; response: NextResponse };
+type LimitedTextResult = { ok: true; text: string } | { ok: false; response: NextResponse };
 
-type LimitedJsonResult =
-  | { ok: true; body: unknown }
-  | { ok: false; response: NextResponse };
+type LimitedJsonResult = { ok: true; body: unknown } | { ok: false; response: NextResponse };
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -26,9 +22,7 @@ export function rejectCrossOriginMutation(req: NextRequest): NextResponse | null
     // Modern browsers provide Fetch Metadata even when Origin/Referer is
     // stripped. Fail closed unless it explicitly proves same-origin; an absent
     // signal must not turn a mutating cookie-authenticated endpoint into CSRF.
-    return req.headers.get('sec-fetch-site') === 'same-origin'
-      ? null
-      : forbiddenOriginResponse();
+    return req.headers.get('sec-fetch-site') === 'same-origin' ? null : forbiddenOriginResponse();
   }
 
   try {

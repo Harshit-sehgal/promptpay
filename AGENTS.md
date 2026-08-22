@@ -22,6 +22,166 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-22 — the site said there was no revenue share; there always was
+
+Operator decision (2026-08-22): participation is compensated at **60% of the
+qualifying bid, 40% to Ateva**. That is what `LedgerMathTrait.calculateSplit`
+has always returned — 60/30/10, where `platform_fee` and `fraud_reserve` are
+both Ateva's, so 30 + 10 _is_ the 40. **No money code changed.** What was wrong
+was the public copy.
+
+The homepage claimed, absolutely and in the present tense, "No participant owns
+a percentage of an advertiser transaction" and "No automatic participant split",
+while `extension-ad.trait.ts:1228` credited the developer 60% of the bid on
+every qualified impression. Nothing accrues today only because that code sits
+behind the `isWaitEarningsEnabled()` gate at :1097 — the claim would have become
+false the moment rewards were switched on.
+
+Every gate passed throughout: the a11y sweep, the public-content gate and 2163
+unit tests all assert on copy, and `money-policy.test.ts` even stated the
+invariant in a comment — "compensation is intentionally not expressed as a
+percentage of advertiser spend" — while asserting nothing about it.
+
+- Homepage copy now states the 60/40 split and, importantly, keeps the
+  distinction that matters: the participant's 60% is an **Ateva obligation**
+  settled on a separate rail, not a claim on the advertiser's payment. The
+  money-in card still says the full customer transaction settles to Ateva,
+  because it does.
+- `ledger.service.spec.ts` now asserts the 60/40 boundary directly, plus a
+  second test that rounding never puts the participant below 60% (at 7 minor
+  units the remainder makes it 5/2 — 71%, by design). Changing the split now
+  fails a test, which forces the copy to change with it.
+- The `money-policy.test.ts` comment points at that assertion instead of
+  restating an invariant it does not enforce.
+
+## Resolved 2026-08-22 — the API had never actually booted, and could not
+
+First real boot against a live database, and it died _after_ applying all 97
+migrations: `prisma-migration-status.ts` resolved the CLI as `prisma` on PATH
+then `pnpm --filter @ateva/db exec prisma`, and the production image has
+neither. The Dockerfile removed the global install and made prisma a workspace
+dependency of `packages/db`, which is why the entrypoint runs
+`./node_modules/.bin/prisma migrate deploy`; this resolver was never updated.
+The drift check fails closed and its throw is unhandled, so the container
+exited immediately after reporting success.
+
+Unreachable from any existing test — it needs an environment with no pnpm,
+which only the container has, and the container had never booted against a real
+database. Fixed by preferring `<dbDir>/node_modules/.bin/prisma`; the
+regression test empties PATH and asserts the local bin wins.
+
+A second boot failure preceded it: `EMAIL_FROM` was set to
+`Ateva <onboarding@resend.dev>`, and the API validates it with `z.email()`,
+which rejects the RFC display form. `set-host-secret.sh` now requires a bare
+address.
+
+## Resolved 2026-08-22 — the planner takes typed values in both modes
+
+Both halves of the homepage planner now accept typed numbers instead of dragged
+ones (`components/beta-signal-planner.tsx`). The advertiser side had three
+sliders; the developer side had +/- steppers. Neither suits a quantity the
+visitor already knows — a slider cannot be typed or pasted, is imprecise across
+a wide range, and hides its value until grabbed.
+
+- `NumberField` holds the raw text while the field is being edited and clamps
+  only on blur, so a half-typed value is never fought mid-keystroke — clearing
+  "45" to type "120" would otherwise snap to the minimum the instant it went
+  empty. Out-of-range input is stated and corrected, not silently discarded.
+  The wheel is blurred off the input: scrolling the page over a focused number
+  field otherwise changes it silently.
+- Advertiser ranges are now `AD_SERVING.MIN/MAX_CAMPAIGN_BUDGET_MINOR` ($50 –
+  $1,000,000) rather than the slider's invented 100–100,000, so the form cannot
+  promise a campaign the API would reject.
+- Both modes now share one two-column layout: inputs left, results right.
+
+Gate note: `e2e/a11y.spec.ts` asserted `getByRole('slider')` and the stepper's
+Decrease/Increase buttons; both now assert `spinbutton`. The recompute test also
+covers a typed value driving the result, blur-clamping 9999 → 500, and the
+advertiser column recomputing — the original bug was a control whose output
+never moved, and that class of bug is now checked on both sides.
+
+- Verification: `pnpm typecheck` 17/17, `pnpm lint` 11/11, web vitest 274/274,
+  and the four planner e2e tests pass in chromium and mobile-chromium. The axe
+  page sweep cannot run locally — it waits for `networkidle`, which never
+  settles without an API — so that sweep is left to CI.
+
+## Added 2026-08-22 — a way to place a secret without an agent seeing it
+
+`scripts/set-host-secret.sh <VAR>` reads one value from the clipboard, checks it
+against the shape that variable must have, and streams it to the OCI host's
+`.env.production` over stdin — never in argv, so it stays out of the remote
+process list, and never printed, so it stays out of the transcript.
+
+This exists because an agent cannot sign in to Upstash, Supabase or Resend, and
+reading a live credential off a dashboard would copy it into the conversation.
+The clipboard goes provider → host directly.
+
+The shape checks catch the failures that otherwise appear only at runtime: a
+pooled URL in `DIRECT_URL` is refused outright (migrations cannot use the
+transaction pooler), a `redis://` Upstash URL is flagged for missing TLS, and a
+dashboard URL pasted in place of a `re_…` key is rejected.
+
+## Resolved 2026-08-22 — the rename left the old mark on 16 surfaces
+
+The WaitLayer→Ateva rename was string-based, so it could not see a bare letter.
+Fifteen pages plus the OpenGraph card still rendered a rounded badge holding a
+green **`W`**: `/pricing`, `/faq`, `/status`, `/security`, `/contact`,
+`/comparison` (x2), `/advertisers`, `/advertiser-policy`, `/payout-policy`, all
+five `/auth/*` pages, and the developer/advertiser dashboard sidebars (via
+`Sidebar`'s `brandLetter = 'W'` default). Every text gate passed throughout —
+typecheck, lint, 2163 unit tests, the a11y sweep and the public-content gate all
+assert on copy, and the copy said "Ateva". Only opening the pages showed it.
+
+- **`components/brand-mark.tsx`** is now the single source for the mark (three
+  bars, accent on the short one). Upper bars use `currentColor` so it works on
+  light and dark surfaces; the homepage's previously inlined SVG now uses it too.
+- **`Sidebar`** renders the mark by default. `brandLetter` is now opt-in and
+  carries no default, reserved for a sub-brand that must read as distinct —
+  `/admin`'s red "A" is the only caller.
+- **`opengraph-image.tsx`** had drifted furthest and is rewritten: it carried the
+  `W`, an indigo palette (`#6366f1`/`#4f46e5`/`#a5b4fc`) used nowhere on the
+  site, and pre-repositioning copy ("Verify AI wait states", "No code
+  tracking"). It now matches the homepage headline and the trust-boundary
+  wording. Drawn with divs, not the shared SVG, because Satori supports only a
+  flexbox subset.
+
+Guard note: no test asserts on the mark, so this can regress silently again. The
+cheap check is a grep for a bare `W` inside a `bg-brand-500`/`from-brand-500`
+badge.
+
+- Verification: `pnpm typecheck` 17/17, `pnpm lint` 11/11, web vitest 274/274,
+  `next build` clean, and the OG route rendered over HTTP for real
+  (`GET /opengraph-image` → 200 `image/png`, 1200x630) — a build alone does not
+  prove Satori can render it, since Satori fails at request time.
+
+## Verified 2026-08-21 — staging provider inventory and OCI host state
+
+The operator-provided service locations were checked without reading or
+recording any credential values. This narrows the infrastructure work but does
+not claim a deployable staging or production environment:
+
+- Supabase organization `Harshit-sehgal's Org` contains a healthy
+  `promptpay-staging` project on AWS `ap-northeast-1` (`t3.nano`). It has no
+  repository connection, migrations, or backups yet. Its database password is
+  not available to the agent, so `DATABASE_URL` and `DIRECT_URL` remain
+  placeholders on the OCI host.
+- Upstash contains `promptpay-staging-redis` on the Free Tier in AWS
+  `ap-south-1`, with TLS enabled. Its endpoint/token have not been copied into
+  the host environment.
+- The authenticated Resend account has no API keys and no verified domains.
+  The OCI environment therefore still has `EMAIL_FROM=FILL_ME_VERIFIED_SENDER`
+  and its existing `RESEND_API_KEY` cannot be treated as belonging to this
+  account.
+- Read-only SSH verification reached `vnic1` and found `ateva-api.service`
+  loaded but **inactive (dead)**. The host is deliberately marked
+  `ATEVA_ENVIRONMENT_KIND=staging`; its database and Redis values are still
+  `FILL_ME_*`, so no start or money switch was attempted.
+
+Verification: local `pnpm typecheck` (17/17), `pnpm lint` (11/11), read-only
+Supabase/Upstash/Resend dashboard inspection, and read-only SSH/systemd/env
+inspection. Remaining work is tracked under operator issue #40 and still
+requires credential creation/retrieval and explicit secret injection.
+
 ## Resolved 2026-08-19 — advertiser waitlist (LAUNCH_PLAN Phase 2 step 11)
 
 The last missing code-side launch item is now implemented and gate-verified:

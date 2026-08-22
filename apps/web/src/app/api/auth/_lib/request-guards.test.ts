@@ -69,9 +69,7 @@ describe('request route guards', () => {
   it('fails closed without Origin/Referer unless Fetch Metadata proves same-origin', () => {
     expect(rejectCrossOriginMutation(request('POST'))?.status).toBe(403);
     expect(
-      rejectCrossOriginMutation(
-        request('POST', { headers: { 'sec-fetch-site': 'same-origin' } }),
-      ),
+      rejectCrossOriginMutation(request('POST', { headers: { 'sec-fetch-site': 'same-origin' } })),
     ).toBeNull();
   });
 

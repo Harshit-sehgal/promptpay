@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { AD_SERVING, MINIMUM_VISIBLE_DURATION_MS } from '@ateva/shared';
 
@@ -12,14 +12,22 @@ type Mode = 'developer' | 'advertiser';
  * Replaces `EarningsCalculator`, which was named for a calculation it is
  * forbidden to perform. Its developer mode had three sliders whose output was a
  * fixed sentence — moving any of them changed nothing — and one of those
- * sliders was "Average Campaign CPM", which implied a participant's outcome
- * tracks an advertiser's spend directly beneath the Beta guarantee that says
- * "No participant owns a percentage of an advertiser transaction".
+ * sliders was "Average Campaign CPM", which invited a visitor to read their own
+ * outcome off an advertiser's spend. Participation is compensated at 60% of the
+ * qualifying bid, but that 60% is an Ateva obligation settled separately — not
+ * a claim on the advertiser's payment — and a CPM slider blurred exactly that
+ * distinction. This planner reports signals and screen time instead.
  *
- * Developer mode now answers both halves of the exchange — signals contributed
- * and screen time given up — from limits the platform actually enforces, and
- * names which limit is binding. Advertiser mode keeps its sliders: that side
- * already computed real numbers from real inputs.
+ * Both modes now take typed values rather than dragged ones. A slider is a poor
+ * fit here: these are quantities a visitor already knows ("about a $2,000
+ * campaign", "roughly 45 waits"), and a slider makes stating a known number
+ * harder than it should be — it cannot be typed or pasted, it is imprecise at
+ * the low end of a wide range, and its value is invisible until grabbed. Typed
+ * fields let someone enter what they know and read the result; the presets stay
+ * for visitors who would rather recognise a day than count one.
+ *
+ * Ranges are the platform's own limits, imported rather than restated, so the
+ * form cannot drift from what the API enforces.
  *
  * Accessible names here are consumed by `apps/web/e2e/a11y.spec.ts`
  * ("homepage planner controls have accessible names in both modes"); changing
@@ -33,7 +41,14 @@ const ACTIVE_HOURS_WITH_QUIET = 14;
 const HOURS_PER_DAY = 24;
 const WAITS_MIN = 1;
 const WAITS_MAX = 500;
-const WAITS_STEP = 5;
+
+/** Advertiser-side limits, in whole dollars, from the platform's minor units. */
+const BUDGET_MIN = AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100;
+const BUDGET_MAX = AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100;
+const CPM_MIN = 1;
+const CPM_MAX = 20;
+const CTR_MIN = 0.1;
+const CTR_MAX = 10;
 
 /**
  * Anchors for the three presets.
@@ -43,27 +58,17 @@ const WAITS_STEP = 5;
  * percentiles once beta telemetry can support them.
  */
 const PRESETS = [
-  {
-    id: 'occasional',
-    name: 'Occasional',
-    blurb: 'A few builds and test runs',
-    waits: 15,
-  },
-  {
-    id: 'typical',
-    name: 'Typical',
-    blurb: 'Steady agent use through the day',
-    waits: 45,
-  },
-  {
-    id: 'heavy',
-    name: 'Heavy',
-    blurb: 'An agent running most of the day',
-    waits: 120,
-  },
+  { id: 'occasional', name: 'Occasional', blurb: 'A few builds and test runs', waits: 15 },
+  { id: 'typical', name: 'Typical', blurb: 'Steady agent use through the day', waits: 45 },
+  { id: 'heavy', name: 'Heavy', blurb: 'An agent running most of the day', waits: 120 },
 ] as const;
 
-const DEFAULTS = { waits: 45, rate: AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT, quiet: true } as const;
+const DEV_DEFAULTS = {
+  waits: 45,
+  rate: AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT,
+  quiet: true,
+} as const;
+const ADV_DEFAULTS = { budget: 2000, cpm: 4, ctr: 2 } as const;
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
@@ -71,52 +76,138 @@ function formatDuration(totalSeconds: number): string {
   return `${totalSeconds} s`;
 }
 
-function Stepper({
+function trimNumber(value: number, decimals: number): string {
+  return decimals > 0 ? String(Number(value.toFixed(decimals))) : String(Math.round(value));
+}
+
+/**
+ * A typed numeric field that accepts what the visitor means.
+ *
+ * The hard part of a typed number is the half-finished one. Clamping on every
+ * keystroke makes a field impossible to edit — clearing "45" to type "120"
+ * would snap to the minimum the instant it went empty, and backspacing through
+ * "4.5" would fight the decimal point. So the raw text is held while the field
+ * is being edited, the result updates live for any value that is already valid,
+ * and the number is clamped only on blur, with the correction stated rather
+ * than performed silently.
+ */
+function NumberField({
   label,
   value,
   min,
   max,
   step = 1,
-  onChange,
+  decimals = 0,
+  prefix,
+  suffix,
+  hint,
+  onCommit,
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   step?: number;
-  onChange: (next: number) => void;
+  decimals?: number;
+  prefix?: string;
+  suffix?: string;
+  hint: string;
+  onCommit: (next: number) => void;
 }) {
-  const atMin = value <= min;
-  const atMax = value >= max;
-  const button =
-    'inline-flex h-11 w-12 items-center justify-center text-xl font-medium transition-colors disabled:cursor-not-allowed';
+  const [draft, setDraft] = useState<string | null>(null);
+  const id = useId();
+  const hintId = `${id}-hint`;
+
+  const shown = draft ?? trimNumber(value, decimals);
+  const parsed = draft === null ? value : Number(draft);
+  const outOfRange =
+    draft !== null &&
+    draft.trim() !== '' &&
+    Number.isFinite(parsed) &&
+    (parsed < min || parsed > max);
+
+  const commit = () => {
+    if (draft === null) return;
+    const next = Number(draft);
+    setDraft(null);
+    if (draft.trim() === '' || !Number.isFinite(next)) return;
+    onCommit(Math.min(max, Math.max(min, next)));
+  };
 
   return (
-    <div className="inline-flex items-center rounded-[10px] border border-surface-300 bg-white">
-      <button
-        type="button"
-        aria-label={`Decrease ${label.toLowerCase()}`}
-        disabled={atMin}
-        onClick={() => onChange(Math.max(min, value - step))}
-        className={`${button} rounded-l-[10px] ${atMin ? 'bg-surface-50 text-surface-300' : 'text-surface-950 hover:bg-surface-50'}`}
+    <div className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-sm font-medium text-surface-950">
+        {label}
+      </label>
+      <div
+        className={`flex items-center rounded-[10px] border bg-white transition-colors focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 ${
+          outOfRange ? 'border-amber-400' : 'border-surface-300'
+        }`}
       >
-        −
-      </button>
-      <output
-        aria-label={label}
-        className="inline-flex h-11 min-w-[84px] items-center justify-center border-x border-surface-200 font-mono text-[17px] font-medium text-surface-950"
+        {prefix && (
+          <span aria-hidden="true" className="pl-3.5 font-mono text-sm text-surface-500">
+            {prefix}
+          </span>
+        )}
+        <input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          value={shown}
+          min={min}
+          max={max}
+          step={step}
+          aria-label={label}
+          aria-describedby={hintId}
+          aria-invalid={outOfRange || undefined}
+          onChange={(e) => {
+            const text = e.target.value;
+            setDraft(text);
+            const next = Number(text);
+            // Update the result as it is typed, but only from a value that is
+            // already usable — a half-typed or out-of-range number should not
+            // move the figures next to it.
+            if (text.trim() !== '' && Number.isFinite(next) && next >= min && next <= max) {
+              onCommit(next);
+            }
+          }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+          // A scroll wheel over a focused number input silently changes it,
+          // which is a real hazard on a page the visitor is scrolling through.
+          onWheel={(e) => e.currentTarget.blur()}
+          className={`h-11 w-full bg-transparent px-3.5 font-mono text-[17px] font-medium text-surface-950 outline-none ${
+            prefix ? 'pl-1.5' : ''
+          }`}
+        />
+        {suffix && (
+          <span aria-hidden="true" className="pr-3.5 font-mono text-sm text-surface-500">
+            {suffix}
+          </span>
+        )}
+      </div>
+      <span
+        id={hintId}
+        className={`font-mono text-xs ${outOfRange ? 'text-amber-700' : 'text-surface-500'}`}
       >
-        {value}
-      </output>
-      <button
-        type="button"
-        aria-label={`Increase ${label.toLowerCase()}`}
-        disabled={atMax}
-        onClick={() => onChange(Math.min(max, value + step))}
-        className={`${button} rounded-r-[10px] ${atMax ? 'bg-surface-50 text-surface-300' : 'text-surface-950 hover:bg-surface-50'}`}
-      >
-        +
-      </button>
+        {outOfRange
+          ? `Enter ${trimNumber(min, decimals)} – ${trimNumber(max, decimals)}; anything outside is set back to the nearest end.`
+          : hint}
+      </span>
+    </div>
+  );
+}
+
+function ResultPair({ caption, value, unit }: { caption: string; value: string; unit: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
+        {caption}
+      </span>
+      <span className="font-serif text-[46px] leading-none text-surface-950">{value}</span>
+      <span className="font-mono text-xs text-surface-500">{unit}</span>
     </div>
   );
 }
@@ -124,31 +215,56 @@ function Stepper({
 export function BetaSignalPlanner() {
   const [mode, setMode] = useState<Mode>('developer');
 
-  const [waits, setWaits] = useState<number>(DEFAULTS.waits);
-  const [rate, setRate] = useState<number>(DEFAULTS.rate);
-  const [quiet, setQuiet] = useState<boolean>(DEFAULTS.quiet);
+  const [waits, setWaits] = useState<number>(DEV_DEFAULTS.waits);
+  const [rate, setRate] = useState<number>(DEV_DEFAULTS.rate);
+  const [quiet, setQuiet] = useState<boolean>(DEV_DEFAULTS.quiet);
   const [preset, setPreset] = useState<string>('typical');
 
-  const [campaignBudget, setCampaignBudget] = useState(2000);
-  const [targetCpm, setTargetCpm] = useState(4);
-  const [ctr, setCtr] = useState(2);
+  const [budget, setBudget] = useState<number>(ADV_DEFAULTS.budget);
+  const [cpm, setCpm] = useState<number>(ADV_DEFAULTS.cpm);
+  const [ctr, setCtr] = useState<number>(ADV_DEFAULTS.ctr);
 
   const activeHours = quiet ? ACTIVE_HOURS_WITH_QUIET : HOURS_PER_DAY;
   const ceiling = rate * activeHours;
   const signals = Math.min(waits, ceiling);
   const capBinds = ceiling < waits;
   const screenTime = formatDuration(signals * VISIBLE_FLOOR_SECONDS);
-  const isDirty = waits !== DEFAULTS.waits || rate !== DEFAULTS.rate || quiet !== DEFAULTS.quiet;
+  const devDirty =
+    waits !== DEV_DEFAULTS.waits || rate !== DEV_DEFAULTS.rate || quiet !== DEV_DEFAULTS.quiet;
 
-  const advertiserImpressions = Math.round((campaignBudget / targetCpm) * 1000);
-  const advertiserClicks = Math.round((advertiserImpressions * ctr) / 100);
+  const impressions = Math.round((budget / cpm) * 1000);
+  const clicks = Math.round((impressions * ctr) / 100);
+  const costPerClick = clicks > 0 ? budget / clicks : null;
+  const advDirty =
+    budget !== ADV_DEFAULTS.budget || cpm !== ADV_DEFAULTS.cpm || ctr !== ADV_DEFAULTS.ctr;
 
-  const reset = () => {
-    setWaits(DEFAULTS.waits);
-    setRate(DEFAULTS.rate);
-    setQuiet(DEFAULTS.quiet);
+  const resetDev = () => {
+    setWaits(DEV_DEFAULTS.waits);
+    setRate(DEV_DEFAULTS.rate);
+    setQuiet(DEV_DEFAULTS.quiet);
     setPreset('typical');
   };
+
+  const resetAdv = () => {
+    setBudget(ADV_DEFAULTS.budget);
+    setCpm(ADV_DEFAULTS.cpm);
+    setCtr(ADV_DEFAULTS.ctr);
+  };
+
+  const resetButton = (dirty: boolean, onReset: () => void) => (
+    <button
+      type="button"
+      onClick={onReset}
+      disabled={!dirty}
+      className={`rounded-lg px-2.5 py-1.5 text-[13px] ${
+        dirty
+          ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+          : 'cursor-not-allowed text-surface-300'
+      }`}
+    >
+      Reset
+    </button>
+  );
 
   return (
     <section
@@ -173,8 +289,8 @@ export function BetaSignalPlanner() {
       {mode === 'developer' ? (
         <>
           <p className="mb-6 mt-0 max-w-[640px] text-[14.5px] leading-relaxed text-surface-600">
-            Pick the day that sounds like yours. Nothing here projects money — none moves during the
-            beta.
+            Pick the day that sounds like yours, or type your own numbers. Nothing here projects
+            money — none moves during the beta.
           </p>
 
           {/* Recognition before recall: a day you can identify, not a number you must know. */}
@@ -226,64 +342,35 @@ export function BetaSignalPlanner() {
                 <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
                   Or set it exactly
                 </span>
-                <button
-                  type="button"
-                  onClick={reset}
-                  disabled={!isDirty}
-                  className={`rounded-lg px-2.5 py-1.5 text-[13px] ${
-                    isDirty
-                      ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
-                      : 'cursor-not-allowed text-surface-300'
-                  }`}
-                >
-                  Reset
-                </button>
+                {resetButton(devDirty, resetDev)}
               </div>
 
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-surface-950">Eligible waits per day</span>
-                <Stepper
-                  label="Eligible waits per day"
-                  value={waits}
-                  min={WAITS_MIN}
-                  max={WAITS_MAX}
-                  step={WAITS_STEP}
-                  onChange={(next) => {
-                    setWaits(next);
-                    setPreset('');
-                  }}
-                />
-                <span className="font-mono text-xs text-surface-500">
-                  Agent pauses lasting at least {VISIBLE_FLOOR_SECONDS.toFixed(2)} s
-                </span>
-              </div>
+              <NumberField
+                label="Eligible waits per day"
+                value={waits}
+                min={WAITS_MIN}
+                max={WAITS_MAX}
+                onCommit={(next) => {
+                  setWaits(next);
+                  setPreset('');
+                }}
+                hint={`Agent pauses lasting at least ${VISIBLE_FLOOR_SECONDS.toFixed(2)} s · ${WAITS_MIN} – ${WAITS_MAX}`}
+              />
 
-              <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-surface-950">
-                  Units per hour you allow
-                </span>
-                <Stepper
-                  label="Units per hour you allow"
-                  value={rate}
-                  min={AD_SERVING.MAX_ADS_PER_HOUR_MIN}
-                  max={AD_SERVING.MAX_ADS_PER_HOUR_MAX}
-                  onChange={setRate}
-                />
-                <span
-                  className={`font-mono text-xs ${
-                    rate >= AD_SERVING.MAX_ADS_PER_HOUR_MAX ||
-                    rate <= AD_SERVING.MAX_ADS_PER_HOUR_MIN
-                      ? 'text-amber-700'
-                      : 'text-surface-500'
-                  }`}
-                >
-                  {rate >= AD_SERVING.MAX_ADS_PER_HOUR_MAX
+              <NumberField
+                label="Units per hour you allow"
+                value={rate}
+                min={AD_SERVING.MAX_ADS_PER_HOUR_MIN}
+                max={AD_SERVING.MAX_ADS_PER_HOUR_MAX}
+                onCommit={setRate}
+                hint={
+                  rate >= AD_SERVING.MAX_ADS_PER_HOUR_MAX
                     ? 'At the maximum the platform allows'
                     : rate <= AD_SERVING.MAX_ADS_PER_HOUR_MIN
                       ? 'At the minimum — turn units off entirely in settings'
-                      : `Allowed range ${AD_SERVING.MAX_ADS_PER_HOUR_MIN} – ${AD_SERVING.MAX_ADS_PER_HOUR_MAX} · default ${AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT}`}
-                </span>
-              </div>
+                      : `Allowed range ${AD_SERVING.MAX_ADS_PER_HOUR_MIN} – ${AD_SERVING.MAX_ADS_PER_HOUR_MAX} · default ${AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT}`
+                }
+              />
 
               <button
                 type="button"
@@ -320,24 +407,16 @@ export function BetaSignalPlanner() {
 
             <div className="flex flex-col gap-4 md:border-l md:border-surface-200 md:pl-8">
               <div aria-live="polite" className="grid grid-cols-2 gap-5">
-                <div className="flex flex-col gap-1">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
-                    You&rsquo;d contribute
-                  </span>
-                  <span className="font-serif text-[46px] leading-none text-surface-950">
-                    {signals.toLocaleString()}
-                  </span>
-                  <span className="font-mono text-xs text-surface-500">verified signals a day</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
-                    It would cost you
-                  </span>
-                  <span className="font-serif text-[46px] leading-none text-surface-950">
-                    {screenTime}
-                  </span>
-                  <span className="font-mono text-xs text-surface-500">of screen time a day</span>
-                </div>
+                <ResultPair
+                  caption="You’d contribute"
+                  value={signals.toLocaleString()}
+                  unit="verified signals a day"
+                />
+                <ResultPair
+                  caption="It would cost you"
+                  value={screenTime}
+                  unit="of screen time a day"
+                />
               </div>
 
               {/* Name the binding limit rather than leaving the visitor to infer it. */}
@@ -361,50 +440,84 @@ export function BetaSignalPlanner() {
           </div>
         </>
       ) : (
-        <div className="mt-5 grid gap-4">
-          <label className="block text-sm text-surface-600">
-            Campaign Budget: ${campaignBudget}
-            <input
-              type="range"
-              aria-label="Campaign Budget"
-              min={100}
-              max={100000}
-              step={100}
-              value={campaignBudget}
-              onChange={(e) => setCampaignBudget(Number(e.target.value))}
-              className="w-full accent-brand-500"
-            />
-          </label>
-          <label className="block text-sm text-surface-600">
-            Target CPM: ${targetCpm}
-            <input
-              type="range"
-              aria-label="Target CPM"
-              min={1}
-              max={20}
-              value={targetCpm}
-              onChange={(e) => setTargetCpm(Number(e.target.value))}
-              className="w-full accent-brand-500"
-            />
-          </label>
-          <label className="block text-sm text-surface-600">
-            Expected Click-Through Rate (CTR): {ctr}%
-            <input
-              type="range"
-              aria-label="Expected Click-Through Rate (CTR)"
-              min={0.1}
-              max={10}
-              step={0.1}
-              value={ctr}
-              onChange={(e) => setCtr(Number(e.target.value))}
-              className="w-full accent-brand-500"
-            />
-          </label>
-          <p aria-live="polite" className="m-0 mt-1 text-[15px] text-surface-950">
-            Estimated impressions: <strong>{advertiserImpressions.toLocaleString()}</strong> ·
-            clicks: <strong>{advertiserClicks.toLocaleString()}</strong>
+        <>
+          <p className="mb-6 mt-0 max-w-[640px] text-[14.5px] leading-relaxed text-surface-600">
+            Type the campaign you have in mind. Delivery is modelled from your own budget and rate —
+            beta campaigns are not billed.
           </p>
-        </div>
+
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-[0.9fr_1.1fr]">
+            <div className="flex flex-col gap-[18px]">
+              <div className="flex items-center justify-between gap-3">
+                <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
+                  Your campaign
+                </span>
+                {resetButton(advDirty, resetAdv)}
+              </div>
+
+              <NumberField
+                label="Campaign budget"
+                value={budget}
+                min={BUDGET_MIN}
+                max={BUDGET_MAX}
+                step={50}
+                prefix="$"
+                onCommit={setBudget}
+                hint={`Platform range $${BUDGET_MIN.toLocaleString()} – $${BUDGET_MAX.toLocaleString()}`}
+              />
+
+              <NumberField
+                label="Target CPM"
+                value={cpm}
+                min={CPM_MIN}
+                max={CPM_MAX}
+                step={0.5}
+                decimals={2}
+                prefix="$"
+                onCommit={setCpm}
+                hint={`What you pay per 1,000 qualified impressions · $${CPM_MIN} – $${CPM_MAX}`}
+              />
+
+              <NumberField
+                label="Expected click-through rate"
+                value={ctr}
+                min={CTR_MIN}
+                max={CTR_MAX}
+                step={0.1}
+                decimals={1}
+                suffix="%"
+                onCommit={setCtr}
+                hint={`Your own assumption, not a platform figure · ${CTR_MIN}% – ${CTR_MAX}%`}
+              />
+            </div>
+
+            <div className="flex flex-col gap-4 md:border-l md:border-surface-200 md:pl-8">
+              <div aria-live="polite" className="grid grid-cols-2 gap-5">
+                <ResultPair
+                  caption="You’d reach"
+                  value={impressions.toLocaleString()}
+                  unit="qualified impressions"
+                />
+                <ResultPair
+                  caption="At your assumed rate"
+                  value={clicks.toLocaleString()}
+                  unit="clicks"
+                />
+              </div>
+
+              <p className="m-0 rounded-[10px] border border-surface-200 bg-surface-50 p-3.5 text-sm leading-relaxed text-surface-700">
+                {costPerClick === null
+                  ? 'At this click-through rate the campaign models fewer than one click — raise the budget or the rate to see a cost per click.'
+                  : `That works out to $${costPerClick.toFixed(2)} per click. Impressions are counted only after the verification checks pass, so this is delivery you can audit rather than reported views.`}
+              </p>
+
+              <p className="m-0 border-t border-surface-200 pt-3.5 text-[13.5px] leading-relaxed text-surface-600">
+                Click-through is your own assumption — Ateva does not publish a benchmark it has not
+                measured. Nothing here is a quote, and no campaign is billed during the beta.
+              </p>
+            </div>
+          </div>
+        </>
       )}
     </section>
   );

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { BackendStatus } from '@/components/backend-status';
 import { BetaSignalPlanner } from '@/components/beta-signal-planner';
+import { BrandMark } from '@/components/brand-mark';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
@@ -26,11 +27,7 @@ export default function HomePage() {
             href="/"
             className="flex items-center gap-2.5 rounded focus-visible:ring-2 focus-visible:ring-brand-600"
           >
-            <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="0" y="1.5" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
-              <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
-              <rect x="0" y="12.1" width="11" height="2.4" rx="0.4" fill="var(--accent,#16a34a)" />
-            </svg>
+            <BrandMark />
             <span className="text-base font-semibold tracking-tight">Ateva</span>
           </Link>
 
@@ -190,18 +187,22 @@ export default function HomePage() {
                 Validate the signal first.
               </h2>
               <p className="mt-5 max-w-xl leading-relaxed text-surface-600">
-                The beta measures eligible wait states with explicit consent. It does not accrue a
-                cash balance. If participant compensation launches later, Ateva will publish an
-                independent fiat reward schedule based on verified eligible activity.
+                The beta measures eligible wait states with explicit consent. Nothing accrues while
+                rewards are off. When they are enabled, a verified impression splits{' '}
+                <strong className="font-semibold text-surface-900">60% to you</strong> and 40% to
+                Ateva, and that 60% is paid in fiat on a published schedule — never in a token, and
+                never as a claim on the advertiser&rsquo;s payment itself.
               </p>
             </div>
             <div className="rounded-2xl border border-surface-200 bg-surface-50 p-7">
               <p className="text-sm font-semibold text-surface-900">Beta guarantees</p>
               <ul className="mt-5 space-y-3 text-sm text-surface-600">
-                <li>✓ Rewards are not currently enabled.</li>
-                <li>✓ No participant owns a percentage of an advertiser transaction.</li>
-                <li>✓ Future payouts use a separately approved fiat payout provider.</li>
-                <li>✓ Dodo Payments is not a participant payout rail.</li>
+                <li>✓ Rewards are not currently enabled — nothing accrues yet.</li>
+                <li>✓ When they are, verified impressions split 60% to you, 40% to Ateva.</li>
+                <li>
+                  ✓ Your 60% is an Ateva obligation, not a share of the advertiser&rsquo;s payment.
+                </li>
+                <li>✓ Payouts use a separately approved fiat provider — never Dodo Payments.</li>
               </ul>
             </div>
           </div>
@@ -223,8 +224,9 @@ export default function HomePage() {
               <p className="mt-5 leading-relaxed text-white/65">
                 The planned advertiser flow is straightforward: the advertiser pays Ateva for
                 campaign delivery; Dodo Payments processes that customer transaction and settles it
-                to Ateva. Any future participant compensation is a separate Ateva expense,
-                calculated after verification and paid through another provider.
+                to Ateva in full. Participant compensation is then a separate Ateva expense —
+                calculated after verification at 60% of the qualifying bid and paid through a
+                different provider. The two never touch the same rail.
               </p>
             </div>
             <div className="mt-10 grid gap-5 md:grid-cols-2">
@@ -232,7 +234,7 @@ export default function HomePage() {
                 <p className="font-mono text-xs uppercase tracking-wider text-white/60">Money in</p>
                 <p className="mt-3 text-xl font-semibold">Advertiser → Dodo Payments → Ateva</p>
                 <p className="mt-3 text-sm leading-relaxed text-white/55">
-                  Full customer transaction settles to Ateva. No automatic participant split.
+                  The full customer transaction settles to Ateva. Nothing is diverted mid-payment.
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
@@ -243,8 +245,8 @@ export default function HomePage() {
                   Ateva → separate payout provider → participant
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-white/55">
-                  Independent fiat compensation only after the payout rail and reward program are
-                  approved.
+                  60% of the qualifying bid, as fiat Ateva owes — paid only after the payout rail
+                  and reward program are approved.
                 </p>
               </div>
             </div>

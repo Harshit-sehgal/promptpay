@@ -95,6 +95,94 @@ these five is already generated:
 transaction pooler; the runtime uses the pooled URL and migrations use the
 direct one.
 
+**Use the session pooler for `DIRECT_URL`, not the direct connection.** Supabase
+serves direct connections over **IPv6 only** unless the paid IPv4 add-on is
+enabled, and this host has no IPv6 route:
+
+```console
+$ ip -6 route show default      # empty
+$ curl -6 https://ifconfig.co   # no egress
+```
+
+It does hold one global IPv6 address, so the failure is not obvious from
+`ip addr` alone.
+
+Measured from the host on 2026-08-22:
+
+```console
+$ getent ahostsv4 aws-0-ap-northeast-1.pooler.supabase.com
+35.79.125.133   52.68.3.1   54.64.190.72          # pooler has real IPv4
+$ # tcp/6543 OPEN, tcp/5432 OPEN
+$ getent ahostsv4 db.fhczxytpjafqhmvvznqq.supabase.co
+                                                  # direct host: no A record
+```
+
+Ignore the dashboard's "Transaction pooler uses IPv6 by default" banner — that
+is advertising the _dedicated_ IPv4 add-on. The shared pooler resolves to IPv4
+and both its ports are reachable from here. The direct host genuinely has no A
+record, which is why it is the one endpoint that cannot be used.
+
+The three Supabase endpoints, and which one each variable wants:
+
+| Endpoint           | Port   | Stack | Use for                             |
+| ------------------ | ------ | ----- | ----------------------------------- |
+| Direct connection  | `5432` | IPv6  | nothing here — unreachable          |
+| Transaction pooler | `6543` | IPv4  | `DATABASE_URL` (+ `pgbouncer=true`) |
+| Session pooler     | `5432` | IPv4  | `DIRECT_URL` — migrations           |
+
+The session pooler is a full session-mode connection, so migrations run through
+it; the transaction pooler is not, which is why it cannot be used for them.
+Both pooler URLs use the `postgres.<project-ref>` username, not `postgres`.
+
+## Placing the secrets
+
+`scripts/set-host-secret.sh <VAR>` takes one value from the clipboard, checks it
+against the shape that variable must have, and streams it here over stdin —
+never in argv, so it stays out of this host's process list, and never printed.
+It refuses a pooled URL in `DIRECT_URL` and flags a non-TLS Upstash URL.
+
+Copy the value in the provider's dashboard, then:
+
+```bash
+scripts/set-host-secret.sh REDIS_URL
+```
+
+The Supabase database password cannot be read back from the dashboard — it
+offers only **Reset database password**. Either supply the stored password or
+reset it and copy the new one from the connection string shown at that moment.
+
+For Supabase, copy **only the password** and run:
+
+```bash
+scripts/set-supabase-urls.sh
+```
+
+It composes both URLs — host, ports, the `postgres.<project-ref>` username and
+percent-encoding — because those are the parts that get typed wrong once and
+then fail hours later. It refuses a whole connection string pasted in place of
+a password.
+
+## Verifying before you start
+
+```bash
+scripts/verify-host-db.sh
+```
+
+This runs the two steps `docker-entrypoint.sh` performs before the API starts,
+in the same image against the same env file: `wait-for-postgres.mjs` for
+`DATABASE_URL`, then `prisma migrate status` for `DIRECT_URL`. Nothing is
+applied.
+
+The second step is the one worth having. A transaction-pooler URL pasted into
+`DIRECT_URL` connects and answers a trivial query happily, and fails only when a
+migration runs — the pooler is not session-mode, so it cannot hold the advisory
+lock `migrate deploy` takes out. `migrate status` exercises the same path
+without changing anything.
+
+`packages/db/prisma.config.ts` resolves `DIRECT_URL || DATABASE_URL`, so
+migration commands already prefer the direct URL; the runtime client keeps using
+`DATABASE_URL`.
+
 Run migrations before the first start:
 
 ```bash

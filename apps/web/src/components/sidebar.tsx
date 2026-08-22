@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { BrandMark } from './brand-mark';
 import { LogoutButton } from './logout-button';
 
 interface NavItem {
@@ -22,7 +23,7 @@ interface SidebarProps {
 
 export function Sidebar({
   brand = 'Ateva',
-  brandLetter = 'W',
+  brandLetter,
   brandColor = 'bg-brand-500',
   navItems,
   backHref = '/',
@@ -42,11 +43,21 @@ export function Sidebar({
       }`}
     >
       <div className="flex items-center gap-2 mb-4 lg:mb-8">
-        <div
-          className={`w-8 h-8 rounded-lg ${brandColor} flex items-center justify-center text-white font-bold text-sm`}
-        >
-          {brandLetter}
-        </div>
+        {/*
+          The product mark by default. A letter badge is only for a sub-brand
+          that must read as distinct from Ateva itself — /admin uses a red "A".
+          The default used to be a "W" badge, which kept the pre-rename identity
+          on every developer and advertiser dashboard.
+        */}
+        {brandLetter ? (
+          <div
+            className={`w-8 h-8 rounded-lg ${brandColor} flex items-center justify-center text-white font-bold text-sm`}
+          >
+            {brandLetter}
+          </div>
+        ) : (
+          <BrandMark size={19} className={isLight ? 'text-surface-900' : 'text-white'} />
+        )}
         <span className={`font-semibold ${isLight ? 'text-surface-900' : 'text-white'}`}>
           {brand}
         </span>

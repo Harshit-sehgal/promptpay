@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BrandMark } from '@/components/brand-mark';
 
 export const metadata: Metadata = {
   title: 'Advertiser Policy — Ateva',
@@ -13,9 +14,7 @@ export default function AdvertiserPolicyPage() {
       <nav className="glass-nav border-b border-surface-200/60 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-              W
-            </div>
+            <BrandMark />
             <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
         </div>

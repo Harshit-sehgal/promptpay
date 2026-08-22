@@ -78,8 +78,8 @@ export default function ConsentRePrompt() {
     >
       <div className="mx-auto max-w-3xl bg-white border border-brand-200 rounded-2xl shadow-lg shadow-surface-300/30 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
         <p className="text-surface-600 text-[13px] leading-relaxed flex-1">
-          Our Privacy Policy and Terms have been updated. Please review and
-          re-accept to keep your account in good standing.
+          Our Privacy Policy and Terms have been updated. Please review and re-accept to keep your
+          account in good standing.
         </p>
         <div className="flex items-center gap-2 shrink-0">
           <button
