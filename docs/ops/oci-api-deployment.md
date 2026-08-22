@@ -223,6 +223,52 @@ Pre-rename `WAITLAYER_*` names are still accepted — `applyLegacyEnvAliases` in
 `@ateva/config` maps them, and the direct `process.env` read sites fall back
 individually. New environments should use `ATEVA_*`.
 
+## The web middleware verifies JWTs itself — with its own copy of the key
+
+The single most dangerous divergence in this deployment, because it fails in a
+way that looks like everything working.
+
+`apps/web/src/middleware.ts` does not ask the API whether a session is valid.
+It verifies the access token at the edge with `jose`, using `JWT_PUBLIC_KEY`
+(plus `JWT_PUBLIC_KEYS` during rotation) **inlined at build time** — Edge
+runtime bakes env vars into the bundle, so changing the variable does nothing
+until a NEW BUILD runs. Redeploying existing artifacts is not enough.
+
+If that key does not match the key the API signs with, the symptoms are:
+
+- login succeeds, `200`, and all three `__Host-` cookies are set
+- `/api/auth/me` through the BFF returns `200` — the API is perfectly happy
+- **every protected page 307s straight back to `/auth/login?returnTo=...`**
+
+So the API is healthy, the database is connected, `platform-health` is `ok`,
+and the product is unusable for every signed-in user. Observed 2026-08-22:
+Vercel's copy was 37 days old and marked _Sensitive_, while the host signed
+with a different key.
+
+Diagnosing it takes two requests. Confirm the API accepts the token, then
+confirm the edge does not:
+
+```bash
+curl -s -c jar -X POST https://ateva.vercel.app/api/auth/login \
+  -H 'Content-Type: application/json' -H 'Origin: https://ateva.vercel.app' \
+  -d '{"email":"...","password":"..."}'
+
+curl -s -b jar -o /dev/null -w '%{http_code}\n' https://ateva.vercel.app/api/auth/me  # 200 = API fine
+curl -s -b jar -o /dev/null -w '%{http_code}\n' https://ateva.vercel.app/developer     # 307 = edge rejects
+```
+
+`200` then `307` is this bug and nothing else.
+
+The fix is to set `JWT_PUBLIC_KEY` on Vercel to the value in the host's
+`.env.production` and **trigger a fresh build**. It is a PUBLIC key, so it does
+not need to be marked Sensitive — and marking it so is a trap, because it hides
+the one value you most need to compare when this happens.
+
+Keep them in step: whenever the API's signing key changes, the web's
+`JWT_PUBLIC_KEY` must change with it and both sides need a new build. Use
+`JWT_PUBLIC_KEYS` to carry the old key through a rotation so existing sessions
+survive the overlap.
+
 ## The web app's side
 
 The web app never calls the API from the browser. It uses `baseURL: '/api'`
