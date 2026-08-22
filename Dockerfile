@@ -30,7 +30,15 @@ COPY apps/vscode-extension/package.json apps/vscode-extension/
 # the optional registry override so pnpm install can fall back when the
 # default registry is unreachable.
 # HUSKY=0 prevents the husky prepare script from failing (no .git in Docker).
-RUN printf 'registry=%s\nonly-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg\nconfirm-modules-purge=false\n' "${NPM_REGISTRY%/}" > .npmrc \
+#
+# The fetch settings exist because this step is the build's only hard external
+# dependency and pnpm's defaults are tuned for a fast link. On a slow or
+# congested one, individual registry requests were observed taking 36-49s and
+# the install died with a bare `fetch failed` after ~7 minutes — no failing
+# package named, nothing to retry by hand. Lower concurrency so a narrow link
+# is not asked for 16 parallel downloads, and give each request room to finish
+# before the retry ladder gives up.
+RUN printf 'registry=%s\nonly-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg\nconfirm-modules-purge=false\nfetch-timeout=600000\nfetch-retries=5\nfetch-retry-mintimeout=20000\nfetch-retry-maxtimeout=180000\nnetwork-concurrency=8\n' "${NPM_REGISTRY%/}" > .npmrc \
   && HUSKY=0 pnpm install --frozen-lockfile
 
 # ── Build Stage: turbo build all packages ──
