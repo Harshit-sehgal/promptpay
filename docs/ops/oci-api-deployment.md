@@ -162,6 +162,32 @@ percent-encoding — because those are the parts that get typed wrong once and
 then fail hours later. It refuses a whole connection string pasted in place of
 a password.
 
+## Set `ATEVA_ENVIRONMENT_ID` before the first successful boot
+
+`EnvironmentMarkerService.verify()` writes a single row — `environment_markers`
+id 1 — holding `ATEVA_ENVIRONMENT_KIND` and `ATEVA_ENVIRONMENT_ID`, and on every
+later boot it compares the running config against that row and **refuses to
+start on a mismatch**. That is the point: it stops a second environment being
+pointed at a database that already belongs to another one.
+
+The consequence is that the values are effectively **write-once**. The row is
+created by the first boot that gets far enough to reach it, and after that the
+only ways to change it are editing the row by hand or wiping the database.
+
+`ATEVA_ENVIRONMENT_ID` is optional and defaults to `local`
+(`packages/config/src/index.ts`), and it is **not** in
+`.env.production.local` — so a boot that says nothing stamps this staging
+database as `staging/local` permanently. Set it deliberately first:
+
+```bash
+scripts/set-host-secret.sh ATEVA_ENVIRONMENT_ID   # e.g. staging-oci
+```
+
+This has not happened yet only because boot has never reached that line: the
+gate before it (`validateMigrations`, `main.ts:129`) failed on the Prisma CLI
+resolution bug, so `verify()` at `main.ts:144` has never run against the real
+database.
+
 ## Verifying before you start
 
 ```bash
