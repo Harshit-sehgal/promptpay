@@ -48,7 +48,13 @@ read_clipboard() {
   return 1
 }
 
-VALUE="$(read_clipboard || true)"
+# `--from-stdin` lets a composing script (set-supabase-urls.sh) reuse these
+# shape checks without round-tripping its value through the clipboard.
+if [[ "${2:-}" == "--from-stdin" ]]; then
+  VALUE="$(cat)"
+else
+  VALUE="$(read_clipboard || true)"
+fi
 VALUE="${VALUE%$'\n'}"
 
 # Dashboards hand out whole assignments as often as bare values — Upstash shows
