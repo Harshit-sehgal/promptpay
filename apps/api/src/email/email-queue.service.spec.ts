@@ -69,6 +69,70 @@ describe('EmailQueueService', () => {
     );
   });
 
+  /**
+   * A permanent rejection must not be queued.
+   *
+   * Observed live: an unverified sender domain made every send return 403.
+   * The queue could not tell that from an outage, so it persisted the message
+   * and retried it on exponential backoff — five identical 403s in four
+   * minutes, none of which could have succeeded, and the operator saw a retry
+   * loop instead of the configuration error behind it.
+   */
+  it('does not queue a permanently rejected message', async () => {
+    vi.mocked(mockEmail.send).mockResolvedValueOnce({
+      delivered: false,
+      driver: 'resend',
+      permanent: true,
+    });
+
+    const result = await service.enqueueOrSend({
+      to: 'a@b.com',
+      subject: 'Hello',
+      html: '<p>hi</p>',
+      text: 'hi',
+    });
+
+    expect(result.delivered).toBe(false);
+    expect(result.permanent).toBe(true);
+    // The point of the fix: nothing is written, so nothing is retried.
+    expect(mockPrisma.emailQueue.create).not.toHaveBeenCalled();
+    expect(mockPrisma.emailQueue.update).not.toHaveBeenCalled();
+  });
+
+  it('still queues a transient failure, which is what the queue is for', async () => {
+    vi.mocked(mockEmail.send).mockResolvedValueOnce({
+      delivered: false,
+      driver: 'resend',
+      permanent: false,
+    });
+
+    const result = await service.enqueueOrSend({
+      to: 'a@b.com',
+      subject: 'Hello',
+      html: '<p>hi</p>',
+      text: 'hi',
+    });
+
+    expect(result.delivered).toBe(true);
+    expect(result.permanent).toBeFalsy();
+    expect(mockPrisma.emailQueue.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats an unmarked failure as transient, preserving the old contract', async () => {
+    // Drivers that predate the `permanent` flag must keep being retried.
+    vi.mocked(mockEmail.send).mockResolvedValueOnce({ delivered: false, driver: 'console' });
+
+    const result = await service.enqueueOrSend({
+      to: 'a@b.com',
+      subject: 'Hello',
+      html: '<p>hi</p>',
+      text: 'hi',
+    });
+
+    expect(result.delivered).toBe(true);
+    expect(mockPrisma.emailQueue.create).toHaveBeenCalledTimes(1);
+  });
+
   it('returns delivered=true when EmailService succeeds', async () => {
     const result = await service.enqueueOrSend({
       to: 'a@b.com',

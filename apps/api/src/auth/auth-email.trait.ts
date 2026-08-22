@@ -120,9 +120,19 @@ export class AuthEmailTrait {
     );
     const result = await this.email.sendEmailVerification(user.email, token);
     if (!result.delivered) {
-      // Email provider is down — don't tell the user the message was sent.
-      // Ops can match audit.log entries to provider outages. The token is
-      // valid for 24h; the user can retry when the provider recovers.
+      // Don't tell the user the message was sent. Distinguish the two cases:
+      // a transient outage is worth retrying and the queue will keep trying on
+      // its own, but a permanent rejection (unverified sender domain, revoked
+      // key) will refuse identically forever — inviting the user to "try again
+      // shortly" there sends them into a loop that cannot succeed. Neither
+      // message names the provider or the reason: that is operator detail and
+      // this endpoint is reachable by anyone with an account.
+      if (result.permanent) {
+        return {
+          message:
+            'We could not send the verification email. This is a problem on our side — please contact support.',
+        };
+      }
       return { message: 'Email delivery temporarily unavailable; please try again shortly' };
     }
     // Fail-closed: expose the raw token only when explicitly in dev/test.

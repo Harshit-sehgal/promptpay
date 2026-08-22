@@ -70,8 +70,16 @@ test.describe('Landing page', () => {
     );
 
     // Allow hydration warnings and those bootstrap 401s; fail on real JS errors.
+    //
+    // Match the status CODE, not the reason phrase. HTTP/2 removed the reason
+    // phrase from the protocol, so Chrome logs "status of 401 ()" against a
+    // real HTTP/2 origin and "status of 401 (Unauthorized)" against the
+    // HTTP/1.1 dev server. Pinning to the phrase made this assertion pass in CI
+    // and fail against the deployed site — the one environment it most needed
+    // to hold in. Which paths may 401 is already constrained above, so matching
+    // the bare code here loosens nothing.
     const tolerated = (message: string) =>
-      message.includes('hydrat') || message.includes('401 (Unauthorized)');
+      message.includes('hydrat') || /\bstatus of 401\b/.test(message);
     expect(errors.filter((e) => !tolerated(e))).toHaveLength(0);
   });
 });
