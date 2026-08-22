@@ -100,6 +100,46 @@ describe('LedgerService', () => {
       // 100 cents: user=60, platform=30, reserve=10
       expect(result.userShare + result.platformShare + result.reserveShare).toBe(100n);
     });
+
+    /**
+     * The participant/Ateva boundary, stated the way the public copy states it.
+     *
+     * The three-bucket split is an internal accounting detail: `platform_fee`
+     * and `fraud_reserve` are both Ateva's, so what a participant actually gets
+     * is 60% and what Ateva keeps is 40%. The homepage now says exactly that.
+     *
+     * This assertion exists because the site previously claimed the opposite —
+     * "No participant owns a percentage of an advertiser transaction" — for as
+     * long as this function had been returning 60%. Nothing failed, because
+     * every gate checked the copy and no gate checked the number against it.
+     * Changing the split now breaks this test, which is the point: the copy has
+     * to be changed with it.
+     */
+    it('gives the participant 60% and Ateva 40%, which is what the site states', () => {
+      for (const bid of [1000n, 5000n, 250n, 100n]) {
+        const { userShare, platformShare, reserveShare } = service.calculateSplit(bid, false);
+        const ateva = platformShare + reserveShare;
+        expect(userShare + ateva).toBe(bid);
+        expect(userShare).toBe((bid * 60n) / 100n);
+        expect(ateva).toBe(bid - (bid * 60n) / 100n);
+      }
+    });
+
+    /**
+     * At bids too small to divide cleanly the remainder goes to `userShare`, so
+     * the participant's share rounds up, never down — 7 minor units split 5/2,
+     * which is 71%, not 60%. That is the intended convention and the reason the
+     * exact-percentage assertion above uses cleanly divisible bids: the
+     * invariant worth guarding is that rounding cannot short-change the
+     * participant, not that the ratio is 0.6 at every possible amount.
+     */
+    it('never rounds the participant below their 60%', () => {
+      for (const bid of [1n, 7n, 13n, 99n, 4321n]) {
+        const { userShare, platformShare, reserveShare } = service.calculateSplit(bid, false);
+        expect(userShare + platformShare + reserveShare).toBe(bid);
+        expect(userShare * 100n).toBeGreaterThanOrEqual(bid * 60n);
+      }
+    });
   });
 
   describe('releaseEarnings', () => {

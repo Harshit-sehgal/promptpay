@@ -22,6 +22,59 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-22 — the site said there was no revenue share; there always was
+
+Operator decision (2026-08-22): participation is compensated at **60% of the
+qualifying bid, 40% to Ateva**. That is what `LedgerMathTrait.calculateSplit`
+has always returned — 60/30/10, where `platform_fee` and `fraud_reserve` are
+both Ateva's, so 30 + 10 _is_ the 40. **No money code changed.** What was wrong
+was the public copy.
+
+The homepage claimed, absolutely and in the present tense, "No participant owns
+a percentage of an advertiser transaction" and "No automatic participant split",
+while `extension-ad.trait.ts:1228` credited the developer 60% of the bid on
+every qualified impression. Nothing accrues today only because that code sits
+behind the `isWaitEarningsEnabled()` gate at :1097 — the claim would have become
+false the moment rewards were switched on.
+
+Every gate passed throughout: the a11y sweep, the public-content gate and 2163
+unit tests all assert on copy, and `money-policy.test.ts` even stated the
+invariant in a comment — "compensation is intentionally not expressed as a
+percentage of advertiser spend" — while asserting nothing about it.
+
+- Homepage copy now states the 60/40 split and, importantly, keeps the
+  distinction that matters: the participant's 60% is an **Ateva obligation**
+  settled on a separate rail, not a claim on the advertiser's payment. The
+  money-in card still says the full customer transaction settles to Ateva,
+  because it does.
+- `ledger.service.spec.ts` now asserts the 60/40 boundary directly, plus a
+  second test that rounding never puts the participant below 60% (at 7 minor
+  units the remainder makes it 5/2 — 71%, by design). Changing the split now
+  fails a test, which forces the copy to change with it.
+- The `money-policy.test.ts` comment points at that assertion instead of
+  restating an invariant it does not enforce.
+
+## Resolved 2026-08-22 — the API had never actually booted, and could not
+
+First real boot against a live database, and it died _after_ applying all 97
+migrations: `prisma-migration-status.ts` resolved the CLI as `prisma` on PATH
+then `pnpm --filter @ateva/db exec prisma`, and the production image has
+neither. The Dockerfile removed the global install and made prisma a workspace
+dependency of `packages/db`, which is why the entrypoint runs
+`./node_modules/.bin/prisma migrate deploy`; this resolver was never updated.
+The drift check fails closed and its throw is unhandled, so the container
+exited immediately after reporting success.
+
+Unreachable from any existing test — it needs an environment with no pnpm,
+which only the container has, and the container had never booted against a real
+database. Fixed by preferring `<dbDir>/node_modules/.bin/prisma`; the
+regression test empties PATH and asserts the local bin wins.
+
+A second boot failure preceded it: `EMAIL_FROM` was set to
+`Ateva <onboarding@resend.dev>`, and the API validates it with `z.email()`,
+which rejects the RFC display form. `set-host-secret.sh` now requires a bare
+address.
+
 ## Resolved 2026-08-22 — the planner takes typed values in both modes
 
 Both halves of the homepage planner now accept typed numbers instead of dragged

@@ -40,9 +40,11 @@ describe('auth cookie names (A-002)', () => {
   });
 
   it('reads bare and __Host- prefixed names (and legacy double-prefix)', () => {
-    expect(readAuthCookie(fakeReq({ 'access_token': 'bare' }), COOKIE_ACCESS)).toBe('bare');
+    expect(readAuthCookie(fakeReq({ access_token: 'bare' }), COOKIE_ACCESS)).toBe('bare');
     expect(readAuthCookie(fakeReq({ '__Host-access_token': 'pref' }), COOKIE_ACCESS)).toBe('pref');
-    expect(readAuthCookie(fakeReq({ '__Host-__Host-access_token': 'legacy' }), COOKIE_ACCESS)).toBe('legacy');
+    expect(readAuthCookie(fakeReq({ '__Host-__Host-access_token': 'legacy' }), COOKIE_ACCESS)).toBe(
+      'legacy',
+    );
   });
 
   it('clears the current plus legacy double-prefixed and __Host- names on logout', () => {

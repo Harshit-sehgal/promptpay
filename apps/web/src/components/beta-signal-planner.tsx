@@ -12,9 +12,11 @@ type Mode = 'developer' | 'advertiser';
  * Replaces `EarningsCalculator`, which was named for a calculation it is
  * forbidden to perform. Its developer mode had three sliders whose output was a
  * fixed sentence — moving any of them changed nothing — and one of those
- * sliders was "Average Campaign CPM", which implied a participant's outcome
- * tracks an advertiser's spend directly beneath the Beta guarantee that says
- * "No participant owns a percentage of an advertiser transaction".
+ * sliders was "Average Campaign CPM", which invited a visitor to read their own
+ * outcome off an advertiser's spend. Participation is compensated at 60% of the
+ * qualifying bid, but that 60% is an Ateva obligation settled separately — not
+ * a claim on the advertiser's payment — and a CPM slider blurred exactly that
+ * distinction. This planner reports signals and screen time instead.
  *
  * Both modes now take typed values rather than dragged ones. A slider is a poor
  * fit here: these are quantities a visitor already knows ("about a $2,000

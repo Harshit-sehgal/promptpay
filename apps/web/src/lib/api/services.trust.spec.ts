@@ -1,4 +1,4 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import api from '@/lib/api/client';
 import { adminApi } from '@/lib/api/services';
 
@@ -27,7 +27,9 @@ describe('adminApi.getDevices', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('calls the admin device lookup endpoint with query params', async () => {
-    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { devices: [], total: 0 } });
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { devices: [], total: 0 },
+    });
 
     await adminApi.getDevices({ search: 'dev@example.com', limit: 25 });
 
