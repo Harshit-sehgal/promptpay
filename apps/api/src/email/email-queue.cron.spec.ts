@@ -11,12 +11,17 @@ describe('EmailQueueCron', () => {
     findMany: vi.fn().mockResolvedValue([]),
     delete: vi.fn().mockResolvedValue({}),
     update: vi.fn().mockResolvedValue({}),
+    // The claim step marks the selected rows before the transaction commits,
+    // so the batch is hidden from other runners while this process sends.
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
   };
   const mockQueryRaw = vi.fn().mockResolvedValue([{ key: 'email-queue-process' }]);
-  // The batch fetch + per-row mutations now run inside $transaction(async tx => ...).
-  // The tx client must surface the same emailQueue mock and the same $queryRaw
-  // so the test's chained mockResolvedValueOnce(lease) then (batch) sequence and
-  // its emailQueue.delete/update assertions stay intact.
+  // Only the CLAIM runs inside $transaction now — the sends and the per-row
+  // record steps run against `prisma` directly, because holding a transaction
+  // across up to 50 provider calls exceeded Prisma's 5s interactive-transaction
+  // timeout and stalled the queue permanently. The tx client still surfaces the
+  // same emailQueue mock and $queryRaw, so the chained lease-then-batch
+  // sequence and the delete/update assertions stay valid either way.
   const mockPrisma = {
     emailQueue: mockEmailQueue,
     $queryRaw: mockQueryRaw,
@@ -39,6 +44,102 @@ describe('EmailQueueCron', () => {
     // Default: lease acquired, no queued rows.
     mockPrisma.$queryRaw.mockResolvedValue([{ key: 'email-queue-process' }]);
     cron = new EmailQueueCron(mockPrisma, mockEmail, mockQueue);
+  });
+
+  /**
+   * The queue must drain even when the batch takes longer than a database
+   * transaction may live.
+   *
+   * The sends used to run inside the batch transaction to hold the SKIP LOCKED
+   * lease. Prisma's interactive transactions default to a 5s timeout, and a
+   * full batch is BATCH_SIZE (50) provider calls of up to 10s each. On the live
+   * staging host this produced "A query cannot be executed on an expired
+   * transaction ... 5800 ms passed": the expiry threw on the next query, the
+   * transaction rolled back, and nothing was delivered or recorded. The run
+   * repeated every minute and failed identically — the queue could never drain,
+   * and it carries password-reset and email-verification mail.
+   *
+   * This asserts the shape that makes that impossible: the transaction closes
+   * before any send happens.
+   */
+  it('sends outside the transaction, so a slow provider cannot expire it', async () => {
+    let txOpen = false;
+    let sentWhileTxOpen = 0;
+
+    vi.mocked(mockPrisma.$transaction).mockImplementation(
+      async (cb: (tx: unknown) => Promise<unknown>) => {
+        txOpen = true;
+        const out = await cb(mockPrisma);
+        txOpen = false;
+        return out;
+      },
+    );
+
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        { id: 'q-1', to: 'a@b.com', subject: 's', html: 'h', text: 't', retryCount: 0 },
+        { id: 'q-2', to: 'c@d.com', subject: 's', html: 'h', text: 't', retryCount: 0 },
+      ]);
+
+    vi.mocked(mockEmail.send).mockImplementation(async () => {
+      if (txOpen) sentWhileTxOpen++;
+      return { delivered: true, driver: 'resend' };
+    });
+
+    const result = await cron.processQueue();
+
+    expect(sentWhileTxOpen, 'no send may happen while the transaction is open').toBe(0);
+    expect(result.delivered).toBe(2);
+    expect(mockPrisma.emailQueue.delete).toHaveBeenCalledTimes(2);
+  });
+
+  it('claims the batch so a concurrent runner cannot pick the same rows up', async () => {
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        { id: 'q-1', to: 'a@b.com', subject: 's', html: 'h', text: 't', retryCount: 0 },
+      ]);
+
+    await cron.processQueue();
+
+    // The claim pushes next_retry_at beyond now, so the other runner's
+    // `next_retry_at <= NOW()` filter stops matching these rows.
+    expect(mockPrisma.emailQueue.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['q-1'] } },
+        data: expect.objectContaining({ nextRetryAt: expect.any(Date) }),
+      }),
+    );
+    const claimed = vi.mocked(mockPrisma.emailQueue.updateMany).mock.calls[0][0] as {
+      data: { nextRetryAt: Date };
+    };
+    expect(claimed.data.nextRetryAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('parks a permanently rejected row instead of retrying it for hours', async () => {
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        { id: 'q-1', to: 'a@b.com', subject: 's', html: 'h', text: 't', retryCount: 0 },
+      ]);
+    vi.mocked(mockEmail.send).mockResolvedValueOnce({
+      delivered: false,
+      driver: 'resend',
+      permanent: true,
+    });
+
+    const result = await cron.processQueue();
+
+    expect(result.permanentFailures).toBe(1);
+    expect(result.stillFailing).toBe(0);
+    const parked = vi.mocked(mockPrisma.emailQueue.update).mock.calls[0][0] as {
+      data: { lastError: string; nextRetryAt: Date };
+    };
+    // Terminal now, not after eight rounds of backoff against a refusal that
+    // will be identical every time.
+    expect(parked.data.lastError).toContain('permanent_failure');
+    expect(parked.data.nextRetryAt.getTime()).toBeGreaterThan(Date.now() + 24 * 60 * 60 * 1000);
   });
 
   it('acquires the cross-replica cron lease before processing', async () => {
