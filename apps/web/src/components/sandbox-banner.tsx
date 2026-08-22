@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getPlatformHealth } from '@/lib/platform-health';
 
 /**
  * Persistent product-mode marker for WL-013. The public build only renders
@@ -24,16 +25,12 @@ export default function SandboxBanner({ environmentKind }: SandboxBannerProps = 
   useEffect(() => {
     if (environmentKind !== undefined) return;
     let active = true;
-    void fetch('/api/platform-health', { cache: 'no-store' })
-      .then((response) =>
-        response.ok ? response.json() : Promise.reject(new Error('health unavailable')),
-      )
-      .then((health: { environmentKind?: string }) => {
-        if (active) setServerKind(health.environmentKind ?? null);
-      })
-      .catch(() => {
-        if (active) setServerKind('unverified');
-      });
+    // Both failure modes mean the same thing here: we could not confirm the
+    // server's environment, so the banner must not claim it is verified.
+    void getPlatformHealth().then((result) => {
+      if (!active) return;
+      setServerKind(result.ok ? (result.data.environmentKind ?? null) : 'unverified');
+    });
     return () => {
       active = false;
     };

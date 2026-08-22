@@ -1,24 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getPlatformHealth } from '@/lib/platform-health';
 
 type HealthState = 'operational' | 'degraded' | 'unknown';
 
 async function fetchHealth(): Promise<HealthState> {
-  try {
-    const res = await fetch('/api/platform-health', { cache: 'no-store' });
-    if (!res.ok) return 'degraded';
-    const data = (await res.json()) as {
-      status?: string;
-      database?: string;
-      redis?: { status: string };
-    };
-    const dbOk = data.database === 'connected';
-    const redisOk = !data.redis || data.redis.status === 'connected';
-    return data.status === 'ok' && dbOk && redisOk ? 'operational' : 'degraded';
-  } catch {
-    return 'unknown';
+  const result = await getPlatformHealth();
+  if (!result.ok) {
+    // The API answering badly and the request never completing are different
+    // facts: the first says it is unwell, the second says we cannot tell.
+    return result.reason === 'http' ? 'degraded' : 'unknown';
   }
+  const { data } = result;
+  const dbOk = data.database === 'connected';
+  const redisOk = !data.redis || data.redis.status === 'connected';
+  return data.status === 'ok' && dbOk && redisOk ? 'operational' : 'degraded';
 }
 
 export function BackendStatus() {

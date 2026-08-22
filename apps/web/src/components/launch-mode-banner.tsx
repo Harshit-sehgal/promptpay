@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { getPlatformHealth } from '@/lib/platform-health';
 
 /**
  * Honest disclosure of the platform's settlement state (A-089).
@@ -45,13 +46,12 @@ export function useWaitLaunchMode(override?: WaitLaunchMode): LaunchModeState {
   useEffect(() => {
     if (override !== undefined) return;
     let active = true;
-    void fetch('/api/platform-health', { cache: 'no-store' })
-      .then((response) =>
-        response.ok ? response.json() : Promise.reject(new Error('unavailable')),
-      )
-      .then((health: { waitLaunchMode?: string }) => {
+    // Either failure leaves us unable to name the mode, and 'unknown' is the
+    // fail-safe: it never claims a launch mode the server did not report.
+    void getPlatformHealth()
+      .then((result) => {
         if (!active) return;
-        const next = health.waitLaunchMode;
+        const next = result.ok ? result.data.waitLaunchMode : undefined;
         setMode(
           typeof next === 'string' && (VALID_MODES as string[]).includes(next)
             ? (next as WaitLaunchMode)
