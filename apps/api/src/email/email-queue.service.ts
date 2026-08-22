@@ -9,7 +9,16 @@ import { EmailMessage, EmailService } from './email.service';
 
 /** Result of an attempted queue-backed email send. */
 export interface EmailQueueSendResult {
+  /**
+   * True when the message was sent OR durably queued for retry — i.e. the
+   * caller may tell the user it is on its way.
+   */
   delivered: boolean;
+  /**
+   * True when the provider refused permanently and the message was therefore
+   * NOT queued. Callers must not promise the user a retry in this case.
+   */
+  permanent?: boolean;
 }
 
 /**
@@ -55,11 +64,28 @@ export class EmailQueueService {
     }
   }
 
-  /** Try to send immediately; queue for retry on failure. */
+  /**
+   * Try to send immediately; queue for retry on failure.
+   *
+   * A PERMANENT rejection is not queued. Queueing one buys nothing — every
+   * retry reproduces the same request and the same refusal — and it actively
+   * hurts: the row sits in the queue until its TTL, the cron burns attempts
+   * against it on exponential backoff, and the operator sees a retry loop
+   * rather than the configuration error that caused it. Observed with an
+   * unverified sender domain: five identical 403s across four minutes, each
+   * logged as a failure to retry, none of which could ever have succeeded.
+   */
   async enqueueOrSend(msg: EmailMessage): Promise<EmailQueueSendResult> {
     const result = await this.email.send(msg);
     if (result.delivered) {
       return { delivered: true };
+    }
+    if (result.permanent) {
+      this.logger.error(
+        `Email permanently rejected by driver=${result.driver} — not queued. ` +
+          'This is a configuration problem, not an outage: verify the EMAIL_FROM sender domain and the provider API key.',
+      );
+      return { delivered: false, permanent: true };
     }
 
     // Persist for retry. Use the message TTL to bound stale retries.

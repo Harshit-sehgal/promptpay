@@ -72,3 +72,82 @@ describe('EmailService CTA link safety', () => {
     expect(html).not.toContain('href=');
   });
 });
+
+/**
+ * Permanent vs transient provider rejection.
+ *
+ * Found by actually sending against a live Resend account with an unverified
+ * sender domain: every send returned 403, and because the queue treated that
+ * the same as an outage it kept the message and retried it — five identical
+ * 403s across four minutes, each logged as a retryable failure, none of which
+ * could ever have succeeded. The distinction did not exist in the type, so no
+ * caller could act on it.
+ */
+describe('EmailService provider failure classification', () => {
+  function resendService() {
+    const config = {
+      get: (key: string, fallback?: unknown) =>
+        key === 'EMAIL_DRIVER'
+          ? 'resend'
+          : key === 'RESEND_API_KEY'
+            ? 're_test_key'
+            : key === 'EMAIL_FROM'
+              ? 'sender@example.test'
+              : key === 'EMAIL_PROVIDER_TIMEOUT_MS'
+                ? 5_000
+                : fallback,
+    };
+    return new EmailService(config as never);
+  }
+
+  const msg = { to: 'user@example.com', subject: 's', html: '<p>h</p>', text: 't' };
+
+  async function sendWithStatus(status: number) {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response('{}', { status, headers: { 'x-request-id': 'rid' } })) as typeof fetch;
+    try {
+      return await resendService().send({ ...msg });
+    } finally {
+      globalThis.fetch = original;
+    }
+  }
+
+  it('treats a 403 as permanent — an unverified domain refuses identically every time', async () => {
+    const res = await sendWithStatus(403);
+    expect(res.delivered).toBe(false);
+    expect(res.permanent).toBe(true);
+  });
+
+  it('treats other 4xx as permanent', async () => {
+    for (const status of [400, 401, 404, 422]) {
+      expect((await sendWithStatus(status)).permanent).toBe(true);
+    }
+  });
+
+  it('treats 429 and 408 as transient — both explicitly invite a retry', async () => {
+    for (const status of [408, 429]) {
+      const res = await sendWithStatus(status);
+      expect(res.delivered).toBe(false);
+      expect(res.permanent).toBe(false);
+    }
+  });
+
+  it('treats 5xx as transient — the provider is the one having a problem', async () => {
+    for (const status of [500, 502, 503]) {
+      expect((await sendWithStatus(status)).permanent).toBe(false);
+    }
+  });
+
+  it('reports success without marking permanence', async () => {
+    const res = await sendWithStatus(200);
+    expect(res.delivered).toBe(true);
+    expect(res.permanent).toBeFalsy();
+  });
+
+  it('marks an invalid recipient permanent — the address will not become valid', async () => {
+    const res = await resendService().send({ ...msg, to: 'not-an-email' });
+    expect(res.delivered).toBe(false);
+    expect(res.permanent).toBe(true);
+  });
+});

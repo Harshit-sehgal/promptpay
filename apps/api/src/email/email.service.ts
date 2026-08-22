@@ -49,6 +49,14 @@ export interface EmailMessage {
 export interface EmailSendResult {
   delivered: boolean;
   driver: string;
+  /**
+   * True when the provider refused in a way that retrying cannot fix — an
+   * unverified sender domain, a revoked key, a malformed recipient. The queue
+   * uses this to avoid backing off for 24h against a rejection that will be
+   * identical every time, which hides a configuration error as a transient
+   * blip. Absent or false means "worth retrying".
+   */
+  permanent?: boolean;
 }
 
 /**
@@ -147,7 +155,7 @@ export class EmailService {
       this.logger.error(
         `Refusing to send email with invalid recipient recipientRef=${recipientRef} (validation failed)`,
       );
-      return { delivered: false, driver: this.driver };
+      return { delivered: false, driver: this.driver, permanent: true };
     }
     // Final defensive check — even if a future misconfiguration slipped past
     // the constructor (e.g. ENV toggled at runtime via a test), never log a
@@ -157,7 +165,7 @@ export class EmailService {
         `Refusing to send production email via console driver recipientRef=${recipientRef}. ` +
           'This would log password-reset/verify tokens to stdout.',
       );
-      return { delivered: false, driver: 'console' };
+      return { delivered: false, driver: 'console', permanent: true };
     }
     try {
       switch (this.driver) {
@@ -449,8 +457,18 @@ export class EmailService {
       // Provider bodies may echo addresses/content. Keep only the status and a
       // safe request id for correlation; never copy the raw body into logs.
       const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id') ?? 'none';
-      this.logger.error(`Resend API error status=${res.status} requestId=${requestId}`);
-      return { delivered: false, driver: 'resend' };
+      // 4xx means the provider understood and refused: an unverified sender
+      // domain, a revoked key, a rejected recipient. Retrying sends the same
+      // request and gets the same answer. 408 and 429 are the exceptions —
+      // both explicitly invite a retry. Everything 5xx is the provider's own
+      // problem and worth retrying.
+      const permanent =
+        res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429;
+      this.logger.error(
+        `Resend API error status=${res.status} requestId=${requestId} ` +
+          `(${permanent ? 'permanent — not retrying; check EMAIL_FROM domain verification and the API key' : 'transient — will retry'})`,
+      );
+      return { delivered: false, driver: 'resend', permanent };
     }
     return { delivered: true, driver: 'resend' };
   }
