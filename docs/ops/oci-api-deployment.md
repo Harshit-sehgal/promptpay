@@ -60,6 +60,33 @@ Three arguments are load-bearing, and each one fails differently:
   `RUN test -n "$JWT_PUBLIC_KEY"` and stops there without it. It is a public
   verification key, not a secret, so passing it as a build arg is fine.
 
+## This host cannot sustainably build its own image
+
+It manages it, but only just, and the margin shrinks as the image grows.
+
+Measured mid-build on 2026-08-22, with 4 GB of swap already in place:
+
+```console
+%Cpu(s):  3.7 us,  3.7 sy,  1.9 id, 57.4 wa,  33.3 st
+Swap:  4095 total  1571 used
+```
+
+**57% iowait and 33% steal.** The iowait is swap thrashing — 956 MB of RAM
+against a build that wants more. The steal is the hypervisor: an OCI
+always-free instance is burstable, and sustained load exhausts its credits, so
+a third of the CPU is simply taken away. Together they turn a ~10 minute build
+into an hour, and the final export of a 1.9 GB image can sit silent for ten
+minutes at a stretch without being stuck.
+
+Swap is what makes it survivable — before it was added the box wedged hard
+enough to stop answering SSH and needed a console reboot. Do not remove it.
+
+The durable fix is to stop building here: build in CI or on a normal machine
+and ship the image to a registry (`CONTAINER_REGISTRY`, issue #40). Until then,
+expect a build to take up to an hour, never run two at once (they thrash each
+other and neither finishes), and prefer `BUILD_SCOPE=api` so the web build
+never enters the picture.
+
 ## Starting it
 
 ```bash
