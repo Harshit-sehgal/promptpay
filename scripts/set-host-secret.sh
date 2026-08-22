@@ -100,6 +100,23 @@ case "$NAME" in
   RESEND_API_KEY)
     [[ "$VALUE" =~ ^re_[A-Za-z0-9_-]+$ ]] || { echo "refusing: a Resend key looks like re_..." >&2; exit 1; }
     ;;
+  GOOGLE_CLIENT_ID)
+    # Public value, not a secret — it ships to the browser via /auth/config so
+    # Google Identity Services knows which tenant to render. Checked anyway
+    # because the console shows the client ID and the client SECRET side by
+    # side, and this flow never needs the secret.
+    case "$VALUE" in
+      *.apps.googleusercontent.com) ;;
+      GOCSPX-*)
+        echo "refusing: that is the client SECRET — this flow verifies ID tokens and never needs it" >&2
+        exit 1
+        ;;
+      *)
+        echo "refusing: a Google client ID ends in .apps.googleusercontent.com" >&2
+        exit 1
+        ;;
+    esac
+    ;;
   EMAIL_FROM)
     # The API validates this with `z.email()`, which rejects the RFC display
     # form `Name <addr>`. Requiring a bare address here turns a container that
