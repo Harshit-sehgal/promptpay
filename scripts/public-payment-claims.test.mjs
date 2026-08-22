@@ -10,10 +10,22 @@ import { fileURLToPath } from 'node:url';
  * Ateva's advertiser money-in rail (advertiser → Dodo Payments → Ateva)
  * is deliberately separate from any future participant money-out rail
  * (Ateva → approved payout provider → participant). Public pages must not
- * describe a participant reward as a percentage of, or a claim on, an
- * individual advertiser transaction — that would describe Ateva as
- * splitting customer funds, which is not what it does and not what its payment
- * provider is approved for.
+ * describe a participant reward as a CLAIM ON an individual advertiser
+ * transaction — that would describe Ateva as splitting customer funds, which is
+ * not what it does and not what its payment provider is approved for.
+ *
+ * Updated 2026-08-22. The operator set participant compensation at 60% of the
+ * qualifying bid, so the public copy now names that rate. Stating the rate is
+ * not the same as diverting the payment: the advertiser's transaction still
+ * settles to Ateva in full, and the 60% is an Ateva expense computed from the
+ * bid and paid on a separate rail. The prohibited-claim scan below is unchanged
+ * and still rejects "revenue share", the raw 60/30/10 and 80/10/10 bucket
+ * splits, and any "N% of revenue / to the developer" phrasing that would make a
+ * participant sound like a party to the advertiser's payment.
+ *
+ * OPEN QUESTION for the payment provider review (#39): whether naming the rate
+ * publicly is acceptable to Dodo, given the approval this gate was built
+ * around. The separation is intact; the disclosure is what changed.
  *
  * The page list is derived from the filesystem rather than hand-maintained.
  * The first version of this gate listed five pages, and the 60/30/10 split it
@@ -177,9 +189,22 @@ test('the money-flow pages state the separated flow explicitly', () => {
   assert.match(payoutPolicy, /fiat/i);
   assert.match(payoutPolicy, /Dodo Payments/i);
 
+  // The invariant is the SEPARATION of the two rails, not any particular
+  // sentence. These assertions used to require /terms to say the reward "is not
+  // a percentage of" an advertiser payment — which became false the moment the
+  // operator set the rate at 60% of the qualifying bid (2026-08-22), and had in
+  // fact always been false, since calculateSplit has returned 60% since it was
+  // written. A gate that requires a specific false sentence keeps it alive: this
+  // one is why the claim survived four separate surfaces.
+  //
+  // What must remain true, and is what these now assert: the advertiser's
+  // transaction settles to Ateva in full, nothing is diverted mid-payment, and
+  // the participant's share is an Ateva obligation discharged on a different
+  // rail. That is the distinction the payment provider's approval rests on.
   const terms = pageContent(surface, '/terms');
-  assert.match(terms, /set independently by Ateva/i);
-  assert.match(terms, /not a percentage of/i);
+  assert.match(terms, /settles in full to Ateva/i);
+  assert.match(terms, /not a claim on any individual advertiser payment/i);
+  assert.match(terms, /separate Ateva obligation/i);
 });
 
 test('guards the guard — discovery and patterns must actually work', () => {
