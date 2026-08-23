@@ -83,8 +83,12 @@ export default function GdprDpaPage() {
           anonymizes personal data and revokes active sessions and API keys.
         </li>
         <li>
-          <strong className="text-surface-900">Objection / Restriction</strong> — contact{' '}
-          <code>privacy@ateva.dev</code>.
+          <strong className="text-surface-900">Objection / Restriction</strong> — raise it through
+          the in-app{' '}
+          <a href="/feedback" className="underline">
+            feedback form
+          </a>
+          .
         </li>
       </ul>
       <p>
@@ -138,8 +142,12 @@ export default function GdprDpaPage() {
 
       <LegalHeading>9. Contact</LegalHeading>
       <p>
-        Data Protection Officer / privacy requests:{' '}
-        <strong className="text-surface-900">privacy@ateva.dev</strong>
+        Data Protection Officer / privacy requests: submit through the in-app{' '}
+        <a href="/feedback" className="underline">
+          feedback form
+        </a>
+        ; a direct mailbox on an Ateva-controlled domain will be published before general
+        availability.
       </p>
     </LegalDocument>
   );

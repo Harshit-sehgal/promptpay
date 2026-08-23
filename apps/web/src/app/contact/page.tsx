@@ -49,24 +49,18 @@ export default function ContactPage() {
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 For account, payout, and campaign questions.
               </p>
-              <a
-                href="mailto:support@ateva.com"
-                className="text-brand-700 font-medium text-sm hover:underline"
-              >
-                support@ateva.com
-              </a>
+              <Link href="/feedback" className="text-brand-700 font-medium text-sm hover:underline">
+                Open the feedback form
+              </Link>
             </div>
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">Security reports</h2>
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 Report vulnerabilities or abuse responsibly.
               </p>
-              <a
-                href="mailto:security@ateva.com"
-                className="text-brand-700 font-medium text-sm hover:underline"
-              >
-                security@ateva.com
-              </a>
+              <Link href="/feedback" className="text-brand-700 font-medium text-sm hover:underline">
+                Report via the feedback form
+              </Link>
             </div>
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">
@@ -75,12 +69,9 @@ export default function ContactPage() {
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 Questions about trust scores or hold periods.
               </p>
-              <a
-                href="mailto:trust@ateva.com"
-                className="text-brand-700 font-medium text-sm hover:underline"
-              >
-                trust@ateva.com
-              </a>
+              <Link href="/feedback" className="text-brand-700 font-medium text-sm hover:underline">
+                Ask via the feedback form
+              </Link>
             </div>
           </div>
 
