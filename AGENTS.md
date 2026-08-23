@@ -22,6 +22,43 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Verified 2026-08-23 — current infrastructure state (partial #40)
+
+A fresh read-only check found the OCI **staging** host active, with a stable
+environment ID and no `FILL_ME` values in its host environment. The shipped
+image connected through the Supabase pooled runtime URL, and Prisma reported
+all 97 migrations up to date. The API and readiness health routes both return
+200. This is staging evidence only; it is not production deployment evidence.
+
+The ignored local `.env.production.local` remains a template with five
+provider placeholders. It also still uses the legacy `WAITLAYER_ENVIRONMENT_*`
+names, while `docs/ops/docker-compose.images.example.yml` requires canonical
+`ATEVA_ENVIRONMENT_*` variables. Its public URL values still point at the old
+WaitLayer/Vercel preview origins and must not be promoted as production
+configuration.
+
+The abandoned `ateva.com` and `www.ateva.com` attachments have been removed
+from the Vercel project and team. No DNS records were published, no traffic
+was moved, and `api.ateva.com` still has no record. The current OCI API is
+exposed by Tailscale Funnel on its `*.ts.net` hostname, so a custom API
+hostname would need a real HTTPS front door/certificate before a DNS-only
+alias is published.
+
+Vercel's empty Preview build-time `JWT_PUBLIC_KEY` and Google client ID, plus
+the shared BFF proxy-hop setting, were populated from the matching
+local/staging configuration without printing their values. The temporary
+Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
+existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
+not the custom-domain setting being cleaned up; it must be reviewed separately
+before a future production launch.
+
+GitHub now has a lowercase `staging` environment plus approval protection on
+both `staging` and `Production`. The registry identifiers and package-only
+GHCR credential are present in both environments. The abandoned Resend
+`ateva.com` domain and production API key were deleted, and
+`PRODUCTION_RESEND_API_KEY` was removed from GitHub. No image has been pushed
+and no production promotion has been dispatched or approved.
+
 ## Resolved 2026-08-22 — four bugs that only a live system could show
 
 The API reached a real database for the first time on 2026-08-22. Everything
