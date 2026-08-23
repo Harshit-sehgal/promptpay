@@ -3,7 +3,7 @@
  * Secret-safe smoke test for the external advertiser review journey.
  *
  * Required environment:
- *   REVIEW_BASE_URL=https://www.ateva.com
+ *   REVIEW_BASE_URL=https://ateva.vercel.app
  *   REVIEW_EMAIL=<dedicated advertiser review account>
  *   REVIEW_ACCOUNT_PASSWORD=<password>
  *
@@ -139,8 +139,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(
-    `review-access-smoke: ${error instanceof Error ? error.message : String(error)}`,
-  );
+  console.error(`review-access-smoke: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
 });

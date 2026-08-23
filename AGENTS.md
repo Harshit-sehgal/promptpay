@@ -27,8 +27,7 @@
 A fresh read-only check found the OCI **staging** host active, with a stable
 environment ID and no `FILL_ME` values in its host environment. The shipped
 image connected through the Supabase pooled runtime URL, and Prisma reported
-all 97 migrations up to date. The API and readiness health routes both return
-200. This is staging evidence only; it is not production deployment evidence.
+all 97 migrations up to date. The API and readiness health routes both return 200. This is staging evidence only; it is not production deployment evidence.
 
 The ignored local `.env.production.local` remains a template with five
 provider placeholders. It also still uses the legacy `WAITLAYER_ENVIRONMENT_*`
@@ -58,6 +57,32 @@ GHCR credential are present in both environments. The abandoned Resend
 `ateva.com` domain and production API key were deleted, and
 `PRODUCTION_RESEND_API_KEY` was removed from GitHub. No image has been pushed
 and no production promotion has been dispatched or approved.
+
+## Resolved 2026-08-23 — the dead-domain emails and domain fiction swept
+
+The operator confirmed the project owns neither `ateva.com` nor `ateva.dev`.
+Live checks the same day: `ateva.com` has **no MX record** (every
+`@ateva.com` address bounces) and `ateva.dev` is NXDOMAIN. Yet user-facing
+surfaces advertised `support@`/`security@`/`trust@ateva.com` on `/contact`
+and routed GDPR privacy requests to `privacy@ateva.dev` in the DPA — a beta
+user with an account, payout, or Art. 17 request had no working channel.
+
+- `/contact` cards now link to the working in-app feedback form (`/feedback`,
+  DB-backed, admin-viewable) instead of dead mailboxes.
+- The GDPR DPA names the feedback form as the request channel, with an
+  explicit commitment to publish a real mailbox before general availability.
+- Ops/review tooling that defaulted to the stranger's origins was repointed:
+  `dodo-review-access.md`, `bootstrap-review-advertiser.mjs`,
+  `review-access-smoke.mjs` now use `https://ateva.vercel.app`; Open item 3
+  records the withdrawn registrar steps and the remaining
+  `NEXT_PUBLIC_API_URL` review.
+- The local `.env.production.local` template was aligned to canonical
+  `ATEVA_ENVIRONMENT_*` names and live origins (gitignored; not part of this
+  commit).
+
+**Operator follow-ups this does NOT close:** provisioning support/security/
+DPO mailboxes on a domain the project controls, and the matching Resend
+verified-sender decision.
 
 ## Resolved 2026-08-22 — four bugs that only a live system could show
 
@@ -2349,35 +2374,31 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    analogous `PRODUCTION_*` values, plus the remote Compose `.env`
    (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
    Missing values fail the gate by design.
-3. **Public production deployment remains open.** The current Vercel Preview
-   is now ready, but it is not the production domain and remains protected by
-   Vercel access controls. `ateva.com` and `www.ateva.com` are now
-   attached to the current `promptpay` project but are still Verification
-   Required because Vercel reports another Vercel account association. A
-   fresh read-only recheck on **2026-08-19** confirms `www.ateva.com/`
-   returns `200` from the old cached marketing deployment, `/auth/login`,
-   `/auth/signup`, `/developer`, `/advertiser`, and `/api/auth/config` return
-   `404`, and `api.ateva.com` has no DNS record. Add the Vercel-provided
-   `_vercel` TXT records and current A/CNAME records at the registrar, then
-   recheck the rendered routes.
-   The 21-route enumeration below is retained as historical evidence; cache-age
-   values are intentionally not treated as current state:
-   - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
-   - `307` — `/terms`, `/privacy`
-   - `404` — `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`,
-     `/admin`, `/security`, `/status`, `/feedback`, `/comparison`,
-     `/payout-policy`, `/advertiser-policy`, all `/legal/*`
-
-   What is live is a marketing build that predates the entire application: no
-   auth, no dashboards. `api.ateva.com` has no DNS record at all.
-   **Architecture note (this is the good news):** auth cookies are written by
+3. **Public production deployment — domain question resolved; launch pending.**
+   The project does not own `ateva.com` (operator-confirmed 2026-08-23). The
+   name's DNS belongs to a third party, has no MX record, and `api.ateva.com`
+   has never had a record; `ateva.dev` is NXDOMAIN. The abandoned Vercel
+   attachments were removed and every registrar-DNS instruction that assumed
+   ownership of the name is withdrawn.
+   The live web origin is `https://ateva.vercel.app` (the real application,
+   not the old marketing build whose 21-route enumeration was recorded below
+   as historical evidence); the API is exposed by Tailscale Funnel on its
+   `*.ts.net` HTTPS hostname (`docs/ops/oci-api-deployment.md`), and the web
+   BFF reaches it server-side — verified live 2026-08-23.
+   Remaining before a production launch: review the existing
+   `NEXT_PUBLIC_API_URL` build setting (left untouched during cleanup), and
+   decide between shipping on the current origins or acquiring an owned
+   domain. **Shipped-client defaults still reference `api.ateva.com`**
+   (CLI/VS Code/web fallbacks): inert while no client is published, but they
+   MUST be repointed before any client publish — a default API origin on a
+   name this project does not control would send user tokens to a stranger's
+   infrastructure (same hazard class as A-126).
+   **Architecture note:** auth cookies are written by
    the Next.js BFF (`app/api/auth/_lib/cookies.ts`), not by the API, so
    `__Host-` cookies live on the web origin and the API may sit on a different
    host with no cross-origin cookie problem. The only hard requirement is that
-   the API is HTTPS-reachable **server-side** from the web host. Recommended
-   split: web stays on Vercel (edge middleware + SRI + CSP are already tuned
-   for it); API goes to a container host with managed Postgres + Redis behind
-   `api.ateva.com`. Set `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
+   the API is HTTPS-reachable **server-side** from the web host. Set
+   `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
    **build** variables — Next inlines them at build time and runtime env does
    not reach middleware or the client bundle (A-083).
 

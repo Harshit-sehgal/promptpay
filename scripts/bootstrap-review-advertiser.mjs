@@ -28,7 +28,7 @@ const BCRYPT_COST = 12;
 const DEFAULT_NAME = 'External Reviewer';
 const DEFAULT_COMPANY = 'Ateva Product Review';
 const DEFAULT_COUNTRY = 'US';
-const DEFAULT_WEBSITE = 'https://www.ateva.com';
+const DEFAULT_WEBSITE = 'https://ateva.vercel.app';
 const REVIEW_CAMPAIGN_NAME = 'Ateva product review — draft campaign';
 
 function fail(message) {
@@ -97,7 +97,8 @@ async function main() {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('--email must be a valid email address');
 
   const envPassword = process.env.REVIEW_ACCOUNT_PASSWORD;
-  const password = envPassword || args.password || (await promptHidden('Review account password (hidden): '));
+  const password =
+    envPassword || args.password || (await promptHidden('Review account password (hidden): '));
   if (passwordValidationError(password)) {
     // Keep validation feedback intentionally generic: the password itself and
     // any validator-derived detail are credential-adjacent data and must never
