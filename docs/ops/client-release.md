@@ -9,6 +9,10 @@ the `ateva-vscode` VS Code extension.
   - Packages `apps/cli` into `ateva-cli-*.tgz`.
   - Smoke-installs the tarball and runs `ateva --version` and
     `ateva --help` with `ATEVA_API_URL=https://api.ateva.com/api/v1`.
+    Note: that URL is the shipped-default placeholder asserted by the
+    workflow; it is not a live host (the project owns no domain — see
+    AGENTS.md open item 3) and MUST be repointed together with the client
+    defaults before any real publication.
   - Uploads the tarball as the `ateva-cli-package` workflow artifact.
 - VS Code release workflow: `.github/workflows/publish-vscode.yml`
   - Packages `apps/vscode-extension` into `ateva-vscode.vsix`.

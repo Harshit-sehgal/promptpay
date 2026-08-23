@@ -30,7 +30,7 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.vercel.app'),
   title: 'Ateva — private beta for AI wait-state verification',
   description:
     'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation. No code tracking.',

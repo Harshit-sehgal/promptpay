@@ -58,6 +58,31 @@ GHCR credential are present in both environments. The abandoned Resend
 `PRODUCTION_RESEND_API_KEY` was removed from GitHub. No image has been pushed
 and no production promotion has been dispatched or approved.
 
+## Resolved 2026-08-23 (second pass) — the stranger's domain out of runtime paths
+
+Follow-up sweep after the dead-email fixes, hunting places where the
+un-owned `ateva.com` was not just documented but _exercised_:
+
+- `scripts/staging-smoke.mjs` created real campaign creatives with
+  `destinationUrl: https://ateva.com` — on staging those are servable ads;
+  a click sent a user to a third party's site. Fixture now uses
+  `example.com`, as do its three seeded account emails.
+- Web canonical fallbacks: root layout `metadataBase` and the sitemap base
+  fell back to `https://ateva.com` when `NEXT_PUBLIC_WEB_URL` is unset,
+  minting OpenGraph/canonical URLs on a domain that resolves to someone
+  else's server. Both fall back to `https://ateva.vercel.app`.
+- VS Code `getDashboardUrl()` catch-path returned
+  `https://ateva.com/developer`; it returns the live web origin now.
+  Note: still no spec covers `getDashboardUrl` at all.
+- Runbooks' `<APP>` example and DODO_PAYMENTS_PLAN §8 deployment rows now
+  state the real origins; client-release.md labels the pinned
+  `api.ateva.com` workflow constant as the placeholder it is.
+
+**Still an operator decision (unchanged):** the shipped-client default
+`ATEVA_API_URL`/`ateva.apiUrl` = `https://api.ateva.com/api/v1` across
+CLI/VS Code plus its CI gate assertions — one coordinated flip required
+before any client publish.
+
 ## Resolved 2026-08-23 — the dead-domain emails and domain fiction swept
 
 The operator confirmed the project owns neither `ateva.com` nor `ateva.dev`.

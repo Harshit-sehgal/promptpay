@@ -86,7 +86,7 @@ export class ConfigurationManager {
       const webHost = host.startsWith('api.') ? host.slice('api.'.length) : host;
       return `${parsed.protocol}//${webHost}/developer`;
     } catch {
-      return 'https://ateva.com/developer';
+      return 'https://ateva.vercel.app/developer';
     }
   }
 
