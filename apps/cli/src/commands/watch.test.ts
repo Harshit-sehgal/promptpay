@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('../lib/credentials', () => ({
   getCredentials: vi.fn(() => ({
-    apiUrl: 'https://api.ateva.com/api/v1',
+    apiUrl: 'https://ateva.vercel.app/api/v1',
     token: 'tok',
     deviceUUID: 'dev_1',
   })),

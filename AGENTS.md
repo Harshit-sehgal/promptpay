@@ -73,15 +73,68 @@ un-owned `ateva.com` was not just documented but _exercised_:
   else's server. Both fall back to `https://ateva.vercel.app`.
 - VS Code `getDashboardUrl()` catch-path returned
   `https://ateva.com/developer`; it returns the live web origin now.
-  Note: still no spec covers `getDashboardUrl` at all.
+  Note: still no spec covers `getDashboardUrl` at all. _(Closed 2026-08-24 —
+  see the entry below; the new spec also caught a port-dropping defect.)_
 - Runbooks' `<APP>` example and DODO_PAYMENTS_PLAN §8 deployment rows now
   state the real origins; client-release.md labels the pinned
   `api.ateva.com` workflow constant as the placeholder it is.
 
-**Still an operator decision (unchanged):** the shipped-client default
-`ATEVA_API_URL`/`ateva.apiUrl` = `https://api.ateva.com/api/v1` across
-CLI/VS Code plus its CI gate assertions — one coordinated flip required
-before any client publish.
+_(The shipped-client default flip recorded below as an operator decision was
+executed 2026-08-24 — see "Resolved 2026-08-24".)_
+
+## Resolved 2026-08-24 — shipped-client defaults off the stranger's domain
+
+Operator decision executed (2026-08-24): every shipped-client default now
+points at **`https://ateva.vercel.app/api/v1`** instead of
+`https://api.ateva.com/api/v1`, closing the last standing reference to a
+domain this project does not own in any code path, gate, or template. A
+default API origin on an un-owned name would send user tokens to a stranger's
+infrastructure if a client were ever published without thinking about it
+(same hazard class as A-126).
+
+One coordinated flip across:
+
+- CLI: `PRODUCTION_API_URL` (`apps/cli/src/lib/api-client.ts`), the loopback
+  warning in the same file, and the dev-API hint in `apps/cli/src/index.ts`.
+- VS Code: `ateva.apiUrl` default in `package.json` and `DEFAULT_API_URL` in
+  `src/config.ts`. A side benefit: `getDashboardUrl()` deriving from
+  `ateva.vercel.app` now yields exactly the live dashboard origin.
+- CI/release gates asserting the defaults: `ci.yml` packed-CLI smoke +
+  VSIX metadata check, `publish-cli.yml`, `publish-vscode.yml`, and the
+  isolated-smoke env in `scripts/ci-package-contract.test.mjs`.
+- Ops templates that suggested the un-owned host as an _example_:
+  `scripts/scaffold-production-env.mjs` and the `staging.yml` comment now use
+  neutral `api.example.com`.
+- Test fixtures updated for consistency (CLI creds fixtures, VS Code specs).
+
+**Honest boundary recorded, not papered over:** `ateva.vercel.app` is the web
+origin, and its BFF proxy (`app/api/[...proxy]/route.ts`) today allowlists
+only browser UI paths, forwards cookie-derived auth rather than a
+client-supplied Bearer header, and deliberately excludes `/extension/*`. So a
+published client pointed at the default would receive 403/dropped auth until
+that boundary is deliberately extended or the API gets its own public
+hostname. This is documented in `docs/ops/client-release.md` as a pre-public
+verification step; it is a launch-blocking product/infra decision, not
+something this change pretends to solve.
+
+Also closed the two recorded coverage gaps:
+
+- **VS Code `getDashboardUrl()` spec** (`config.dashboard-url.spec.ts`, 4
+  tests): default derivation, `api.` prefix stripping, loopback scheme, and
+  the fallback for values getApiUrl rejects. The new spec immediately caught
+  a real defect: the derivation used `parsed.hostname`, silently dropping an
+  explicit port — `http://localhost:4002/api/v1` opened
+  `http://localhost/developer`. Fixed to preserve non-default ports.
+- **Brand-mark residue guard** (`apps/web/src/components/brand-mark.test.ts`,
+  3 tests): no `.tsx` may ship a brand-coloured badge whose content is a
+  hardcoded single letter; `Sidebar.brandLetter` must stay opt-in with no
+  default; the shared `BrandMark` import must be present. Mutation-checked
+  against the original `<div className="…bg-brand-500…">W</div>` shape and
+  verified not to fire on the admin red-"A" sub-brand or expression children.
+
+Verification: `pnpm typecheck` 18/18, `pnpm lint` 11/11, cli vitest 136/136,
+vscode vitest 152 passed + 1 opt-in skip, brand-mark guard 3/3,
+`node --test scripts/ci-package-contract.test.mjs` green, Prettier clean.
 
 ## Resolved 2026-08-23 — the dead-domain emails and domain fiction swept
 
@@ -304,7 +357,11 @@ assert on copy, and the copy said "Ateva". Only opening the pages showed it.
   wording. Drawn with divs, not the shared SVG, because Satori supports only a
   flexbox subset.
 
-Guard note: no test asserts on the mark, so this can regress silently again. The
+Guard note: _(closed 2026-08-24)_ — `apps/web/src/components/brand-mark.test.ts`
+now asserts no `.tsx` file ships a brand-coloured badge holding a hardcoded
+single letter, that `Sidebar`'s `brandLetter` stays opt-in with no default, and
+that the shared `BrandMark` import is present. Mutation-checked against the
+original `<div className="…bg-brand-500…">W</div>` shape. The
 cheap check is a grep for a bare `W` inside a `bg-brand-500`/`from-brand-500`
 badge.
 
@@ -2413,11 +2470,12 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    Remaining before a production launch: review the existing
    `NEXT_PUBLIC_API_URL` build setting (left untouched during cleanup), and
    decide between shipping on the current origins or acquiring an owned
-   domain. **Shipped-client defaults still reference `api.ateva.com`**
-   (CLI/VS Code/web fallbacks): inert while no client is published, but they
-   MUST be repointed before any client publish — a default API origin on a
-   name this project does not control would send user tokens to a stranger's
-   infrastructure (same hazard class as A-126).
+   domain. ~~Shipped-client defaults still reference `api.ateva.com`~~
+   **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
+   their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
+   see the dated entry above. Before any client publish, verify that origin
+   can actually serve the CLI/extension endpoints (the BFF proxy currently
+   cannot — recorded in `docs/ops/client-release.md`).
    **Architecture note:** auth cookies are written by
    the Next.js BFF (`app/api/auth/_lib/cookies.ts`), not by the API, so
    `__Host-` cookies live on the web origin and the API may sit on a different

@@ -380,7 +380,7 @@ jobs:
     environment: production
     env:
       # PRODUCTION_API_URL must include the /api/v1 prefix.
-      # Example: https://api.ateva.com/api/v1
+      # Example: https://api.example.com/api/v1
       PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
       PRODUCTION_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
     steps:

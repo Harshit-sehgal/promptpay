@@ -151,7 +151,7 @@ describe('ApiClient — URL / base-URL resolution', () => {
     await client.getBalance();
     const opts = mock.captured[0] as Record<string, unknown>;
 
-    expect(opts.hostname).toBe('api.ateva.com');
+    expect(opts.hostname).toBe('ateva.vercel.app');
     expect(opts.path).toBe('/api/v1/ledger/balance');
   });
 

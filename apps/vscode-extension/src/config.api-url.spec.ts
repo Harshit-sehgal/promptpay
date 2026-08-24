@@ -21,7 +21,7 @@ vi.mock('vscode', () => ({
   ConfigurationTarget: { Global: 1 },
 }));
 
-const DEFAULT = 'https://api.ateva.com/api/v1';
+const DEFAULT = 'https://ateva.vercel.app/api/v1';
 
 async function apiUrl(value: string | undefined): Promise<string> {
   mock.configured = value;
