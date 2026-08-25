@@ -50,8 +50,16 @@ const PAGES = [
 
 for (const path of PAGES) {
   test(`${path} has no serious or critical WCAG 2.1 AA violations`, async ({ page }) => {
-    await page.goto(path);
-    await page.waitForLoadState('networkidle');
+    await page.goto(path, { waitUntil: 'domcontentloaded' });
+
+    // Public pages intentionally make background health/consent requests, and
+    // /status polls every 15 seconds. `networkidle` therefore describes neither
+    // visual readiness nor accessibility readiness and can consume the entire
+    // test timeout before axe runs. The page-local main landmark is the stable
+    // rendered contract every route below already has to satisfy.
+    const main = page.locator('main#main-content');
+    await expect(main).toHaveCount(1);
+    await expect(main).toBeVisible();
 
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
 
@@ -92,7 +100,7 @@ for (const path of PAGES) {
       throw new Error(`${blocking.length} blocking a11y violation(s) on ${path}:\n  ${summary}`);
     }
 
-    await expect(page.locator('main#main-content')).toHaveCount(1);
+    await expect(main).toHaveCount(1);
   });
 }
 

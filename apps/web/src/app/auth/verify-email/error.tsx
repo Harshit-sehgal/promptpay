@@ -10,7 +10,7 @@ export default function VerifyEmailError({
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6">
       <div className="w-full max-w-sm text-center">
-        <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
+        <div className="rounded-3xl border border-surface-200/70 bg-white p-8">
           <h2 className="text-xl font-bold text-surface-900 mb-2 tracking-tight">
             Something went wrong
           </h2>

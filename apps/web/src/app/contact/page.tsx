@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 
 export const metadata: Metadata = {
   title: 'Contact & Support — Ateva',
@@ -11,32 +11,11 @@ export const metadata: Metadata = {
 export default function ContactPage() {
   return (
     <div className="min-h-screen bg-white">
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-sm font-medium transition-colors px-3 py-1.5"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/auth/signup?role=developer"
-              className="bg-surface-900 hover:bg-surface-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Join beta
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
-      <main id="main-content" tabIndex={-1} className="pt-36 pb-24 px-6">
+      <main id="main-content" tabIndex={-1} className="px-5 py-20 sm:px-6 lg:px-8 lg:py-24">
         <div className="mx-auto max-w-3xl">
-          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">
+          <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-4">
             Contact & Support
           </h1>
           <p className="text-surface-500 text-lg mb-12">
@@ -44,7 +23,7 @@ export default function ContactPage() {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">Email support</h2>
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 For account, payout, and campaign questions.
@@ -53,7 +32,7 @@ export default function ContactPage() {
                 Open the feedback form
               </Link>
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">Security reports</h2>
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 Report vulnerabilities or abuse responsibly.
@@ -62,7 +41,7 @@ export default function ContactPage() {
                 Report via the feedback form
               </Link>
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">
                 Trust & verification
               </h2>
@@ -75,7 +54,7 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <div className="bg-surface-50/60 border border-surface-200/80 rounded-2xl p-8">
+          <div className="bg-surface-50/60 border border-surface-200/80 rounded-3xl p-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-4">Helpful links</h2>
             <div className="grid grid-cols-2 gap-3">
               <Link

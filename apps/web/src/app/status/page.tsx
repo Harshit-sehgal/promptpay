@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 import { getErrorMessage } from '@/lib/api/errors';
 import { systemApi } from '@/lib/api/services';
 
@@ -53,27 +52,19 @@ export default function StatusPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-          <Link
-            href="/"
-            className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-          >
-            ← Back to Home
-          </Link>
-        </div>
-      </nav>
+      <SiteHeader />
 
       {/* Main content */}
-      <main id="main-content" tabIndex={-1} className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-3xl px-5 py-20 sm:px-6 lg:py-24"
+      >
         <div className="text-center mb-12">
           <p className="wl-eyebrow mb-3">Live platform check</p>
-          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">System status</h1>
+          <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-4">
+            System status
+          </h1>
           <p className="text-surface-600 text-sm max-w-xl mx-auto leading-6">
             The web app checks the platform API directly. This page reports availability, not
             account, campaign, or payout status.
@@ -86,7 +77,7 @@ export default function StatusPage() {
             <p className="text-surface-500 text-xs">Querying nodes...</p>
           </div>
         ) : error ? (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center">
+          <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 text-center">
             <p className="text-rose-800 font-semibold text-sm mb-2">Backend status unavailable</p>
             <p className="text-rose-700 text-sm mb-4">{error}</p>
             <button
@@ -100,7 +91,7 @@ export default function StatusPage() {
           <div className="space-y-6">
             {/* Overall status banner */}
             <div
-              className={`p-6 rounded-2xl border transition-all duration-300 flex items-center gap-4 ${
+              className={`p-6 rounded-3xl border transition-all duration-300 flex items-center gap-4 ${
                 overallHealthy
                   ? 'bg-emerald-50/50 border-emerald-200/60 text-emerald-800'
                   : 'bg-rose-50/50 border-rose-200/60 text-rose-800'
@@ -124,7 +115,7 @@ export default function StatusPage() {
             {/* Service detail cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Database Status */}
-              <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
+              <div className="bg-white border border-surface-200 rounded-3xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-surface-900 font-semibold text-sm">Primary Database</span>
                   <span
@@ -143,7 +134,7 @@ export default function StatusPage() {
               </div>
 
               {/* Redis Cache & Rate Limiting Status */}
-              <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
+              <div className="bg-white border border-surface-200 rounded-3xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-surface-900 font-semibold text-sm">
                     Redis Cache & Rate Limiter
@@ -170,7 +161,7 @@ export default function StatusPage() {
             </div>
 
             {/* Infrastructure specifications */}
-            <div className="bg-surface-50/50 border border-surface-200/60 rounded-2xl p-6 space-y-4">
+            <div className="bg-surface-50/50 border border-surface-200/60 rounded-3xl p-6 space-y-4">
               <h3 className="text-surface-950 font-bold text-xs uppercase tracking-wider">
                 Metrics
               </h3>

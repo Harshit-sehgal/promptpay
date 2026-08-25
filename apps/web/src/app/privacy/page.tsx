@@ -84,7 +84,7 @@ export default function PrivacyPage() {
         <Link href="/" className="text-brand-500 hover:text-brand-600 text-xs font-medium">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold text-surface-900 mt-4 mb-2 tracking-tight">
+        <h1 className="font-serif text-[28px] font-normal tracking-tight text-surface-950 mt-4 mb-2 tracking-tight">
           Privacy Policy
         </h1>
         <p className="text-surface-500 text-sm mb-10">Last updated: 2026-07-01</p>

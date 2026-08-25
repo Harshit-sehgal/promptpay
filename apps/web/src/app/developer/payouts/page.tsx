@@ -341,7 +341,7 @@ export default function DevPayoutsPage() {
   return (
     <div className="max-w-6xl mx-auto">
       {isAuthenticated && !user?.emailVerified && (
-        <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-amber-50 border border-amber-200/60 rounded-3xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-amber-800 font-semibold text-sm">
               Verify your email to request payouts
@@ -362,7 +362,7 @@ export default function DevPayoutsPage() {
         </div>
       )}
       {info && requestBlockedByTwoFactor && (
-        <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="bg-amber-50 border border-amber-200/60 rounded-3xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-amber-800 font-semibold text-sm">Enable 2FA to request payouts</p>
             <p className="text-amber-700 text-xs mt-0.5">
@@ -425,7 +425,7 @@ export default function DevPayoutsPage() {
           </div>
 
           {/* Request payout */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
             {!earningsLive ? (
@@ -526,7 +526,7 @@ export default function DevPayoutsPage() {
           </div>
 
           {/* Payout methods */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-surface-900 font-bold text-[16px]">Payout methods</h2>{' '}
               <button
@@ -674,7 +674,7 @@ export default function DevPayoutsPage() {
             )}
 
             {info.payoutAccounts.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
+              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-3xl font-normal">
                 No payout methods yet. Add a currently available method to prepare for payouts.
               </div>
             ) : (
@@ -743,10 +743,10 @@ export default function DevPayoutsPage() {
           </div>
 
           {/* Payout history */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent payout requests</h2>
             {requests.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
+              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-3xl font-normal">
                 No payout requests yet.
               </div>
             ) : (

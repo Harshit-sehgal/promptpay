@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 
 import { CURRENCY_POLICY, formatMinorUnits, payoutMinimumMinor } from '@ateva/shared';
 
@@ -16,17 +16,16 @@ export default function PayoutPolicyPage() {
 
   return (
     <div className="min-h-screen bg-surface-50">
-      <nav className="glass-nav border-b border-surface-200/60 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-        </div>
-      </nav>
+      <SiteHeader />
 
-      <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-6 py-16">
-        <h1 className="text-3xl font-bold text-surface-900 mb-8 tracking-tight">Payout Policy</h1>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-4xl px-5 py-16 sm:px-6 lg:py-20"
+      >
+        <h1 className="mb-8 font-serif text-4xl font-normal tracking-[-0.02em] text-surface-950 sm:text-5xl">
+          Payout Policy
+        </h1>
 
         <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
           <p className="font-semibold">Planned launch policy — not active in beta</p>

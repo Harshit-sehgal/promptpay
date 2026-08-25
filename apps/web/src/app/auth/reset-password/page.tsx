@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import { AuthShell } from '@/components/auth-shell';
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -47,7 +48,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
-        <p className="text-red-600 text-sm">
+        <p className="text-red-700 text-sm">
           Missing reset token. Please use the link from your email, or{' '}
           <Link href="/auth/forgot-password" className="font-medium underline">
             request a new one
@@ -60,8 +61,8 @@ function ResetPasswordForm() {
 
   if (done) {
     return (
-      <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-        <p className="text-emerald-700 text-sm">
+      <div className="bg-surface-100 border border-surface-200 rounded-xl p-4">
+        <p className="text-surface-800 text-sm">
           Password reset successfully. All sessions were signed out — redirecting you to sign in...
         </p>
       </div>
@@ -76,7 +77,7 @@ function ResetPasswordForm() {
           role="alert"
           aria-live="polite"
         >
-          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-700 text-sm">{error}</p>
         </div>
       )}
 
@@ -132,7 +133,7 @@ function ResetPasswordForm() {
           size="lg"
           isLoading={loading}
           disabled={loading}
-          className="w-full rounded-xl text-sm"
+          className="w-full text-sm"
         >
           {loading ? 'Resetting...' : 'Reset password'}
         </Button>
@@ -143,19 +144,15 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <main
-      id="main-content"
-      tabIndex={-1}
-      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
-    >
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-10 justify-center">
+    <AuthShell>
+      <div className="w-full max-w-md">
+        <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
           <BrandMark />
           <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
         </div>
 
-        <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+        <div className="rounded-3xl border border-surface-200/70 bg-white p-6 sm:p-8 lg:rounded-none lg:border-0 lg:p-0">
+          <h1 className="font-serif text-[26px] font-normal text-surface-950 mb-1.5 tracking-tight">
             Choose a new password
           </h1>
           <p className="text-surface-500 text-sm mb-8">Minimum 8 characters.</p>
@@ -174,6 +171,6 @@ export default function ResetPasswordPage() {
           </p>
         </div>
       </div>
-    </main>
+    </AuthShell>
   );
 }

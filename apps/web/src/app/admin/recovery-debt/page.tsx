@@ -394,7 +394,7 @@ export default function AdminRecoveryDebtPage() {
 
       {action && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-lg w-full">
+          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-lg w-full">
             <h3 className="text-white font-semibold mb-2 capitalize">
               {action.mode === 'open'
                 ? `${formatStatus(action.status)} case`

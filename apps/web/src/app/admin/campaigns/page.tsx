@@ -295,7 +295,7 @@ export default function AdminCampaignsPage() {
       {/* Campaign reject modal */}
       {rejectModalFor && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Reject campaign</h3>
             <p className="text-ink-300 text-sm mb-4">
               <span className="text-white">{rejectModalFor.title || rejectModalFor.name}</span>
@@ -333,7 +333,7 @@ export default function AdminCampaignsPage() {
       {/* Creative reject modal */}
       {creativeRejectFor && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Reject creative</h3>
             <p className="text-ink-300 text-sm mb-4">
               Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>

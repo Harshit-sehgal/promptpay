@@ -151,7 +151,7 @@ export default function AdminDevicesPage() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6">
-        <section className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+        <section className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4 mb-5">
             <div>
               <h2 className="text-surface-900 font-semibold text-[16px]">Registered devices</h2>
@@ -268,7 +268,7 @@ export default function AdminDevicesPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm space-y-5 h-fit"
+          className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm space-y-5 h-fit"
         >
           <div>
             <h2 className="text-surface-900 font-semibold text-[16px] mb-1">

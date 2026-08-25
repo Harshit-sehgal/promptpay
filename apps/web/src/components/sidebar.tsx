@@ -36,13 +36,13 @@ export function Sidebar({
 
   return (
     <aside
-      className={`w-full lg:w-64 p-4 sm:p-6 flex flex-col shrink-0 transition-colors duration-200 ${
+      className={`flex w-full shrink-0 flex-col p-4 transition-colors duration-200 sm:p-5 lg:w-[272px] lg:p-6 ${
         isLight
           ? 'bg-surface-50 border-b border-surface-200/80 lg:border-b-0 lg:border-r'
           : 'bg-ink-800 border-b border-ink-600/30 lg:border-b-0 lg:border-r'
       }`}
     >
-      <div className="flex items-center gap-2 mb-4 lg:mb-8">
+      <div className="mb-4 flex items-center gap-2.5 lg:mb-9">
         {/*
           The product mark by default. A letter badge is only for a sub-brand
           that must read as distinct from Ateva itself — /admin uses a red "A".
@@ -51,14 +51,22 @@ export function Sidebar({
         */}
         {brandLetter ? (
           <div
-            className={`w-8 h-8 rounded-lg ${brandColor} flex items-center justify-center text-white font-bold text-sm`}
+            className={`grid h-9 w-9 place-items-center rounded-full ${brandColor} text-sm font-semibold text-white`}
           >
             {brandLetter}
           </div>
         ) : (
-          <BrandMark size={19} className={isLight ? 'text-surface-900' : 'text-white'} />
+          <div
+            className={`grid h-9 w-9 place-items-center rounded-full ${
+              isLight ? 'bg-surface-950 text-white' : 'bg-white text-ink-900'
+            }`}
+          >
+            <BrandMark size={17} />
+          </div>
         )}
-        <span className={`font-semibold ${isLight ? 'text-surface-900' : 'text-white'}`}>
+        <span
+          className={`text-[15px] font-semibold tracking-[-0.02em] ${isLight ? 'text-surface-900' : 'text-white'}`}
+        >
           {brand}
         </span>
       </div>
@@ -70,11 +78,11 @@ export function Sidebar({
               key={item.href}
               href={item.href}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14px] transition-all duration-150 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+              className={`flex items-center gap-3 rounded-full px-4 py-2.5 text-[13px] transition-all duration-150 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
                 isActive
                   ? isLight
-                    ? 'bg-brand-50 border border-brand-200/60 text-brand-700 font-medium'
-                    : 'bg-ink-700 text-white'
+                    ? 'border border-surface-200 bg-white font-medium text-surface-950 shadow-[0_5px_18px_-12px_rgba(23,25,28,0.35)]'
+                    : 'bg-white font-medium text-ink-900'
                   : isLight
                     ? 'text-surface-600 hover:text-surface-900 hover:bg-surface-100/50'
                     : 'text-ink-200 hover:text-white hover:bg-ink-700/50'

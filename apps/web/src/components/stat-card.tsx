@@ -21,9 +21,9 @@ export function StatCard({
 
   return (
     <div
-      className={`rounded-2xl p-6 border shadow-sm transition-all duration-200 motion-reduce:transition-none ${
+      className={`rounded-[20px] p-6 border transition-all duration-200 motion-reduce:transition-none ${
         isLight
-          ? 'bg-white border-surface-200/80 shadow-surface-100/50'
+          ? 'bg-white border-surface-200/70 shadow-[0_0_0_1px_rgba(4,23,43,0.04),0_8px_24px_-12px_rgba(0,0,0,0.1)]'
           : 'bg-ink-800 border-ink-600/30'
       }`}
     >
@@ -33,7 +33,7 @@ export function StatCard({
         </p>
         {icon && <span className="shrink-0">{icon}</span>}
       </div>
-      <p className={`text-3xl font-bold font-mono tabular-nums ${defaultValColor}`}>{value}</p>
+      <p className={`text-3xl font-medium font-mono tabular-nums ${defaultValColor}`}>{value}</p>
       {subtitle && (
         <p className={`text-xs mt-1.5 ${isLight ? 'text-surface-600' : 'text-ink-300'}`}>
           {subtitle}
