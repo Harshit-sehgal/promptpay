@@ -60,19 +60,36 @@ Recording these so the next sweep does not re-litigate them:
   `scripts/ci-package-contract.test.mjs:222` reads it by exact path; renaming
   for cosmetics would break CI for no gain.
 
-### Open — consent does not gate client monitoring
+### Resolved — consent now gates client monitoring
 
-`apps/web/src/sentry.client.config.ts` calls `Sentry.init()` whenever a DSN is
-present, including `replaysSessionSampleRate: 0.01`, with no consent check.
-`apps/web/src/lib/client-monitoring.ts` exists precisely to gate this
-(`initializeMonitoringFromStoredConsent`, `enableClientMonitoring`,
-`disableClientMonitoring`), is fully unit-tested, and **has no production
-caller** — it is imported only by its own test. Meanwhile the consent banner
-tells visitors they are accepting "optional analytics cookies".
+`apps/web/src/sentry.client.config.ts` — the file Sentry's Next.js plugin
+injects into the client bundle — called `Sentry.init()` whenever a DSN was
+present, including `replaysSessionSampleRate: 0.01`, with no consent check. So
+trace sampling and Session Replay could start before the visitor answered the
+cookie banner, and kept running after a "decline", while the banner told them
+they were accepting "optional analytics cookies".
 
-So session replay can start before consent. This was found while looking for
-dead code: deleting the unused module would have cemented the defect. Wiring it
-is a deliberate change to consent behaviour and is left for a decision.
+`apps/web/src/lib/client-monitoring.ts` already held the fix: a consent-gated
+`initClientMonitoring()` that verifies the stored choice against the server's
+_current_ required policy version and fails closed. It was fully unit-tested and
+had **no production caller** — imported only by its own test. The defect was
+therefore the absence of a call, which no behavioural test could see.
+
+- The injected client config no longer initialises Sentry. It calls
+  `initializeMonitoringFromStoredConsent()` and nothing else, so the only client
+  `Sentry.init()` left in the tree is the one behind the version check.
+- `components/cookie-consent.tsx` now calls `enableClientMonitoring(version)` on
+  accept and `disableClientMonitoring()` on decline inside `persist()`, so a
+  choice takes effect in the current session rather than the next page load —
+  declining stops Session Replay immediately.
+- `src/__tests__/client-telemetry-consent.test.ts` guards it. The assertions are
+  source-level by design: the regression is a missing call, and a mock-based
+  test cannot observe that. The guard was verified to FAIL when the direct
+  `Sentry.init()` is reintroduced, then pass once reverted.
+
+Found while looking for dead code — `client-monitoring.ts` was the top
+unreferenced-file candidate. Deleting it, which was the obvious cleanup move,
+would have cemented the defect.
 
 Verification for this pass: `pnpm build` 11/11, `pnpm typecheck` 18/18,
 `pnpm lint` 11/11, `pnpm --filter ateva-api test:unit` 142 files / 1521 tests

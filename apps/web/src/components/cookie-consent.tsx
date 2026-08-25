@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api/client';
 import { useAuth } from '@/lib/auth-context';
+import { disableClientMonitoring, enableClientMonitoring } from '@/lib/client-monitoring';
 import { readStoredCookieConsent, writeStoredCookieConsent } from '@/lib/consent-preferences';
 
 import { useToast } from '@ateva/ui';
@@ -70,6 +71,10 @@ export default function CookieConsent() {
   const persist = (choice: Choice) => {
     if (!marketingVersion) return;
     writeStoredCookieConsent(choice, marketingVersion);
+    // Apply the choice to optional telemetry now, not on the next page load:
+    // declining must stop Session Replay in this session, not the next one.
+    if (choice === 'accepted') enableClientMonitoring(marketingVersion);
+    else disableClientMonitoring();
     setVisible(false);
   };
 
