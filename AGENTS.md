@@ -22,6 +22,108 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-26 — repository and documentation cleanup sweep
+
+A cleanup pass over the tree, run on the premise that the deployed UI is final.
+The notable result is how little was actually removable: the searches for stale
+code mostly returned deliberate, load-bearing constructs, and those were left
+alone rather than tidied away.
+
+- **Removed 3.8 GB of regenerable build output**: every `.turbo/` cache,
+  `apps/web/.next`, `apps/api/coverage`, `apps/web/test-results`, and all
+  `dist/` directories. All were already gitignored; nothing tracked was
+  touched. `pnpm build` regenerates them (verified, 11/11 tasks).
+- **Removed two dead CSS blocks** from `apps/web/src/app/globals.css`: the
+  `.wl-2col` responsive override (zero remaining consumers) and the
+  `div[style*='padding:0 32px']` override (no element carries that inline style
+  any more). Both were leftovers from the pre-redesign inline-style markup.
+  `globals-css-integrity.test.ts` passes (5/5).
+- **Rebuilt the README documentation index.** 41 of 63 docs were unreachable
+  from it, including every ADR after 0001 and all of `docs/ops/`. The index is
+  now grouped by purpose and every link resolves.
+
+### Checked and deliberately NOT removed
+
+Recording these so the next sweep does not re-litigate them:
+
+- **`WaitLayer` references (14 files) are not stale.** Every one is either a
+  deliberate `ATEVA_X ?? WAITLAYER_X` legacy env fallback or a comment
+  documenting the rename. Replacing them would break env compatibility.
+- **`tools/wait-attestation-bridge/` is not orphaned.** It is a `workspace:*`
+  dependency of `apps/api` and the subject of ADR-0007.
+- **The overlapping `docs/ops/` deploy and rollback docs are a deliberate
+  hierarchy**, not duplicates; `deployment.md` names itself the quick-start for
+  `rollback-and-deployment.md`. Deleting any breaks the others' links.
+- **`LAUNCH_PLAN.md`, `FOUNDATION_STATUS.md` and `DODO_PAYMENTS_PLAN.md` carry
+  explicit SUPERSEDED banners** and are indexed as historical records. Kept.
+- **`docs/16-operational-runbooks.md` keeps its colliding number.**
+  `scripts/ci-package-contract.test.mjs:222` reads it by exact path; renaming
+  for cosmetics would break CI for no gain.
+
+### Open — consent does not gate client monitoring
+
+`apps/web/src/sentry.client.config.ts` calls `Sentry.init()` whenever a DSN is
+present, including `replaysSessionSampleRate: 0.01`, with no consent check.
+`apps/web/src/lib/client-monitoring.ts` exists precisely to gate this
+(`initializeMonitoringFromStoredConsent`, `enableClientMonitoring`,
+`disableClientMonitoring`), is fully unit-tested, and **has no production
+caller** — it is imported only by its own test. Meanwhile the consent banner
+tells visitors they are accepting "optional analytics cookies".
+
+So session replay can start before consent. This was found while looking for
+dead code: deleting the unused module would have cemented the defect. Wiring it
+is a deliberate change to consent behaviour and is left for a decision.
+
+Verification for this pass: `pnpm build` 11/11, `pnpm typecheck` 18/18,
+`pnpm lint` 11/11, `pnpm --filter ateva-api test:unit` 142 files / 1521 tests
+passing, `node --test scripts/ci-package-contract.test.mjs` 20/20. The
+`test:integration` suite remains gated behind
+`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` (it runs `prisma migrate reset
+--force`) and was not run.
+
+## Resolved 2026-08-26 — cohesive editorial UI redesign
+
+The web product now uses one deliberate visual system across its public,
+authentication, and dashboard surfaces, informed by the Refero Steep reference
+without copying its analytics product or page composition. The system uses a
+paper-and-ink palette, sienna accent, Instrument Serif display type, restrained
+rounded geometry, and mono evidence labels. Semantic green, amber, and red stay
+reserved for actual status.
+
+- The homepage is rebuilt around Ateva's own product artifact: an illustrative
+  verification trace that connects eligible wait detection, a labelled
+  sponsored unit, visibility controls, and reporting. It keeps the private-beta,
+  rewards-disabled, consent, payment-rail, and 60/40 accounting boundaries
+  explicit.
+- `SiteHeader` and `SiteFooter` provide the shared public shell. The major
+  marketing, trust, policy, pricing, comparison, status, and advertiser routes
+  use it instead of maintaining visually divergent navigation copies.
+- The advertiser page has a focused editorial narrative and a responsive
+  waitlist card. The auth routes share a two-panel `AuthShell` that explains the
+  privacy boundary while preserving compact mobile forms. Dashboard sidebars
+  and supporting UI primitives use the same token and shape language.
+- Local Instrument Serif files back both the web display face and the generated
+  OpenGraph card. Motion remains optional under `prefers-reduced-motion`, focus
+  treatment stays visible, and the full public/auth axe sweep passes at desktop
+  and mobile breakpoints.
+- The accessibility harness now waits for the page-local main landmark instead
+  of `networkidle`; `/status` polls by design, so the old wait condition could
+  hang despite a fully rendered page. The money-claims release gate also caught
+  and corrected one redesign sentence so the 60% participant obligation cannot
+  be read as diverting an advertiser payment.
+
+Verification: `pnpm lint` 11/11, `pnpm typecheck` 18/18, web Vitest 284/284,
+API unit 1521/1521, `pnpm test:release-gates` 140/140 plus all scenario checks,
+web production build 59/59 pages, and Playwright axe 27/27 in both Chromium and
+mobile Chromium. Rendered browser review covered the homepage, advertiser,
+pricing, login, and OpenGraph surfaces at 1440px and 390px. The first full
+`pnpm test` attempt found the isolated `postgres-test` service absent and failed
+two auth setup suites with `ECONNREFUSED`; after starting that dedicated service
+and non-destructively applying all 97 migrations, the exact suites passed 13/13
+and the complete API unit command passed. The full command was not rerun through
+its destructive per-integration-suite `prisma migrate reset` step without fresh
+operator consent. The `docker-build` CI job was not run locally.
+
 ## Verified 2026-08-23 — current infrastructure state (partial #40)
 
 A fresh read-only check found the OCI **staging** host active, with a stable
