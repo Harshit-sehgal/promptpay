@@ -101,7 +101,7 @@ services:
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
       API_PORT: '4002'
-      GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       # docker-compose is a developer convenience — run with dev NODE_ENV so the
       # google-token verifier's mock path remains available. Production deploys
@@ -180,7 +180,6 @@ services:
         JWT_ISSUER: ${JWT_ISSUER:-ateva}
         JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
-        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
         NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-http://localhost:3000}
         NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: ${NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND:-development}
         NEXT_PUBLIC_ALLOW_MOCK_AUTH: ${NEXT_PUBLIC_ALLOW_MOCK_AUTH:-"true"}
@@ -191,7 +190,6 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
       NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: ${NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND:-development}
       JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}

@@ -277,30 +277,17 @@ function checkUrls(env, production) {
 }
 
 function checkOAuth(env, production) {
-  const apiId = env.GOOGLE_CLIENT_ID;
-  const webId = env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  if (!apiId && !webId) {
+  const apiId = env.GOOGLE_CLIENT_ID?.trim();
+  if (!apiId) {
     return [
       production
-        ? fail(
-            'google-oauth',
-            'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID are required in production',
-          )
+        ? fail('google-oauth', 'GOOGLE_CLIENT_ID is required in production')
         : warn('google-oauth', 'Google OAuth is not configured outside production'),
     ];
   }
-  if (!apiId || !webId) {
-    return [
-      fail(
-        'google-oauth',
-        'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID must be configured together',
-      ),
-    ];
-  }
-  if (apiId !== webId) {
-    return [fail('google-oauth', 'GOOGLE_CLIENT_ID and NEXT_PUBLIC_GOOGLE_CLIENT_ID do not match')];
-  }
-  return [pass('google-oauth', 'API and web Google client IDs match')];
+  return [
+    pass('google-oauth', 'API Google client ID configured; web discovers it through /auth/config'),
+  ];
 }
 
 function checkDodo(env, production) {
@@ -374,10 +361,7 @@ function checkEnvironment(env) {
   );
   if (production && env.ATEVA_ENVIRONMENT_KIND !== 'production') {
     findings.push(
-      fail(
-        'environment-kind',
-        'production NODE_ENV requires ATEVA_ENVIRONMENT_KIND=production',
-      ),
+      fail('environment-kind', 'production NODE_ENV requires ATEVA_ENVIRONMENT_KIND=production'),
     );
   } else {
     findings.push(pass('environment-kind', env.ATEVA_ENVIRONMENT_KIND ?? 'unset'));

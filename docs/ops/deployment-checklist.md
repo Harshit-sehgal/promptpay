@@ -142,17 +142,19 @@ DATABASE_URL=<production-url> \
       in Vercel; `COOKIE_SECURE` is not `false`.
 - [ ] Vercel build variables are configured: `JWT_PUBLIC_KEY`, `JWT_SECRET`,
       `NEXT_PUBLIC_API_URL` or `API_INTERNAL_URL`,
-      `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `JWT_ISSUER`, and `JWT_AUDIENCE`.
+      `JWT_ISSUER`, and `JWT_AUDIENCE`. Google client-ID configuration belongs
+      to the API's `GOOGLE_CLIENT_ID` runtime environment.
 - [ ] Production positive `ALLOWED_COUNTRIES` and `ALLOWED_CURRENCIES` are
       selected by product/legal and configured in the API secret manager.
 - [ ] `.env.production` contains every fail-closed value required by
       `docs/ops/docker-compose.images.example.yml`, including the stable
-      environment ID, payout encryption/HMAC keys, email secrets, and public
-      web configuration.
+      environment ID, payout encryption/HMAC keys, email secrets, the API
+      `GOOGLE_CLIENT_ID`, and public web configuration.
 - [ ] GitHub's production environment contains `PRODUCTION_JWT_PUBLIC_KEY`,
-      optional rotation keyset/issuer/audience, `PRODUCTION_API_URL`,
-      `PRODUCTION_WEB_URL`, and `PRODUCTION_GOOGLE_CLIENT_ID`. Next.js embeds
-      these public values at build time.
+      optional rotation keyset/issuer/audience, `PRODUCTION_API_URL`, and
+      `PRODUCTION_WEB_URL`. Next.js embeds the web URL and JWT verification
+      values at build time; Google client-ID discovery remains API runtime
+      configuration.
 - [ ] Release URL secrets use their exact contracts: `STAGING_API_URL` and
       `STAGING_WEB_URL` are HTTPS origins with no trailing slash, while
       `PRODUCTION_API_URL` ends exactly in `/api/v1` and

@@ -15,19 +15,16 @@ export JWT_AUDIENCE="${JWT_AUDIENCE:-ateva-client}"
 # During rotation only: export JWT_PUBLIC_KEYS="$(cat previous-jwt-public.pem)"
 export NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 export NEXT_PUBLIC_WEB_URL=https://app.example.com
-export NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 
 docker build --target api \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
-  --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
   -t "$ATEVA_API_IMAGE" .
 docker build --target web \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
-  --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
   -t "$ATEVA_WEB_IMAGE" .
 
 docker push "$ATEVA_API_IMAGE"
@@ -95,11 +92,13 @@ HTTPS origin. Configure these Vercel build/runtime variables:
 - `JWT_PUBLIC_KEY` and optional `JWT_PUBLIC_KEYS` matching the API key set
 - `JWT_ISSUER` and `JWT_AUDIENCE` when either differs from its default
 - `JWT_SECRET` matching the API BFF-identity secret
-- `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
 
-The Vercel build preflight rejects missing auth/API configuration. A successful
-web build is not a completed deployment until `/api/auth/config` and
-`/api/auth/login` reach the API rather than returning 5xx.
+The API Google client ID is the sole Google OAuth client-ID configuration; the
+web discovers it at runtime through the same-origin auth config route. Do not
+set a separate NEXT_PUBLIC_GOOGLE_CLIENT_ID build variable. The Vercel build
+preflight rejects missing auth/API configuration. A successful web build is not
+a completed deployment until the auth config and login routes reach the API
+rather than returning 5xx.
 
 ## Post-deploy
 

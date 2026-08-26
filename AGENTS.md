@@ -15,12 +15,39 @@
 - Keep this file current: when an item is fixed, move it to the resolved index
   with the date and the verification command/manual test that proves it.
 - Do not mark an item complete just because a narrow unit test passes.
+
 - **Commit hygiene (hard rules):** never commit debug `console.log` printing
   tokens, JWT claims, session IDs, API bodies, or secrets (blocked pre-commit
   since 2026-07-13); the pre-commit hook is a deterministic eslint+prettier
   script (`.husky/pre-commit`, replaced lint-staged 2026-08-07 — lint-staged's
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
+
+## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
+
+The web login and signup flows discover the Google client ID through the
+same-origin `/api/auth/config` route. The API's `GOOGLE_CLIENT_ID` is therefore
+the only configured OAuth identity: it verifies the token audience and serves
+the value that Google Identity Services initializes with.
+
+- Removed the obsolete `NEXT_PUBLIC_GOOGLE_CLIENT_ID` requirement from the web
+  prebuild and production release validator.
+- Removed the unused value from Docker build arguments, runtime Compose
+  configuration, CI/release workflow inputs, and operator templates.
+- `deploy-doctor` now checks only the API-side client ID and reports that the
+  web discovers it through `/auth/config`; a stale web variable cannot create a
+  false mismatch.
+
+Operator live verification also confirmed that invalid Google credentials
+return a structured 401 through the web BFF without a 502 or API crash. On
+2026-08-26, the stale Vercel Production `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entry
+was removed, and the Google Cloud `Ateva-web` client in project `Ateva` was
+verified in the console with `https://ateva.vercel.app` as an authorized
+JavaScript origin. A real browser callback reached Google's account chooser
+with the same client, passed the account owner's device verification, and
+returned to Ateva. The API then rejected the sign-in because that email already
+has an Ateva password account; the user must sign in with the password and link
+Google from account settings.
 
 ## Resolved 2026-08-26 (second pass) — production sign-in outage, and four defects CI could not see
 
@@ -259,8 +286,8 @@ exposed by Tailscale Funnel on its `*.ts.net` hostname, so a custom API
 hostname would need a real HTTPS front door/certificate before a DNS-only
 alias is published.
 
-Vercel's empty Preview build-time `JWT_PUBLIC_KEY` and Google client ID, plus
-the shared BFF proxy-hop setting, were populated from the matching
+Vercel's empty Preview build-time `JWT_PUBLIC_KEY` and the shared BFF
+proxy-hop setting were populated from the matching
 local/staging configuration without printing their values. The temporary
 Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
 existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
@@ -652,7 +679,8 @@ advertiser interest capture while billing is closed.
 **Remaining (operator-only, unchanged):** Dodo live credentials + webhook
 semantics (#39), production infrastructure + release secrets (#40), staging-
 to-production deployment (#41), independent wait attestation operator (#45),
-GitHub credential rotation, Google OAuth credentials (decision D6), client
+GitHub credential rotation, Google OAuth browser-origin authorization and
+successful callback (the API client-ID/runtime path is verified), client
 publishing tokens, legal review, and the production payout-operator / float
 decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launch
 policy are resolved: Dodo cannot pay developers, and developer payouts remain
@@ -701,8 +729,8 @@ release sequencing as planning guidance rather than current system state.
 ## Resolved 2026-08-19 — Vercel Preview deployment compatibility
 
 The branch Preview failure was diagnosed and fixed end-to-end. The project
-variables `JWT_PUBLIC_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and
-`NEXT_PUBLIC_API_URL` now include Preview scope, and `BFF_TRUST_PROXY_HOPS=1`
+variables `JWT_PUBLIC_KEY` and `NEXT_PUBLIC_API_URL` now include Preview scope,
+and `BFF_TRUST_PROXY_HOPS=1`
 is configured for Production and Preview. `apps/web/next.config.js` keeps
 `output: 'standalone'` for container builds but omits it on Vercel, avoiding
 the Next 16.3 adapter's missing NFT-manifest failure.
@@ -881,7 +909,7 @@ window existed for an operator-enforced `banned` level.
   wait attestation.
 - **Deployment diagnosis is now codeable and secret-safe.** `pnpm deploy:doctor`
   validates production URL contracts, PostgreSQL/Redis configuration, escaped
-  RS256 key-pair matching, Google OAuth ID alignment, Dodo rail consistency,
+  RS256 key-pair matching, API-owned Google OAuth configuration, Dodo rail consistency,
   mock-auth/throttle flags, and fail-closed money-switch posture. `--with-network`
   probes the versioned API health route and Redis socket; `--with-db` performs
   read-only migration and switch checks. Contract coverage is wired into
@@ -2722,10 +2750,11 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
-7. **Google OAuth credentials** for live Google sign-in (decision D6: enable at
-   launch). CSP `frame-src` is verified live; provision matching
-   `GOOGLE_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` values, then verify
-   the ID-token callback.
+7. **Google OAuth browser integration** for live Google sign-in (decision D6:
+   enable at launch). CSP `frame-src` is verified live; the API
+   `GOOGLE_CLIENT_ID` and web `/api/auth/config` runtime path are verified.
+   Still verify that `ateva.vercel.app` is an authorized JavaScript origin in
+   Google Cloud and complete a real browser callback.
 8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
    the provider level; launch countries/currencies, KYC/tax/legal docs.
    Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only
