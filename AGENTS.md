@@ -22,6 +22,103 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-26 (second pass) — production sign-in outage, and four defects CI could not see
+
+### Sign-in returned 502 while the API was healthy
+
+Signing in on `ateva.vercel.app` returned `502 {"message":"Upstream API
+unavailable"}`. The API was fine throughout: `uptimeSeconds` showed an unbroken
+~3.7 days, and calling its login endpoint directly over the **public** Funnel
+ingress returned `401 Invalid credentials` correctly. Only the Vercel function
+could not reach it.
+
+Two fixes landed:
+
+- **#85** — `fetchApiJson` made a single attempt, so a transient connection
+  failure became a hard, user-visible 502. It now retries once, but ONLY on
+  error codes that guarantee the request never reached the application
+  (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`, `UND_ERR_CONNECT_TIMEOUT`), and
+  never on `ECONNRESET`/socket errors, which can fire after the request was
+  written. That distinction is load-bearing: the same helper backs signup,
+  refresh and logout, where a replay could create a second account or burn a
+  refresh token twice. Timeouts are not retried either.
+- **#86** — nothing recorded WHY the fetch failed. The BFF returns an opaque
+  message to the browser by design, and `SENTRY_DSN` is unset in production, so
+  the incident had to be reconstructed from response timings. The failure cause
+  is now logged server-side (code, name, message, connect-vs-timeout, attempt
+  count), logging only the upstream ORIGIN — these are auth paths and some
+  providers put tokens in query strings.
+
+**Not solved.** The retry covers sub-second blips. One observed outage lasted
+about six minutes (502s from 16:06:04, recovering to 401 at 16:09:55), which no
+request-level retry can absorb. It is intermittent, not deterministic — a later
+deploy showed no outage at all. Funnel also runs 1.7–6.2s against a 15s BFF
+timeout. This is external item 3 (production API host) surfacing, not a
+separate bug.
+
+### Diagnostic traps worth recording
+
+- `dig` from a tailnet member returns the **CGNAT** address `100.111.181.4` via
+  MagicDNS, which makes the Funnel host look private. Public resolvers return
+  the real ingress. Do not diagnose reachability from a tailnet member without
+  checking a public resolver — an early conclusion here was wrong because of it.
+- `SENTRY_DSN` is **unset in Vercel Production**. A real production outage
+  therefore left no trace anywhere. Worth setting independently of any code fix.
+
+### Defects that passed CI because of the environment it runs in
+
+- **#82** — `apps/cli/src/commands/status.test.ts` asserted plain text against
+  `chalk`-coloured output. It passed in CI (no TTY, so chalk emits no codes) and
+  failed on any developer machine. Pinned `chalk.level = 0` in a package-level
+  vitest setup rather than stripping escapes per call site, and verified under
+  `FORCE_COLOR=3` and `FORCE_COLOR=0`.
+- **#88** — that setup file then compiled into `dist/`. Never shipped
+  (`files: ["dist/index.js"]`), but built every time and carrying an external
+  `require('chalk')`. Added to the tsconfig `exclude` list, which already
+  intended to hold test code.
+
+### Dependabot PRs that could never go green
+
+- **#83** supersedes #77/#78/#79. `ci-package-contract.test.mjs` requires the
+  three CodeQL actions to share one commit and version, so a single-action bump
+  breaks coherence by construction. All three had to move together.
+- **#84** supersedes #76. The same contract pins the exact `actions/cache` SHA
+  and asserts it appears twice, so a workflow-only bump fails until the test's
+  copy moves with it — an edit Dependabot cannot make.
+
+### TypeScript 7 (#81) is blocked upstream, not by our configuration
+
+Attempting the migration found three layers:
+
+1. `baseUrl` removed (TS5102) and non-relative path mappings rejected (TS5090).
+   Four configs depended on both. **Landed separately in #87**, verified
+   backward compatible against the current TypeScript 5.9 with the turbo cache
+   bypassed, so the eventual bump is a version change rather than a migration.
+2. `moduleResolution: node`/`Node` (node10) removed (TS5108). Moving to `node16`
+   then surfaces TS1479: `chalk` v5 is ESM-only while the CLI is CommonJS.
+   `bundler` resolution fits and builds clean, but it is a semantic change and
+   was left out. Confirmed NOT a live bug — the built CLI runs, because chalk is
+   bundled into the entrypoint.
+3. **`nest build` cannot run under TypeScript 7.0 at all:** "The installed
+   TypeScript version (7.0.2) does not expose the programmatic compiler API that
+   the Nest CLI requires ... the compiler API is expected to return in 7.1."
+
+So #81 stays open and blocked until TypeScript 7.1. Recorded on the PR.
+
+### Housekeeping
+
+`chore/domain-reality-cleanup` was deleted after verifying every file was
+byte-identical to `main` and all three commit subjects appear in `main`'s log.
+A three-dot diff against an old merge-base made it look like it carried 130
+unmerged insertions; it did not.
+
+Verification for this pass: `pnpm build` 11/11, `pnpm typecheck` 18/18 (cache
+bypassed), `pnpm lint` 11/11, API 142 files / 1521 tests, web 66 files / 297
+tests, CLI 22 / 136, shared 5 / 77, config 1 / 22, vscode 16 / 152, and
+`node --test scripts/ci-package-contract.test.mjs` 20/20. Every merge ran the
+full required check set on its PR; `main` protection was verified restored
+after each.
+
 ## Resolved 2026-08-26 — repository and documentation cleanup sweep
 
 A cleanup pass over the tree, run on the premise that the deployed UI is final.
