@@ -49,6 +49,19 @@ returned to Ateva. The API then rejected the sign-in because that email already
 has an Ateva password account; the user must sign in with the password and link
 Google from account settings.
 
+## Resolved 2026-08-26 — branch protection matches the single-reviewer repository
+
+The repository has one collaborator, so requiring a code-owner approval made
+the protected `main` branch impossible to merge without routing around its
+controls. The operator-selected policy is now: admins enforced, one
+independent approval required, stale approvals dismissed, and
+`require_code_owner_reviews=false`. The one-approval requirement remains in
+place; re-enable code-owner reviews when a second qualified reviewer exists.
+
+Verification: `gh api repos/Harshit-sehgal/promptpay/branches/main/protection`
+returned the policy above on 2026-08-26; collaborators were checked separately
+and only `Harshit-sehgal` is present.
+
 ## Resolved 2026-08-26 (second pass) — production sign-in outage, and four defects CI could not see
 
 ### Sign-in returned 502 while the API was healthy
