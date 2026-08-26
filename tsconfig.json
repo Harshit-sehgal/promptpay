@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
     "declaration": true,
     "declarationMap": true,
     "esModuleInterop": true,
@@ -11,11 +10,11 @@
     "moduleResolution": "bundler",
     "outDir": "dist",
     "paths": {
-      "@ateva/agent-protocol": ["packages/agent-protocol/src"],
-      "@ateva/config": ["packages/config/src"],
-      "@ateva/db": ["packages/db/src"],
-      "@ateva/shared": ["packages/shared/src"],
-      "@ateva/ui": ["packages/ui/src"]
+      "@ateva/agent-protocol": ["./packages/agent-protocol/src"],
+      "@ateva/config": ["./packages/config/src"],
+      "@ateva/db": ["./packages/db/src"],
+      "@ateva/shared": ["./packages/shared/src"],
+      "@ateva/ui": ["./packages/ui/src"]
     },
     "resolveJsonModule": true,
     "skipLibCheck": true,
