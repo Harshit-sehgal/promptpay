@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 
 const CONFIG_SECTION = 'ateva';
 
-const DEFAULT_API_URL = 'https://api.ateva.com/api/v1';
+const DEFAULT_API_URL = 'https://ateva.vercel.app/api/v1';
 
 export class ConfigurationManager {
   private readonly secrets: vscode.SecretStorage;
@@ -74,7 +74,8 @@ export class ConfigurationManager {
 
   /**
    * Web dashboard origin derived from the configured API URL (e.g.
-   * `https://api.ateva.com/api/v1` → `https://ateva.com/developer`),
+   * `https://ateva.vercel.app/api/v1` → `https://ateva.vercel.app/developer`,
+   * or `https://api.example.com/api/v1` → `https://example.com/developer`),
    * so staging/dev installs open the matching dashboard instead of always
    * pointing at the production site.
    */
@@ -84,9 +85,13 @@ export class ConfigurationManager {
       const parsed = new URL(apiUrl);
       const host = parsed.hostname;
       const webHost = host.startsWith('api.') ? host.slice('api.'.length) : host;
-      return `${parsed.protocol}//${webHost}/developer`;
+      // Preserve an explicit non-default port — a local dev API on :4002 means
+      // the matching dashboard is expected on that host too, not silently on
+      // :80. URL.port is '' for default ports, so https origins are unchanged.
+      const portSuffix = parsed.port ? `:${parsed.port}` : '';
+      return `${parsed.protocol}//${webHost}${portSuffix}/developer`;
     } catch {
-      return 'https://ateva.com/developer';
+      return 'https://ateva.vercel.app/developer';
     }
   }
 

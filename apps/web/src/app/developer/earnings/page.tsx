@@ -131,7 +131,7 @@ export default function DevEarningsPage() {
       )}
 
       {data && (
-        <div className="bg-white border border-surface-200/80 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white border border-surface-200/80 rounded-3xl shadow-sm overflow-hidden">
           {data.entries.length === 0 ? (
             <div className="text-surface-400 text-sm py-16 text-center font-normal">
               No earnings yet. Install the Ateva VS Code extension to start tracking wait states.

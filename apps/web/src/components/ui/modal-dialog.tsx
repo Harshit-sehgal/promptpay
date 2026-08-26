@@ -78,7 +78,7 @@ export default function ModalDialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full outline-none ${className}`}
+        className={`bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full outline-none ${className}`}
       >
         {children}
       </div>

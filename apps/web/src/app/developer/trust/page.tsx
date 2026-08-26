@@ -113,7 +113,7 @@ export default function DevTrustPage() {
           </div>
 
           {/* Score breakdown */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Score breakdown</h2>
             <div className="space-y-6">
               {data.factors.map((factor) => {
@@ -140,7 +140,7 @@ export default function DevTrustPage() {
           </div>
 
           {/* Open flags */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Open fraud flags</h2>
             {data.openFlags.length === 0 ? (
               <p className="text-surface-400 text-sm py-4 text-center font-normal">
@@ -167,7 +167,7 @@ export default function DevTrustPage() {
           </div>
 
           {/* Recent penalties */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent penalties</h2>
             {data.recentPenalties.length === 0 ? (
               <p className="text-surface-400 text-sm py-4 text-center font-normal">

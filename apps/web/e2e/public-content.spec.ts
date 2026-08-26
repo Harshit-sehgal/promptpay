@@ -85,7 +85,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: '/advertisers',
-    expect: ['Join the advertiser waitlist', 'founding sponsor', 'Billing is closed'],
+    expect: ['Join the advertiser waitlist', 'founding-sponsor access', 'Billing is closed'],
   },
   {
     path: '/security',

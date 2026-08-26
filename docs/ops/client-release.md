@@ -8,12 +8,21 @@ the `ateva-vscode` VS Code extension.
 - CLI release workflow: `.github/workflows/publish-cli.yml`
   - Packages `apps/cli` into `ateva-cli-*.tgz`.
   - Smoke-installs the tarball and runs `ateva --version` and
-    `ateva --help` with `ATEVA_API_URL=https://api.ateva.com/api/v1`.
+    `ateva --help` with `ATEVA_API_URL=https://ateva.vercel.app/api/v1`,
+    the shipped default (operator decision 2026-08-24 — the previous
+    `api.ateva.com` placeholder sat on a domain the project does not own).
+    **Before any real publication:** verify that origin actually serves the
+    CLI/extension endpoints. Today the web deployment's BFF proxy
+    (`app/api/[...proxy]/route.ts`) allowlists only browser UI paths,
+    forwards cookie-derived auth rather than a client-supplied Bearer
+    header, and excludes `/extension/*` entirely — so a client pointed at
+    it receives 403/dropped auth until that boundary is deliberately
+    extended or the API gets its own public hostname.
   - Uploads the tarball as the `ateva-cli-package` workflow artifact.
 - VS Code release workflow: `.github/workflows/publish-vscode.yml`
   - Packages `apps/vscode-extension` into `ateva-vscode.vsix`.
   - Checks the VSIX metadata keeps `ateva.apiUrl` defaulted to
-    `https://api.ateva.com/api/v1`.
+    `https://ateva.vercel.app/api/v1`.
   - Uploads the VSIX as the `ateva-vscode-vsix` workflow artifact.
 
 Release-published events build and upload artifacts but do not publish to npm or

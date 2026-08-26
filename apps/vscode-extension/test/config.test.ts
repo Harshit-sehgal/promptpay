@@ -72,7 +72,7 @@ describe('ConfigurationManager — settings parsing & validation', () => {
     expect(mgr.getApiUrl()).toBe('https://api.example.com/api/v1');
 
     delete mock.config['apiUrl'];
-    expect(mgr.getApiUrl()).toBe('https://api.ateva.com/api/v1');
+    expect(mgr.getApiUrl()).toBe('https://ateva.vercel.app/api/v1');
   });
 
   it('reads adsEnabled as a boolean and defaults to disabled (opt-in required)', async () => {

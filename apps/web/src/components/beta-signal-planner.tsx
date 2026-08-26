@@ -256,9 +256,9 @@ export function BetaSignalPlanner() {
       type="button"
       onClick={onReset}
       disabled={!dirty}
-      className={`rounded-lg px-2.5 py-1.5 text-[13px] ${
+      className={`rounded-full px-3.5 py-1.5 text-[13px] ${
         dirty
-          ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+          ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
           : 'cursor-not-allowed text-surface-300'
       }`}
     >
@@ -269,7 +269,7 @@ export function BetaSignalPlanner() {
   return (
     <section
       aria-label="Beta planning calculator"
-      className="mx-auto mt-14 max-w-[1180px] rounded-2xl border border-surface-200 bg-white px-8 py-7"
+      className="mx-auto mt-14 max-w-[1180px] rounded-3xl border border-surface-200/70 bg-white px-8 py-7"
     >
       <div className="mb-1 flex flex-wrap items-start justify-between gap-5">
         <h3 className="m-0 font-serif text-[27px] font-normal text-surface-950">
@@ -280,7 +280,7 @@ export function BetaSignalPlanner() {
         <button
           type="button"
           onClick={() => setMode((m) => (m === 'developer' ? 'advertiser' : 'developer'))}
-          className="inline-flex min-h-11 items-center rounded-[10px] border border-surface-300 bg-surface-50 px-4 text-sm text-surface-950 hover:bg-surface-100"
+          className="inline-flex min-h-11 items-center rounded-full border border-surface-950 bg-transparent px-5 text-sm text-surface-950 hover:bg-surface-100/60"
         >
           {mode === 'developer' ? 'For advertisers' : 'For developers'}
         </button>
@@ -315,10 +315,10 @@ export function BetaSignalPlanner() {
                       setWaits(p.waits);
                       setPreset(p.id);
                     }}
-                    className={`flex min-h-11 flex-col gap-1.5 rounded-xl p-4 text-left transition-colors ${
+                    className={`flex min-h-11 flex-col gap-1.5 rounded-2xl p-4 text-left transition-colors ${
                       active
-                        ? 'border-2 border-brand-500 bg-brand-50'
-                        : 'border border-surface-200 bg-white hover:bg-surface-50'
+                        ? 'border border-brand-500 bg-brand-50'
+                        : 'border border-surface-200/70 bg-white hover:bg-surface-50'
                     }`}
                   >
                     <span
@@ -327,7 +327,9 @@ export function BetaSignalPlanner() {
                       {p.name}
                     </span>
                     <span className="text-[12.5px] leading-snug text-surface-600">{p.blurb}</span>
-                    <span className="font-mono text-xs text-surface-500">
+                    <span
+                      className={`font-mono text-xs ${active ? 'text-brand-700' : 'text-surface-500'}`}
+                    >
                       ≈ {p.waits} waits a day
                     </span>
                   </button>

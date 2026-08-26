@@ -97,8 +97,8 @@ jobs:
           npm install --prefix "$CLI_INSTALL_ROOT" --ignore-scripts ./artifacts/cli/*.tgz
           CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/ateva"
           test -x "$CLI_BIN"
-          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --version
-          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --help
+          ATEVA_API_URL=https://ateva.vercel.app/api/v1 "$CLI_BIN" --version
+          ATEVA_API_URL=https://ateva.vercel.app/api/v1 "$CLI_BIN" --help
       - name: Upload CLI package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

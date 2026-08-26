@@ -76,7 +76,7 @@ export default function ReferralPage() {
         <>
           {/* Referral stats grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Your referral code</p>
               {data.referralCode ? (
                 <p className="text-2xl font-mono font-semibold text-brand-500 tracking-widest">
@@ -86,11 +86,11 @@ export default function ReferralPage() {
                 <p className="text-surface-400 text-sm font-normal">No code generated yet</p>
               )}
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Total referrals</p>
               <p className="text-3xl font-semibold text-surface-900">{data.referralCount}</p>
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Rewards earned</p>
               <p className="text-3xl font-semibold text-emerald-600 font-mono">
                 {formatCurrencyBreakdown(
@@ -102,7 +102,7 @@ export default function ReferralPage() {
 
           {/* Referral link + copy (No nested border boxes) */}
           {data.referralLink && (
-            <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+            <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
               <h2 className="text-surface-900 font-bold text-[16px] mb-4">Your referral link</h2>
               <div className="flex items-center gap-3">
                 <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-700 text-sm break-all font-mono">
@@ -124,7 +124,7 @@ export default function ReferralPage() {
           )}
 
           {/* Referral history */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm overflow-hidden">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm overflow-hidden">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Referral history</h2>
             {data.referrals.length === 0 ? (
               <p className="text-surface-400 text-sm py-8 text-center font-normal">

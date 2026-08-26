@@ -112,27 +112,91 @@ are historical records, not current release status.
 
 ## Documentation
 
+Start with [`AGENTS.md`](AGENTS.md) — it is the authoritative repo-wide audit
+and the live residual register. Everything below is reference material.
+
+### Product & design
+
 - [Strategy Audit](docs/00-strategy-audit.md)
 - [Product Requirements](docs/01-product-requirements.md)
-- [Technical Architecture](docs/02-technical-architecture.md)
-- [Database Schema](docs/03-database-schema.md)
-- [API Specification](docs/04-api-specification.md)
 - [MVP Roadmap](docs/05-mvp-roadmap.md)
-- [Fraud Prevention Plan](docs/06-fraud-prevention-plan.md)
 - [Payout Strategy](docs/07-payout-strategy.md)
-- [Compliance & Privacy](docs/08-compliance-privacy-checklist.md)
+- [Advertiser Economics](docs/ADVERTISER_ECONOMICS.md)
 - [UI Page List](docs/09-ui-page-list.md)
-- [Engineering Breakdown](docs/10-engineering-task-breakdown.md)
-- [Milestone Checklist](docs/11-milestone-checklist.md)
-- [Definition of Done](docs/12-definition-of-done.md)
-- [Risk Register](docs/13-risk-register.md)
 - [Validation Experiments](docs/14-validation-experiments.md)
 - [Sources & Assumptions](docs/15-sources-and-assumptions.md)
+
+### Architecture & API
+
+- [Technical Architecture](docs/02-technical-architecture.md)
 - [Architecture Overview](docs/16-architecture-overview.md)
-- [API Changelog](docs/17-api-changelog.md)
-- [Architecture Decision Records](docs/adr/0001-record-architecture-decisions.md)
-- [Wait-attestation Launch Gate](docs/ops/wait-attestation-launch-gate.md)
-- [Launch Plan](LAUNCH_PLAN.md) — **superseded 2026-08-18**, kept as a historical
-  launch-readiness audit and phasing record
-- [Foundation Status](FOUNDATION_STATUS.md) — **superseded 2026-08-07**, kept as
-  a historical record of the July hardening pass; do not plan against it
+- [Implementation Blueprint](docs/ateva-implementation-blueprint.md)
+- [Database Schema](docs/03-database-schema.md) · [ER Diagram](docs/er-diagram.md)
+- [API Specification](docs/04-api-specification.md) · [API Changelog](docs/17-api-changelog.md)
+- [Rate Limiting](docs/rate-limiting.md)
+
+### Architecture Decision Records
+
+- [0001 — Record architecture decisions](docs/adr/0001-record-architecture-decisions.md)
+- [0002 — Three-ledger accounting](docs/adr/0002-three-ledger-accounting.md)
+- [0003 — Extension event pipeline](docs/adr/0003-extension-event-pipeline.md)
+- [0004 — JWT rotation & TOTP 2FA](docs/adr/0004-jwt-rotation-totp-2fa.md)
+- [0005 — Swagger plugin](docs/adr/0005-swagger-plugin.md)
+- [0006 — Fail-closed payouts](docs/adr/0006-fail-closed-payouts.md)
+- [0007 — Independent wait attestation](docs/adr/0007-independent-wait-attestation.md)
+
+### Trust, fraud & compliance
+
+- [Fraud Prevention Plan](docs/06-fraud-prevention-plan.md)
+- [Compliance & Privacy Checklist](docs/08-compliance-privacy-checklist.md)
+- [Risk Register](docs/13-risk-register.md)
+- [Security Audit Checklist](docs/security-audit-checklist-2026-07-12.md)
+- [Legal documents](docs/legal/README.md)
+- Wait attestation: [Launch Gate](docs/ops/wait-attestation-launch-gate.md) ·
+  [Protocol](docs/ops/wait-attestation-protocol.md) ·
+  [Threat Model](docs/ops/wait-attestation-threat-model.md)
+
+### Operations
+
+- [Operational Runbooks](docs/ops/runbooks.md) ·
+  [Backup & Retention](docs/16-operational-runbooks.md)
+- Deploy: [Quick-start](docs/ops/deployment.md) ·
+  [Checklist](docs/ops/deployment-checklist.md) ·
+  [Full runbook](docs/ops/rollback-and-deployment.md) ·
+  [OCI API host](docs/ops/oci-api-deployment.md)
+- Rollback: [Procedure](docs/ops/rollback.md) ·
+  [Database migrations](docs/ops/migration-rollback.md)
+- Recovery: [Backup & Restore](docs/ops/backup-restore-runbook.md) ·
+  [Disaster Recovery](docs/ops/disaster-recovery-runbook.md)
+- Money: [Payouts](docs/ops/payout-runbook.md) ·
+  [Ledger Reconciliation](docs/ops/ledger-reconciliation-runbook.md) ·
+  [Dodo review access](docs/ops/dodo-review-access.md)
+- Review queues: [Fraud](docs/ops/fraud-review-runbook.md) ·
+  [Campaign approval](docs/ops/campaign-approval-runbook.md)
+- [Incident Response](docs/ops/incident-response.md) ·
+  [Monitoring](docs/ops/monitoring.md) ·
+  [Audit Outbox](docs/ops/audit-outbox.md)
+- [Client Release](docs/ops/client-release.md) ·
+  [Branch Protection](docs/ops/branch-protection.md)
+- [Public Exposure Audit](docs/ops/public-exposure-audit.md) ·
+  [Remaining Open Items](docs/ops/remaining-open-items.md)
+- [Environment Reference](docs/ENV_REFERENCE.md)
+
+### Contributing
+
+- [Onboarding](docs/ONBOARDING.md)
+- [Contributing](docs/CONTRIBUTING.md)
+- [Style Guide](docs/STYLE_GUIDE.md)
+- [Code Review Checklist](docs/CODE_REVIEW_CHECKLIST.md)
+- [Definition of Done](docs/12-definition-of-done.md)
+- [Engineering Breakdown](docs/10-engineering-task-breakdown.md) ·
+  [Milestone Checklist](docs/11-milestone-checklist.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+### Historical records — do not plan against these
+
+- [Launch Plan](LAUNCH_PLAN.md) — superseded 2026-08-18; a launch-readiness
+  audit and phasing record
+- [Foundation Status](FOUNDATION_STATUS.md) — superseded 2026-08-07; a record of
+  the July hardening pass
+- [Dodo Payments Plan](DODO_PAYMENTS_PLAN.md) — the payment-rail workstream plan

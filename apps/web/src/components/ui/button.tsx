@@ -25,19 +25,19 @@ const roundedClasses: Record<ButtonRounded, string> = {
 };
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-950 shadow-sm',
-  secondary: 'bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 shadow-sm',
-  brand:
-    'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700 shadow-sm shadow-brand-500/20',
+  primary: 'bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-950',
+  secondary:
+    'border border-surface-900 bg-transparent text-surface-900 hover:bg-surface-100/60 active:bg-surface-200/60',
+  brand: 'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700',
   outline:
     'border border-surface-200 bg-white text-surface-700 hover:bg-surface-50 hover:border-surface-300 active:bg-surface-100',
   ghost: 'text-surface-600 hover:text-surface-900 hover:bg-surface-100/60 active:bg-surface-200/60',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800 shadow-sm',
+  danger: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
+  sm: 'h-8 px-4 text-xs',
+  md: 'h-10 px-5 text-sm',
   lg: 'h-12 px-6 text-sm',
 };
 
@@ -46,7 +46,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     {
       variant = 'primary',
       size = 'md',
-      rounded = 'lg',
+      rounded = 'full',
       children,
       isLoading,
       disabled,

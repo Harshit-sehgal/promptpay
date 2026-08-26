@@ -92,7 +92,7 @@ DATABASE_URL='<target database url>' \
     --name 'Dodo Payments Reviewer' \
     --company 'Dodo Payments Review' \
     --country 'US' \
-    --website 'https://www.ateva.com'
+    --website 'https://ateva.vercel.app'
 ```
 
 The command prompts for the password with hidden input. For non-interactive
@@ -101,7 +101,7 @@ protected automation it can instead read `REVIEW_ACCOUNT_PASSWORD`.
 Then validate the deployed journey without printing secrets:
 
 ```sh
-REVIEW_BASE_URL='https://www.ateva.com' \
+REVIEW_BASE_URL='https://ateva.vercel.app' \
 REVIEW_EMAIL='<dedicated review mailbox>' \
 REVIEW_ACCOUNT_PASSWORD='<password>' \
 pnpm review:smoke
@@ -111,7 +111,7 @@ pnpm review:smoke
 
 Send only:
 
-- Login URL: `https://www.ateva.com/auth/login` (or the actual public review origin)
+- Login URL: `https://ateva.vercel.app/auth/login` (or the actual public review origin)
 - Review email/username
 - Review password
 - A short note that this is a dedicated advertiser review account and the sample

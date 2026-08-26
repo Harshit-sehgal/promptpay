@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   return {
     api,
     creds: {
-      apiUrl: 'https://api.ateva.com/api/v1',
+      apiUrl: 'https://ateva.vercel.app/api/v1',
       token: 'tok',
       email: 'dev@test.com',
       role: 'developer',

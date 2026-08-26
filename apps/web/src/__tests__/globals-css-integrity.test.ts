@@ -31,9 +31,20 @@ describe('globals.css integrity', () => {
     expect(broken.map((b) => `line ${b.number}: ${b.line.trim()}`)).toEqual([]);
   });
 
-  it('still imports the webfonts and Tailwind', () => {
-    expect(css).toMatch(/@import url\('https:\/\/fonts\.googleapis\.com\/css2\?[^\n']+'\);/);
+  it('imports Tailwind and pulls no webfont from a third party', () => {
+    // Fonts are self-hosted through `next/font/local` in `layout.tsx` (Inter,
+    // JetBrains Mono, Instrument Serif). A remote `@import url(fonts.googleapis…)`
+    // would add a render-blocking third-party request the build cannot control.
     expect(css).toMatch(/@import ['"]tailwindcss['"];/);
+    expect(css).not.toMatch(/@import\s+url\(/);
+  });
+
+  it('has the serif wired as a local font, not merely referenced', () => {
+    // The failure mode this guards: `font-serif` classes shipped while the face
+    // was never loaded, so headings silently fell back to Georgia.
+    const layout = readFileSync(join(__dirname, '..', 'app', 'layout.tsx'), 'utf8');
+    expect(layout).toMatch(/instrument-serif-400\.ttf/);
+    expect(layout).toMatch(/--font-serif/);
   });
 
   it('balances every brace', () => {
@@ -59,9 +70,9 @@ describe('globals.css integrity', () => {
     expect(depth).toBe(0);
   });
 
-  it('declares the shared nav surface the pages reference', () => {
-    // `.glass-nav` shipped on eight pages while declared nowhere, so those
-    // navs rendered with no backdrop at all.
-    expect(css).toMatch(/\.glass-nav\s*\{/);
+  it('keeps public navigation in the shared translucent header', () => {
+    const header = readFileSync(join(__dirname, '..', 'components', 'site-header.tsx'), 'utf8');
+    expect(header).toMatch(/aria-label="Primary navigation"/);
+    expect(header).toMatch(/backdrop-blur-xl/);
   });
 });

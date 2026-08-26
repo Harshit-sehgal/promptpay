@@ -50,7 +50,7 @@ if (IS_LOOPBACK) {
   console.warn(
     '[Ateva] CLI is pointed at a local dev API (' +
       API_URL +
-      '). Set ATEVA_API_URL to the production API (https://api.ateva.com/api/v1) to connect to Ateva.',
+      '). Set ATEVA_API_URL to the production API (https://ateva.vercel.app/api/v1) to connect to Ateva.',
   );
 }
 

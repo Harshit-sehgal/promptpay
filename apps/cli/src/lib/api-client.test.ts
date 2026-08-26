@@ -160,7 +160,7 @@ describe('resolveApiBaseUrl (A-013)', () => {
   const base = { ATEVA_API_URL: undefined, NODE_ENV: undefined };
 
   it('defaults to the production origin for a packaged install', () => {
-    expect(resolveApiBaseUrl({ ...base })).toBe('https://api.ateva.com/api/v1');
+    expect(resolveApiBaseUrl({ ...base })).toBe('https://ateva.vercel.app/api/v1');
   });
 
   it('honours an explicit ATEVA_API_URL override (local dev)', () => {
@@ -171,7 +171,7 @@ describe('resolveApiBaseUrl (A-013)', () => {
 
   it('uses the production origin when NODE_ENV=production', () => {
     expect(resolveApiBaseUrl({ ...base, NODE_ENV: 'production' })).toBe(
-      'https://api.ateva.com/api/v1',
+      'https://ateva.vercel.app/api/v1',
     );
   });
 

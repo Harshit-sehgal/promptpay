@@ -10,7 +10,8 @@ Conventions:
   `migrate deploy` / `db push` against production without the staging gate
   (P1.23).
 - `curl` examples assume an admin `Authorization: Bearer <ADMIN_JWT>` header.
-  Replace `<APP>` with the API base URL (e.g. `https://api.ateva.com`).
+  Replace `<APP>` with the API base URL — today the Tailscale Funnel origin
+  (`https://vnic1.tail76eb88.ts.net`) until an owned API hostname exists.
 - Runtime kill-switches use `POST /admin/runtime-config/:key` with
   `{ "enabled": false }`. The `:key` value MUST match a key in the
   `RuntimeConfigKey` enum (`packages/shared/src/enums.ts` / the

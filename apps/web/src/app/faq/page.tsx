@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 
 interface FAQItem {
   question: string;
@@ -46,26 +45,16 @@ export default function FAQPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-          <Link
-            href="/"
-            className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-          >
-            ← Back to Home
-          </Link>
-        </div>
-      </nav>
+      <SiteHeader />
 
       {/* Main content */}
-      <main id="main-content" tabIndex={-1} className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-3xl px-5 py-20 sm:px-6 lg:py-24"
+      >
         <div className="text-center mb-16">
-          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">
+          <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-4">
             Frequently Asked Questions
           </h1>
           <p className="text-surface-500 text-sm">
@@ -79,7 +68,7 @@ export default function FAQPage() {
             return (
               <div
                 key={index}
-                className="border border-surface-200 rounded-2xl overflow-hidden transition-all duration-200 bg-white"
+                className="border border-surface-200 rounded-3xl overflow-hidden transition-all duration-200 bg-white"
               >
                 <button
                   type="button"

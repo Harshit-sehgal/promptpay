@@ -17,7 +17,7 @@ export default function TermsPage() {
         >
           ← Back to home
         </Link>
-        <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-10">
+        <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-10">
           Terms of Service
         </h1>
 

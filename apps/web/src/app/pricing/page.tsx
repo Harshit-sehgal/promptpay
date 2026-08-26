@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 
 import {
   CURRENCY_POLICY,
@@ -52,36 +52,15 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-sm font-medium px-3 py-1.5"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/auth/signup?role=developer"
-              className="bg-surface-900 hover:bg-surface-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Join beta
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <main id="main-content" tabIndex={-1}>
-        <section className="pt-36 pb-16 px-6">
+        <section className="px-5 pb-16 pt-20 sm:px-6 lg:px-8 lg:pt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 mb-5">
               Private beta · real-money switches disabled
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
+            <h1 className="font-serif text-[40px] md:text-[60px] font-normal leading-[1.1] tracking-[-0.015em] text-surface-950 mb-5">
               Beta access, not commercial pricing
             </h1>
             <p className="text-surface-500 text-lg max-w-2xl mx-auto">
@@ -94,7 +73,7 @@ export default function PricingPage() {
 
         <section className="px-6 pb-20">
           <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white border-2 border-surface-200/80 rounded-2xl p-8">
+            <div className="bg-white border-2 border-surface-200/80 rounded-3xl p-8">
               <p className="text-xs uppercase tracking-wider text-brand-700 font-semibold mb-4">
                 Developers
               </p>
@@ -120,7 +99,7 @@ export default function PricingPage() {
               </ul>
             </div>
 
-            <div className="bg-surface-900 rounded-2xl p-8 relative overflow-hidden">
+            <div className="bg-surface-900 rounded-3xl p-8 relative overflow-hidden">
               <p className="text-xs uppercase tracking-wider text-brand-300 font-semibold mb-4">
                 Advertisers
               </p>
@@ -158,7 +137,7 @@ export default function PricingPage() {
               no automatic customer-payment split.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white border border-surface-200 rounded-2xl p-7">
+              <div className="bg-white border border-surface-200 rounded-3xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money in</p>
                 <h3 className="font-semibold text-surface-900 text-lg mb-3">
                   Advertiser → Dodo → Ateva
@@ -168,7 +147,7 @@ export default function PricingPage() {
                   customer transaction and settles it to Ateva. Dodo does not pay participants.
                 </p>
               </div>
-              <div className="bg-white border border-surface-200 rounded-2xl p-7">
+              <div className="bg-white border border-surface-200 rounded-3xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money out</p>
                 <h3 className="font-semibold text-surface-900 text-lg mb-3">
                   Ateva → separate payout provider → participant

@@ -20,6 +20,15 @@ const inter = localFont({
   display: 'swap',
 });
 
+const instrumentSerif = localFont({
+  src: [
+    { path: '../../public/fonts/instrument-serif-400.ttf', weight: '400', style: 'normal' },
+    { path: '../../public/fonts/instrument-serif-400-italic.ttf', weight: '400', style: 'italic' },
+  ],
+  variable: '--font-serif',
+  display: 'swap',
+});
+
 const jetbrainsMono = localFont({
   src: [
     { path: '../../public/fonts/jetbrains-mono-400.ttf', weight: '400', style: 'normal' },
@@ -30,7 +39,7 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.com'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.vercel.app'),
   title: 'Ateva — private beta for AI wait-state verification',
   description:
     'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation. No code tracking.',
@@ -66,7 +75,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="font-sans antialiased">
         <SkipLink />
         <SandboxBanner />

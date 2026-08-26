@@ -9,7 +9,7 @@ export default function AdminFraudError({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-20">
-      <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-8 max-w-md w-full text-center">
+      <div className="bg-red-500/10 border border-red-500/20 rounded-3xl p-8 max-w-md w-full text-center">
         <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
           <span className="text-red-400 text-xl font-bold">!</span>
         </div>

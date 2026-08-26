@@ -293,7 +293,7 @@ export default function DevSettingsPage() {
       {settings && (
         <form onSubmit={handleSave} className="space-y-8">
           {/* Ad preferences */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Ad preferences</h2>
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -458,7 +458,7 @@ export default function DevSettingsPage() {
           </div>
 
           {/* Account info */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Account</h2>
             <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -545,7 +545,7 @@ export default function DevSettingsPage() {
           />
 
           {/* API keys */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div>
                 <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>

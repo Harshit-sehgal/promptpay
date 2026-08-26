@@ -83,10 +83,8 @@ test('CI blocks on production browser E2E and recovered Playwright flakes', () =
     'cache misses must still install the OS dependencies',
   );
   assert.equal(
-    (
-      workflow.match(/^\s+run: pnpm --filter ateva-web exec playwright install chromium$/gm) ??
-      []
-    ).length,
+    (workflow.match(/^\s+run: pnpm --filter ateva-web exec playwright install chromium$/gm) ?? [])
+      .length,
     2,
     'cache hits must verify the browser without re-running the OS installer',
   );
@@ -283,7 +281,7 @@ test('packed CLI runs outside the monorepo without private runtime packages', ()
     const isolatedEnv = {
       ...process.env,
       NODE_PATH: '',
-      ATEVA_API_URL: 'https://api.ateva.com/api/v1',
+      ATEVA_API_URL: 'https://ateva.vercel.app/api/v1',
     };
     const version = run(process.execPath, [cli, '--version'], {
       cwd: work,

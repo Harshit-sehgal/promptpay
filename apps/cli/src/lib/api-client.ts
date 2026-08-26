@@ -36,7 +36,7 @@ function readManifestVersion(): string {
 }
 const CLI_MANIFEST_VERSION: string = readManifestVersion();
 
-const PRODUCTION_API_URL = 'https://api.ateva.com/api/v1';
+const PRODUCTION_API_URL = 'https://ateva.vercel.app/api/v1';
 
 /**
  * Resolve the API base URL for the CLI. Packaged/distributed clients default
@@ -86,7 +86,7 @@ if (isLoopbackUrl(API_URL)) {
   console.warn(
     `[Ateva] WARNING: the CLI is pointed at a loopback address (${API_URL}). ` +
       'It will not reach the production Ateva API. Set ATEVA_API_URL to the ' +
-      'production origin (https://api.ateva.com/api/v1) unless you are running a local API.',
+      'production origin (https://ateva.vercel.app/api/v1) unless you are running a local API.',
   );
 }
 

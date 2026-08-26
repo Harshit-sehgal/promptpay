@@ -64,7 +64,7 @@ export default function AdvertiserSettingsPage() {
       )}
 
       <div className="space-y-6">
-        <section className="rounded-2xl border border-surface-200/80 bg-white p-7 shadow-sm">
+        <section className="rounded-3xl border border-surface-200/80 bg-white p-7 shadow-sm">
           <h2 className="mb-2 text-[16px] font-bold text-surface-900">Export my data</h2>
           <p className="mb-4 text-xs text-surface-500">
             Download a recent self-service JSON snapshot of your profile, campaigns, creatives,

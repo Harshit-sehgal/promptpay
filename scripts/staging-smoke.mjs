@@ -57,9 +57,9 @@ const API_BASE_URL = process.env.STAGING_API_URL ?? 'http://localhost:4002';
 // (STAGING_FULL_FLOW=0), and even then the script hard-fails below so a
 // release gate can never pass on the short path.
 const FULL_FLOW = process.env.STAGING_FULL_FLOW !== '0';
-const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@ateva.com';
-const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@ateva.com';
-const STAGING_DEV_EMAIL = 'staging-smoke-developer@ateva.com';
+const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@example.com';
+const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@example.com';
+const STAGING_DEV_EMAIL = 'staging-smoke-developer@example.com';
 const STAGING_COUNTRY = (process.env.STAGING_ALLOWED_COUNTRIES ?? 'US')
   .split(',')[0]
   .trim()
@@ -379,8 +379,8 @@ async function main() {
         const creative = await api('POST', `/campaigns/${campaignId}/creatives`, advToken, {
           title: 'Staging smoke creative',
           sponsoredMessage: 'A staging-only API-contract smoke creative.',
-          destinationUrl: 'https://ateva.com',
-          displayDomain: 'ateva.com',
+          destinationUrl: 'https://example.com',
+          displayDomain: 'example.com',
           ctaText: 'Learn more',
         });
         creativeId = creative.json?.id ?? null;

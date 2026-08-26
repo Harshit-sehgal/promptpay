@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { AuthShell } from '@/components/auth-shell';
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -210,19 +211,15 @@ export default function LoginPage() {
   };
 
   return (
-    <main
-      id="main-content"
-      tabIndex={-1}
-      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
-    >
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-10 justify-center">
+    <AuthShell>
+      <div className="w-full max-w-md">
+        <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
           <BrandMark />
           <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
         </div>
 
-        <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+        <div className="rounded-3xl border border-surface-200/70 bg-white p-6 sm:p-8 lg:rounded-none lg:border-0 lg:p-0">
+          <h1 className="font-serif text-[26px] font-normal text-surface-950 mb-1.5 tracking-tight">
             Welcome back
           </h1>
           <p className="text-surface-500 text-sm mb-8">Sign in to your account</p>
@@ -230,9 +227,9 @@ export default function LoginPage() {
           {accountDeleted && (
             <div
               role="status"
-              className="mb-5 rounded-xl border border-emerald-200/70 bg-emerald-50 p-3.5"
+              className="mb-5 rounded-xl border border-surface-200 bg-surface-100 p-3.5"
             >
-              <p className="text-sm font-medium text-emerald-800">
+              <p className="text-sm font-medium text-surface-800">
                 Your account identity was permanently erased. You have been signed out.
               </p>
             </div>
@@ -244,7 +241,7 @@ export default function LoginPage() {
               role="alert"
               aria-live="polite"
             >
-              <p className="text-red-600 text-sm">{error}</p>
+              <p className="text-red-700 text-sm">{error}</p>
             </div>
           )}
 
@@ -324,7 +321,7 @@ export default function LoginPage() {
               size="lg"
               isLoading={loading}
               disabled={loading}
-              className="w-full rounded-xl text-sm"
+              className="w-full text-sm"
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </Button>
@@ -381,7 +378,7 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 

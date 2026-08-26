@@ -53,9 +53,13 @@ const SECTIONS = [
     [
       ['DATABASE_URL', null, 'Managed Postgres, pooled connection.'],
       ['DIRECT_URL', null, 'Unpooled connection for migrations. May equal DATABASE_URL.'],
-      ['REDIS_URL', null, 'Required in production: distributed rate limiting + brute-force tracking.'],
+      [
+        'REDIS_URL',
+        null,
+        'Required in production: distributed rate limiting + brute-force tracking.',
+      ],
       ['API_PORT', '4000', null],
-      ['API_BASE_URL', null, 'HTTPS, credential-free, e.g. https://api.ateva.com'],
+      ['API_BASE_URL', null, 'HTTPS, credential-free, e.g. https://api.example.com'],
       ['WEB_BASE_URL', null, 'HTTPS, credential-free, e.g. https://www.ateva.com'],
       [
         'BFF_TRUST_PROXY_HOPS',
@@ -68,12 +72,28 @@ const SECTIONS = [
   [
     'Signing and encryption (generated — keep secret, back up)',
     [
-      ['JWT_PRIVATE_KEY', secrets.JWT_PRIVATE_KEY, 'Single line with literal \\n escapes. Compose and --env-file cannot carry multi-line values (A-097).'],
-      ['JWT_PUBLIC_KEY', secrets.JWT_PUBLIC_KEY, 'Must ALSO be a Vercel BUILD variable — Next inlines it; runtime env never reaches middleware (A-083).'],
+      [
+        'JWT_PRIVATE_KEY',
+        secrets.JWT_PRIVATE_KEY,
+        'Single line with literal \\n escapes. Compose and --env-file cannot carry multi-line values (A-097).',
+      ],
+      [
+        'JWT_PUBLIC_KEY',
+        secrets.JWT_PUBLIC_KEY,
+        'Must ALSO be a Vercel BUILD variable — Next inlines it; runtime env never reaches middleware (A-083).',
+      ],
       ['JWT_SECRET', secrets.JWT_SECRET, 'Refresh-token HMAC + BFF identity signing.'],
       ['TOTP_SECRET_ENCRYPTION_KEY', secrets.TOTP_SECRET_ENCRYPTION_KEY, null],
-      ['EMAIL_QUEUE_SECRET', secrets.EMAIL_QUEUE_SECRET, 'Queued email bodies contain reset/verify tokens.'],
-      ['PRIVACY_HASH_KEY', secrets.PRIVACY_HASH_KEY, 'Keyed IP pseudonymization; a plain SHA-256 is reversible over IPv4.'],
+      [
+        'EMAIL_QUEUE_SECRET',
+        secrets.EMAIL_QUEUE_SECRET,
+        'Queued email bodies contain reset/verify tokens.',
+      ],
+      [
+        'PRIVACY_HASH_KEY',
+        secrets.PRIVACY_HASH_KEY,
+        'Keyed IP pseudonymization; a plain SHA-256 is reversible over IPv4.',
+      ],
       ['PAYOUT_ENCRYPTION_KEY', secrets.PAYOUT_ENCRYPTION_KEY, 'AES-256-GCM at rest.'],
       ['PAYOUT_HMAC_KEY', secrets.PAYOUT_HMAC_KEY, 'Must differ from PAYOUT_ENCRYPTION_KEY.'],
     ],
@@ -91,7 +111,11 @@ const SECTIONS = [
     [
       ['EMAIL_DRIVER', 'resend', null],
       ['RESEND_API_KEY', null, 'Without this the API will not boot in production.'],
-      ['EMAIL_FROM', null, 'A real verified sender. ateva.local / no-reply@ateva.dev are rejected.'],
+      [
+        'EMAIL_FROM',
+        null,
+        'A real verified sender. ateva.local / no-reply@ateva.dev are rejected.',
+      ],
     ],
   ],
   [
@@ -119,7 +143,11 @@ const SECTIONS = [
     'Optional integrations — leave unset until you have credentials',
     [
       ['# GOOGLE_CLIENT_ID', '', 'Only needed for the Google sign-in button.'],
-      ['# STRIPE_SECRET_KEY', '', 'INACTIVE at launch (decision D2) — advertiser deposits moved to Dodo.'],
+      [
+        '# STRIPE_SECRET_KEY',
+        '',
+        'INACTIVE at launch (decision D2) — advertiser deposits moved to Dodo.',
+      ],
       ['# STRIPE_WEBHOOK_SECRET', '', ''],
       ['# PAYPAL_CLIENT_ID', '', 'Recommended first automated payout rail.'],
       ['# PAYPAL_CLIENT_SECRET', '', ''],

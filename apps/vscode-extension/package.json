@@ -129,7 +129,7 @@
         },
         "ateva.apiUrl": {
           "type": "string",
-          "default": "https://api.ateva.com/api/v1",
+          "default": "https://ateva.vercel.app/api/v1",
           "description": "Ateva API base URL",
           "scope": "machine"
         },

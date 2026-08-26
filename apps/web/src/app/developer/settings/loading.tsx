@@ -8,7 +8,7 @@ export default function SettingsLoading() {
 
       <div className="space-y-8">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="rounded-2xl border border-surface-200/80 bg-white p-7 shadow-sm">
+          <div key={i} className="rounded-3xl border border-surface-200/80 bg-white p-7 shadow-sm">
             <div className="mb-5 h-5 w-32 animate-pulse rounded bg-surface-200" />
             <div className="space-y-6">
               {[1, 2].map((j) => (

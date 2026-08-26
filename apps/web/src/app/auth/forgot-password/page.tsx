@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
+import { AuthShell } from '@/components/auth-shell';
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -28,19 +29,15 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <main
-      id="main-content"
-      tabIndex={-1}
-      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
-    >
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-10 justify-center">
+    <AuthShell>
+      <div className="w-full max-w-md">
+        <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
           <BrandMark />
           <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
         </div>
 
-        <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+        <div className="rounded-3xl border border-surface-200/70 bg-white p-6 sm:p-8 lg:rounded-none lg:border-0 lg:p-0">
+          <h1 className="font-serif text-[26px] font-normal text-surface-950 mb-1.5 tracking-tight">
             Reset your password
           </h1>
           <p className="text-surface-500 text-sm mb-8">
@@ -53,13 +50,13 @@ export default function ForgotPasswordPage() {
               role="alert"
               aria-live="polite"
             >
-              <p className="text-red-600 text-sm">{error}</p>
+              <p className="text-red-700 text-sm">{error}</p>
             </div>
           )}
 
           {sent ? (
-            <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-              <p className="text-emerald-700 text-sm">
+            <div className="bg-surface-100 border border-surface-200 rounded-xl p-4">
+              <p className="text-surface-800 text-sm">
                 If an account exists for <span className="font-medium">{email}</span>, a password
                 reset link has been sent. The link is valid for 1 hour.
               </p>
@@ -97,7 +94,7 @@ export default function ForgotPasswordPage() {
                 size="lg"
                 isLoading={loading}
                 disabled={loading}
-                className="w-full rounded-xl text-sm"
+                className="w-full text-sm"
               >
                 {loading ? 'Sending...' : 'Send reset link'}
               </Button>
@@ -115,6 +112,6 @@ export default function ForgotPasswordPage() {
           </p>
         </div>
       </div>
-    </main>
+    </AuthShell>
   );
 }

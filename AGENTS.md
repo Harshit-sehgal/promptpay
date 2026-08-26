@@ -22,6 +22,265 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-26 — repository and documentation cleanup sweep
+
+A cleanup pass over the tree, run on the premise that the deployed UI is final.
+The notable result is how little was actually removable: the searches for stale
+code mostly returned deliberate, load-bearing constructs, and those were left
+alone rather than tidied away.
+
+- **Removed 3.8 GB of regenerable build output**: every `.turbo/` cache,
+  `apps/web/.next`, `apps/api/coverage`, `apps/web/test-results`, and all
+  `dist/` directories. All were already gitignored; nothing tracked was
+  touched. `pnpm build` regenerates them (verified, 11/11 tasks).
+- **Removed two dead CSS blocks** from `apps/web/src/app/globals.css`: the
+  `.wl-2col` responsive override (zero remaining consumers) and the
+  `div[style*='padding:0 32px']` override (no element carries that inline style
+  any more). Both were leftovers from the pre-redesign inline-style markup.
+  `globals-css-integrity.test.ts` passes (5/5).
+- **Rebuilt the README documentation index.** 41 of 63 docs were unreachable
+  from it, including every ADR after 0001 and all of `docs/ops/`. The index is
+  now grouped by purpose and every link resolves.
+
+### Checked and deliberately NOT removed
+
+Recording these so the next sweep does not re-litigate them:
+
+- **`WaitLayer` references (14 files) are not stale.** Every one is either a
+  deliberate `ATEVA_X ?? WAITLAYER_X` legacy env fallback or a comment
+  documenting the rename. Replacing them would break env compatibility.
+- **`tools/wait-attestation-bridge/` is not orphaned.** It is a `workspace:*`
+  dependency of `apps/api` and the subject of ADR-0007.
+- **The overlapping `docs/ops/` deploy and rollback docs are a deliberate
+  hierarchy**, not duplicates; `deployment.md` names itself the quick-start for
+  `rollback-and-deployment.md`. Deleting any breaks the others' links.
+- **`LAUNCH_PLAN.md`, `FOUNDATION_STATUS.md` and `DODO_PAYMENTS_PLAN.md` carry
+  explicit SUPERSEDED banners** and are indexed as historical records. Kept.
+- **`docs/16-operational-runbooks.md` keeps its colliding number.**
+  `scripts/ci-package-contract.test.mjs:222` reads it by exact path; renaming
+  for cosmetics would break CI for no gain.
+
+### Resolved — consent now gates client monitoring
+
+`apps/web/src/sentry.client.config.ts` — the file Sentry's Next.js plugin
+injects into the client bundle — called `Sentry.init()` whenever a DSN was
+present, including `replaysSessionSampleRate: 0.01`, with no consent check. So
+trace sampling and Session Replay could start before the visitor answered the
+cookie banner, and kept running after a "decline", while the banner told them
+they were accepting "optional analytics cookies".
+
+`apps/web/src/lib/client-monitoring.ts` already held the fix: a consent-gated
+`initClientMonitoring()` that verifies the stored choice against the server's
+_current_ required policy version and fails closed. It was fully unit-tested and
+had **no production caller** — imported only by its own test. The defect was
+therefore the absence of a call, which no behavioural test could see.
+
+- The injected client config no longer initialises Sentry. It calls
+  `initializeMonitoringFromStoredConsent()` and nothing else, so the only client
+  `Sentry.init()` left in the tree is the one behind the version check.
+- `components/cookie-consent.tsx` now calls `enableClientMonitoring(version)` on
+  accept and `disableClientMonitoring()` on decline inside `persist()`, so a
+  choice takes effect in the current session rather than the next page load —
+  declining stops Session Replay immediately.
+- `src/__tests__/client-telemetry-consent.test.ts` guards it. The assertions are
+  source-level by design: the regression is a missing call, and a mock-based
+  test cannot observe that. The guard was verified to FAIL when the direct
+  `Sentry.init()` is reintroduced, then pass once reverted.
+
+Found while looking for dead code — `client-monitoring.ts` was the top
+unreferenced-file candidate. Deleting it, which was the obvious cleanup move,
+would have cemented the defect.
+
+Verification for this pass: `pnpm build` 11/11, `pnpm typecheck` 18/18,
+`pnpm lint` 11/11, `pnpm --filter ateva-api test:unit` 142 files / 1521 tests
+passing, `node --test scripts/ci-package-contract.test.mjs` 20/20. The
+`test:integration` suite remains gated behind
+`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` (it runs `prisma migrate reset
+--force`) and was not run.
+
+## Resolved 2026-08-26 — cohesive editorial UI redesign
+
+The web product now uses one deliberate visual system across its public,
+authentication, and dashboard surfaces, informed by the Refero Steep reference
+without copying its analytics product or page composition. The system uses a
+paper-and-ink palette, sienna accent, Instrument Serif display type, restrained
+rounded geometry, and mono evidence labels. Semantic green, amber, and red stay
+reserved for actual status.
+
+- The homepage is rebuilt around Ateva's own product artifact: an illustrative
+  verification trace that connects eligible wait detection, a labelled
+  sponsored unit, visibility controls, and reporting. It keeps the private-beta,
+  rewards-disabled, consent, payment-rail, and 60/40 accounting boundaries
+  explicit.
+- `SiteHeader` and `SiteFooter` provide the shared public shell. The major
+  marketing, trust, policy, pricing, comparison, status, and advertiser routes
+  use it instead of maintaining visually divergent navigation copies.
+- The advertiser page has a focused editorial narrative and a responsive
+  waitlist card. The auth routes share a two-panel `AuthShell` that explains the
+  privacy boundary while preserving compact mobile forms. Dashboard sidebars
+  and supporting UI primitives use the same token and shape language.
+- Local Instrument Serif files back both the web display face and the generated
+  OpenGraph card. Motion remains optional under `prefers-reduced-motion`, focus
+  treatment stays visible, and the full public/auth axe sweep passes at desktop
+  and mobile breakpoints.
+- The accessibility harness now waits for the page-local main landmark instead
+  of `networkidle`; `/status` polls by design, so the old wait condition could
+  hang despite a fully rendered page. The money-claims release gate also caught
+  and corrected one redesign sentence so the 60% participant obligation cannot
+  be read as diverting an advertiser payment.
+
+Verification: `pnpm lint` 11/11, `pnpm typecheck` 18/18, web Vitest 284/284,
+API unit 1521/1521, `pnpm test:release-gates` 140/140 plus all scenario checks,
+web production build 59/59 pages, and Playwright axe 27/27 in both Chromium and
+mobile Chromium. Rendered browser review covered the homepage, advertiser,
+pricing, login, and OpenGraph surfaces at 1440px and 390px. The first full
+`pnpm test` attempt found the isolated `postgres-test` service absent and failed
+two auth setup suites with `ECONNREFUSED`; after starting that dedicated service
+and non-destructively applying all 97 migrations, the exact suites passed 13/13
+and the complete API unit command passed. The full command was not rerun through
+its destructive per-integration-suite `prisma migrate reset` step without fresh
+operator consent. The `docker-build` CI job was not run locally.
+
+## Verified 2026-08-23 — current infrastructure state (partial #40)
+
+A fresh read-only check found the OCI **staging** host active, with a stable
+environment ID and no `FILL_ME` values in its host environment. The shipped
+image connected through the Supabase pooled runtime URL, and Prisma reported
+all 97 migrations up to date. The API and readiness health routes both return 200. This is staging evidence only; it is not production deployment evidence.
+
+The ignored local `.env.production.local` remains a template with five
+provider placeholders. It also still uses the legacy `WAITLAYER_ENVIRONMENT_*`
+names, while `docs/ops/docker-compose.images.example.yml` requires canonical
+`ATEVA_ENVIRONMENT_*` variables. Its public URL values still point at the old
+WaitLayer/Vercel preview origins and must not be promoted as production
+configuration.
+
+The abandoned `ateva.com` and `www.ateva.com` attachments have been removed
+from the Vercel project and team. No DNS records were published, no traffic
+was moved, and `api.ateva.com` still has no record. The current OCI API is
+exposed by Tailscale Funnel on its `*.ts.net` hostname, so a custom API
+hostname would need a real HTTPS front door/certificate before a DNS-only
+alias is published.
+
+Vercel's empty Preview build-time `JWT_PUBLIC_KEY` and Google client ID, plus
+the shared BFF proxy-hop setting, were populated from the matching
+local/staging configuration without printing their values. The temporary
+Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
+existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
+not the custom-domain setting being cleaned up; it must be reviewed separately
+before a future production launch.
+
+GitHub now has a lowercase `staging` environment plus approval protection on
+both `staging` and `Production`. The registry identifiers and package-only
+GHCR credential are present in both environments. The abandoned Resend
+`ateva.com` domain and production API key were deleted, and
+`PRODUCTION_RESEND_API_KEY` was removed from GitHub. No image has been pushed
+and no production promotion has been dispatched or approved.
+
+## Resolved 2026-08-23 (second pass) — the stranger's domain out of runtime paths
+
+Follow-up sweep after the dead-email fixes, hunting places where the
+un-owned `ateva.com` was not just documented but _exercised_:
+
+- `scripts/staging-smoke.mjs` created real campaign creatives with
+  `destinationUrl: https://ateva.com` — on staging those are servable ads;
+  a click sent a user to a third party's site. Fixture now uses
+  `example.com`, as do its three seeded account emails.
+- Web canonical fallbacks: root layout `metadataBase` and the sitemap base
+  fell back to `https://ateva.com` when `NEXT_PUBLIC_WEB_URL` is unset,
+  minting OpenGraph/canonical URLs on a domain that resolves to someone
+  else's server. Both fall back to `https://ateva.vercel.app`.
+- VS Code `getDashboardUrl()` catch-path returned
+  `https://ateva.com/developer`; it returns the live web origin now.
+  Note: still no spec covers `getDashboardUrl` at all. _(Closed 2026-08-24 —
+  see the entry below; the new spec also caught a port-dropping defect.)_
+- Runbooks' `<APP>` example and DODO_PAYMENTS_PLAN §8 deployment rows now
+  state the real origins; client-release.md labels the pinned
+  `api.ateva.com` workflow constant as the placeholder it is.
+
+_(The shipped-client default flip recorded below as an operator decision was
+executed 2026-08-24 — see "Resolved 2026-08-24".)_
+
+## Resolved 2026-08-24 — shipped-client defaults off the stranger's domain
+
+Operator decision executed (2026-08-24): every shipped-client default now
+points at **`https://ateva.vercel.app/api/v1`** instead of
+`https://api.ateva.com/api/v1`, closing the last standing reference to a
+domain this project does not own in any code path, gate, or template. A
+default API origin on an un-owned name would send user tokens to a stranger's
+infrastructure if a client were ever published without thinking about it
+(same hazard class as A-126).
+
+One coordinated flip across:
+
+- CLI: `PRODUCTION_API_URL` (`apps/cli/src/lib/api-client.ts`), the loopback
+  warning in the same file, and the dev-API hint in `apps/cli/src/index.ts`.
+- VS Code: `ateva.apiUrl` default in `package.json` and `DEFAULT_API_URL` in
+  `src/config.ts`. A side benefit: `getDashboardUrl()` deriving from
+  `ateva.vercel.app` now yields exactly the live dashboard origin.
+- CI/release gates asserting the defaults: `ci.yml` packed-CLI smoke +
+  VSIX metadata check, `publish-cli.yml`, `publish-vscode.yml`, and the
+  isolated-smoke env in `scripts/ci-package-contract.test.mjs`.
+- Ops templates that suggested the un-owned host as an _example_:
+  `scripts/scaffold-production-env.mjs` and the `staging.yml` comment now use
+  neutral `api.example.com`.
+- Test fixtures updated for consistency (CLI creds fixtures, VS Code specs).
+
+**Honest boundary recorded, not papered over:** `ateva.vercel.app` is the web
+origin, and its BFF proxy (`app/api/[...proxy]/route.ts`) today allowlists
+only browser UI paths, forwards cookie-derived auth rather than a
+client-supplied Bearer header, and deliberately excludes `/extension/*`. So a
+published client pointed at the default would receive 403/dropped auth until
+that boundary is deliberately extended or the API gets its own public
+hostname. This is documented in `docs/ops/client-release.md` as a pre-public
+verification step; it is a launch-blocking product/infra decision, not
+something this change pretends to solve.
+
+Also closed the two recorded coverage gaps:
+
+- **VS Code `getDashboardUrl()` spec** (`config.dashboard-url.spec.ts`, 4
+  tests): default derivation, `api.` prefix stripping, loopback scheme, and
+  the fallback for values getApiUrl rejects. The new spec immediately caught
+  a real defect: the derivation used `parsed.hostname`, silently dropping an
+  explicit port — `http://localhost:4002/api/v1` opened
+  `http://localhost/developer`. Fixed to preserve non-default ports.
+- **Brand-mark residue guard** (`apps/web/src/components/brand-mark.test.ts`,
+  3 tests): no `.tsx` may ship a brand-coloured badge whose content is a
+  hardcoded single letter; `Sidebar.brandLetter` must stay opt-in with no
+  default; the shared `BrandMark` import must be present. Mutation-checked
+  against the original `<div className="…bg-brand-500…">W</div>` shape and
+  verified not to fire on the admin red-"A" sub-brand or expression children.
+
+Verification: `pnpm typecheck` 18/18, `pnpm lint` 11/11, cli vitest 136/136,
+vscode vitest 152 passed + 1 opt-in skip, brand-mark guard 3/3,
+`node --test scripts/ci-package-contract.test.mjs` green, Prettier clean.
+
+## Resolved 2026-08-23 — the dead-domain emails and domain fiction swept
+
+The operator confirmed the project owns neither `ateva.com` nor `ateva.dev`.
+Live checks the same day: `ateva.com` has **no MX record** (every
+`@ateva.com` address bounces) and `ateva.dev` is NXDOMAIN. Yet user-facing
+surfaces advertised `support@`/`security@`/`trust@ateva.com` on `/contact`
+and routed GDPR privacy requests to `privacy@ateva.dev` in the DPA — a beta
+user with an account, payout, or Art. 17 request had no working channel.
+
+- `/contact` cards now link to the working in-app feedback form (`/feedback`,
+  DB-backed, admin-viewable) instead of dead mailboxes.
+- The GDPR DPA names the feedback form as the request channel, with an
+  explicit commitment to publish a real mailbox before general availability.
+- Ops/review tooling that defaulted to the stranger's origins was repointed:
+  `dodo-review-access.md`, `bootstrap-review-advertiser.mjs`,
+  `review-access-smoke.mjs` now use `https://ateva.vercel.app`; Open item 3
+  records the withdrawn registrar steps and the remaining
+  `NEXT_PUBLIC_API_URL` review.
+- The local `.env.production.local` template was aligned to canonical
+  `ATEVA_ENVIRONMENT_*` names and live origins (gitignored; not part of this
+  commit).
+
+**Operator follow-ups this does NOT close:** provisioning support/security/
+DPO mailboxes on a domain the project controls, and the matching Resend
+verified-sender decision.
+
 ## Resolved 2026-08-22 — four bugs that only a live system could show
 
 The API reached a real database for the first time on 2026-08-22. Everything
@@ -217,7 +476,11 @@ assert on copy, and the copy said "Ateva". Only opening the pages showed it.
   wording. Drawn with divs, not the shared SVG, because Satori supports only a
   flexbox subset.
 
-Guard note: no test asserts on the mark, so this can regress silently again. The
+Guard note: _(closed 2026-08-24)_ — `apps/web/src/components/brand-mark.test.ts`
+now asserts no `.tsx` file ships a brand-coloured badge holding a hardcoded
+single letter, that `Sidebar`'s `brandLetter` stays opt-in with no default, and
+that the shared `BrandMark` import is present. Mutation-checked against the
+original `<div className="…bg-brand-500…">W</div>` shape. The
 cheap check is a grep for a bare `W` inside a `bg-brand-500`/`from-brand-500`
 badge.
 
@@ -2312,35 +2575,32 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    analogous `PRODUCTION_*` values, plus the remote Compose `.env`
    (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
    Missing values fail the gate by design.
-3. **Public production deployment remains open.** The current Vercel Preview
-   is now ready, but it is not the production domain and remains protected by
-   Vercel access controls. `ateva.com` and `www.ateva.com` are now
-   attached to the current `promptpay` project but are still Verification
-   Required because Vercel reports another Vercel account association. A
-   fresh read-only recheck on **2026-08-19** confirms `www.ateva.com/`
-   returns `200` from the old cached marketing deployment, `/auth/login`,
-   `/auth/signup`, `/developer`, `/advertiser`, and `/api/auth/config` return
-   `404`, and `api.ateva.com` has no DNS record. Add the Vercel-provided
-   `_vercel` TXT records and current A/CNAME records at the registrar, then
-   recheck the rendered routes.
-   The 21-route enumeration below is retained as historical evidence; cache-age
-   values are intentionally not treated as current state:
-   - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
-   - `307` — `/terms`, `/privacy`
-   - `404` — `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`,
-     `/admin`, `/security`, `/status`, `/feedback`, `/comparison`,
-     `/payout-policy`, `/advertiser-policy`, all `/legal/*`
-
-   What is live is a marketing build that predates the entire application: no
-   auth, no dashboards. `api.ateva.com` has no DNS record at all.
-   **Architecture note (this is the good news):** auth cookies are written by
+3. **Public production deployment — domain question resolved; launch pending.**
+   The project does not own `ateva.com` (operator-confirmed 2026-08-23). The
+   name's DNS belongs to a third party, has no MX record, and `api.ateva.com`
+   has never had a record; `ateva.dev` is NXDOMAIN. The abandoned Vercel
+   attachments were removed and every registrar-DNS instruction that assumed
+   ownership of the name is withdrawn.
+   The live web origin is `https://ateva.vercel.app` (the real application,
+   not the old marketing build whose 21-route enumeration was recorded below
+   as historical evidence); the API is exposed by Tailscale Funnel on its
+   `*.ts.net` HTTPS hostname (`docs/ops/oci-api-deployment.md`), and the web
+   BFF reaches it server-side — verified live 2026-08-23.
+   Remaining before a production launch: review the existing
+   `NEXT_PUBLIC_API_URL` build setting (left untouched during cleanup), and
+   decide between shipping on the current origins or acquiring an owned
+   domain. ~~Shipped-client defaults still reference `api.ateva.com`~~
+   **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
+   their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
+   see the dated entry above. Before any client publish, verify that origin
+   can actually serve the CLI/extension endpoints (the BFF proxy currently
+   cannot — recorded in `docs/ops/client-release.md`).
+   **Architecture note:** auth cookies are written by
    the Next.js BFF (`app/api/auth/_lib/cookies.ts`), not by the API, so
    `__Host-` cookies live on the web origin and the API may sit on a different
    host with no cross-origin cookie problem. The only hard requirement is that
-   the API is HTTPS-reachable **server-side** from the web host. Recommended
-   split: web stays on Vercel (edge middleware + SRI + CSP are already tuned
-   for it); API goes to a container host with managed Postgres + Redis behind
-   `api.ateva.com`. Set `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
+   the API is HTTPS-reachable **server-side** from the web host. Set
+   `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
    **build** variables — Next inlines them at build time and runtime env does
    not reach middleware or the client bundle (A-083).
 

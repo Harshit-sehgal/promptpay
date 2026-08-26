@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BrandMark } from '@/components/brand-mark';
+import { SiteHeader } from '@/components/site-header';
 
 export const metadata: Metadata = {
   title: 'Tool Comparison — Ateva',
@@ -179,53 +179,13 @@ const PLATFORM_COMPARE = [
 export default function ComparisonPage() {
   return (
     <div className="min-h-screen bg-white">
-      {/* Nav */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <BrandMark />
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-          </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <Link
-              href="/pricing"
-              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-            >
-              Pricing
-            </Link>
-            <Link href="/comparison" className="text-surface-900 font-medium text-sm">
-              Comparison
-            </Link>
-            <Link
-              href="/#how-it-works"
-              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
-            >
-              How it works
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-sm font-medium transition-colors px-3 py-1.5"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/auth/signup?role=developer"
-              className="bg-surface-900 hover:bg-surface-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Join beta
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <main id="main-content" tabIndex={-1}>
         {/* Hero */}
-        <section className="pt-36 pb-16 px-6">
+        <section className="px-5 pb-16 pt-20 sm:px-6 lg:px-8 lg:pt-24">
           <div className="mx-auto max-w-3xl text-center">
-            <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
+            <h1 className="font-serif text-[40px] md:text-[60px] font-normal leading-[1.1] tracking-[-0.015em] text-surface-950 mb-5">
               Tool & platform comparison
             </h1>
             <p className="text-surface-500 text-lg max-w-xl mx-auto">
@@ -277,7 +237,7 @@ export default function ComparisonPage() {
             <p className="text-surface-500 text-sm mb-8">
               Not all tools support every feature. Here's what's available for each integration.
             </p>
-            <div className="overflow-hidden rounded-2xl border border-surface-200/80">
+            <div className="overflow-hidden rounded-3xl border border-surface-200/80">
               <table className="w-full text-sm">
                 <thead className="bg-surface-100">
                   <tr>
@@ -323,7 +283,7 @@ export default function ComparisonPage() {
               Ateva vs other ad platforms. We focus on privacy, developer trust, and AI-native
               integrations.
             </p>
-            <div className="overflow-hidden rounded-2xl border border-surface-200/80">
+            <div className="overflow-hidden rounded-3xl border border-surface-200/80">
               <table className="w-full text-sm">
                 <thead className="bg-surface-100">
                   <tr>
@@ -387,86 +347,6 @@ export default function ComparisonPage() {
 
         {/* Footer */}
       </main>
-
-      <footer className="py-16 px-6 border-t border-surface-200/60">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-start justify-between gap-10">
-            <div>
-              <div className="flex items-center gap-2.5 mb-3">
-                <BrandMark />
-                <span className="text-surface-900 font-semibold text-sm">Ateva</span>
-              </div>
-              <p className="text-surface-400 text-sm max-w-xs leading-relaxed">
-                Private beta for AI wait-state verification. Rewards and advertiser billing are not
-                yet enabled.
-              </p>
-            </div>
-            <div className="flex gap-16">
-              <div>
-                <h4 className="text-surface-900 font-semibold text-xs mb-3">Product</h4>
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/pricing"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Pricing
-                  </Link>
-                  <Link
-                    href="/comparison"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Comparison
-                  </Link>
-                  <Link
-                    href="/#how-it-works"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    How it works
-                  </Link>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-surface-900 font-semibold text-xs mb-3">Legal</h4>
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/privacy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Privacy
-                  </Link>
-                  <Link
-                    href="/terms"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Terms
-                  </Link>
-                  <Link
-                    href="/advertiser-policy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Advertiser Policy
-                  </Link>
-                  <Link
-                    href="/payout-policy"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Payout Policy
-                  </Link>
-                  <Link
-                    href="/contact"
-                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
-                  >
-                    Contact
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-xs">
-            © 2026 Ateva. All rights reserved.
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

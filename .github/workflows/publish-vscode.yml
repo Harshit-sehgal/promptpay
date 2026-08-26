@@ -48,7 +48,7 @@ jobs:
           mkdir -p /tmp/ateva-vsix
           unzip -q artifacts/vscode/ateva-vscode.vsix -d /tmp/ateva-vsix
           cp /tmp/ateva-vsix/extension/package.json /tmp/ateva-vscode-package.json
-          node -e "const pkg = require('/tmp/ateva-vscode-package.json'); const url = pkg.contributes.configuration.properties['ateva.apiUrl'].default; if (url !== 'https://api.ateva.com/api/v1') throw new Error('Unexpected ateva.apiUrl default: ' + url);"
+          node -e "const pkg = require('/tmp/ateva-vscode-package.json'); const url = pkg.contributes.configuration.properties['ateva.apiUrl'].default; if (url !== 'https://ateva.vercel.app/api/v1') throw new Error('Unexpected ateva.apiUrl default: ' + url);"
           node scripts/verify-vsix-artifact.cjs /tmp/ateva-vsix/extension
           node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/ateva-vsix/extension
       - name: Upload VSIX artifact

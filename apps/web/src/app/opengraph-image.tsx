@@ -1,4 +1,6 @@
 import { ImageResponse } from 'next/og';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 export const alt = 'Ateva — private beta for AI wait-state verification';
 export const size = { width: 1200, height: 630 };
@@ -7,18 +9,24 @@ export const contentType = 'image/png';
 /**
  * The social share card.
  *
- * This is the only place the product is rendered for someone who has not
- * visited it yet, and it had drifted furthest: a `W` badge from the pre-rename
- * name, an indigo palette the site does not use anywhere, and a headline
- * ("Verify AI wait states" / "No code tracking") that predates the current
- * positioning. It now carries the same mark, palette and claim as the homepage.
+ * Rendered as an editorial spread on paper white: serif display type with one
+ * italicized sienna phrase, a single Blush Peach chip, and the three-bar mark.
+ * This mirrors the palette and claim of the homepage rather than inventing its
+ * own visual language.
  *
  * Drawn with divs rather than the shared `BrandMark` SVG because this renders
  * through Satori, which supports only a flexbox subset and no CSS classes.
- * Geometry mirrors `components/brand-mark.tsx` at 3.5x the 16px viewBox.
+ * The serif faces are read from `public/fonts` and passed explicitly — Satori
+ * has no access to `next/font`.
  */
-export default function OpengraphImage() {
-  const bar = { height: 9, borderRadius: 2, background: 'white' };
+export default async function OpengraphImage() {
+  const fontsDir = path.join(process.cwd(), 'public', 'fonts');
+  const [serifRegular, serifItalic] = await Promise.all([
+    readFile(path.join(fontsDir, 'instrument-serif-400.ttf')),
+    readFile(path.join(fontsDir, 'instrument-serif-400-italic.ttf')),
+  ]);
+
+  const bar = { height: 10, borderRadius: 3, background: '#17191c' };
 
   return new ImageResponse(
     <div
@@ -27,44 +35,81 @@ export default function OpengraphImage() {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
-        padding: '80px',
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #0b1a12 65%, #063a25 100%)',
-        color: 'white',
-        fontFamily: 'sans-serif',
+        justifyContent: 'space-between',
+        padding: '72px 80px',
+        background: '#ffffff',
+        color: '#17191c',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', fontSize: 40, fontWeight: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', fontSize: 34 }}>
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
-            width: 56,
-            marginRight: 22,
+            gap: 7,
+            width: 54,
+            marginRight: 20,
           }}
         >
-          <div style={{ ...bar, width: 56 }} />
-          <div style={{ ...bar, width: 56 }} />
-          <div style={{ ...bar, width: 39, background: '#4ade80' }} />
+          <div style={{ ...bar, width: 54 }} />
+          <div style={{ ...bar, width: 54 }} />
+          <div style={{ ...bar, width: 37, background: '#fbe1d1' }} />
         </div>
         Ateva
       </div>
 
-      <div style={{ fontSize: 62, fontWeight: 800, marginTop: 44, lineHeight: 1.12 }}>
-        Verify AI-agent wait time
-      </div>
-      <div style={{ fontSize: 62, fontWeight: 800, lineHeight: 1.12, color: '#4ade80' }}>
-        without reading the work.
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            fontFamily: 'Instrument Serif',
+            fontSize: 88,
+            lineHeight: 1.08,
+            letterSpacing: -2,
+            display: 'flex',
+          }}
+        >
+          Verify AI-agent wait time
+        </div>
+        <div
+          style={{
+            fontFamily: 'Instrument Serif',
+            fontStyle: 'italic',
+            fontSize: 88,
+            lineHeight: 1.08,
+            letterSpacing: -2,
+            color: '#5d2a1a',
+            display: 'flex',
+          }}
+        >
+          without reading the work.
+        </div>
       </div>
 
-      <div style={{ fontSize: 28, marginTop: 34, opacity: 0.82, lineHeight: 1.4 }}>
-        No source code, prompts, or terminal output.
-      </div>
-      <div style={{ fontSize: 22, marginTop: 18, opacity: 0.6, letterSpacing: 1 }}>
-        Private beta · rewards disabled
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 26, color: '#5f636e' }}>
+          No source code, prompts, or terminal output.
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: '#fbe1d1',
+            color: '#4a2113',
+            borderRadius: 999,
+            padding: '12px 24px',
+            fontSize: 22,
+          }}
+        >
+          Private beta · rewards disabled
+        </div>
       </div>
     </div>,
-    size,
+    {
+      ...size,
+      fonts: [
+        { name: 'Instrument Serif', data: serifRegular, weight: 400, style: 'normal' },
+        { name: 'Instrument Serif', data: serifItalic, weight: 400, style: 'italic' },
+      ],
+    },
   );
 }
