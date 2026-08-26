@@ -48,13 +48,13 @@
     "erase:waitlist": "node scripts/erase-waitlist-signup.mjs"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "eslint": "^10.8.0",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.9.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.1.7",
     "prettier": "^3.9.6",
-    "tsx": "^4.23.7",
-    "turbo": "^2.10.8",
+    "tsx": "^4.23.12",
+    "turbo": "^2.10.11",
     "typescript": "^5.9.2"
   }
 }
