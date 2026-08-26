@@ -4,7 +4,6 @@ import type { AxiosResponse } from 'axios';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { AccountErasure } from '@/components/account-erasure';
-import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { NumberField } from '@/components/ui/number-field';
 import { stringifyApiData } from '@/lib/api/client';
@@ -545,8 +544,6 @@ export default function DevSettingsPage() {
               </div>
             </div>
           </div>
-
-          <GoogleAccountLink initiallyLinked={user?.googleVerified === true} />
 
           {/* Shared account security: all roles use the same API-accurate flow. */}
           <TwoFactorEnrolment

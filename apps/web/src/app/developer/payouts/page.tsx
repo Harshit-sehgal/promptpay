@@ -512,6 +512,19 @@ export default function DevPayoutsPage() {
                       className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-sm placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     />
                   </div>
+                  {/*
+                    State both bounds before submission. The amount is validated
+                    against the payout threshold and the available balance on
+                    submit, but neither number appeared on screen until now — a
+                    request over the balance was refused citing a figure the
+                    developer had never been shown.
+                  */}
+                  {info && (
+                    <p className="text-surface-500 text-xs mt-1.5">
+                      Minimum {formatCurrency(info.minimumThresholdMinor, selectedCurrency)} ·
+                      Available {formatCurrency(selectedAvailableMinor, selectedCurrency)}
+                    </p>
+                  )}
                 </div>
                 {requestError && <p className="text-red-600 text-sm font-normal">{requestError}</p>}
                 <button
