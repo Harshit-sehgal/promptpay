@@ -96,6 +96,13 @@ deploy showed no outage at all. Funnel also runs 1.7–6.2s against a 15s BFF
 timeout. This is external item 3 (production API host) surfacing, not a
 separate bug.
 
+**Verified recovery 2026-08-26:** the operator restarted `ateva-api.service` on
+the OCI staging host. The unit is enabled with `Restart=always`, the
+`ateva-api:main` container is healthy, Funnel proxies to `127.0.0.1:4002`, and
+local plus three repeated public API/BFF health probes returned 200 with the
+database and Redis connected. This restores the current staging service; it
+does not replace the separate decision for a stable production front door.
+
 ### Diagnostic traps worth recording
 
 - `dig` from a tailnet member returns the **CGNAT** address `100.111.181.4` via
