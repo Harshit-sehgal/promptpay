@@ -89,6 +89,40 @@ async function attemptFetch(url: string, init: RequestInit): Promise<UpstreamRes
   }
 }
 
+/**
+ * Record why an upstream call failed, server-side only.
+ *
+ * The caller receives a deliberately opaque "Upstream API unavailable" — the
+ * browser must not learn about our network topology. But that opacity also made
+ * a real production incident undiagnosable: sign-in returned 502 while the API
+ * was demonstrably healthy, and nothing anywhere recorded the underlying cause.
+ * Sentry would not have helped either; SENTRY_DSN is unset in production.
+ *
+ * Only the origin is logged, never the full URL — auth paths carry tokens in
+ * the query string on some providers, and this line goes to a shared log.
+ */
+function logUpstreamFailure(url: string, error: Error, timedOut: boolean, attempts: number): void {
+  let origin = 'unparseable-url';
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    // keep the placeholder — a malformed URL is itself the useful signal
+  }
+
+  console.error(
+    '[bff] upstream call failed',
+    JSON.stringify({
+      origin,
+      reason: timedOut ? 'timeout' : 'connect',
+      code: connectErrorCode(error) ?? 'unknown',
+      name: error.name,
+      message: error.message,
+      attempts: attempts + 1,
+      timeoutMs: BFF_API_TIMEOUT_MS,
+    }),
+  );
+}
+
 export async function fetchApiJson(url: string, init: RequestInit = {}): Promise<UpstreamResult> {
   for (let attempt = 0; ; attempt += 1) {
     const outcome = await attemptFetch(url, init);
@@ -101,6 +135,7 @@ export async function fetchApiJson(url: string, init: RequestInit = {}): Promise
       RETRYABLE_CONNECT_CODES.has(connectErrorCode(outcome) ?? '');
 
     if (!canRetry) {
+      logUpstreamFailure(url, outcome, timedOut, attempt);
       return {
         ok: false,
         status: 0,

@@ -96,6 +96,25 @@ describe('fetchApiJson', () => {
     expect(result.status).toBe(0);
   });
 
+  it('logs the underlying cause server-side without leaking the full URL', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(fetchFailed('ECONNREFUSED')));
+
+    await run(fetchApiJson('https://api.test/auth/login?token=super-secret'));
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(errorSpy.mock.calls[0][1]));
+    expect(payload).toMatchObject({
+      origin: 'https://api.test',
+      reason: 'connect',
+      code: 'ECONNREFUSED',
+      attempts: 2,
+    });
+    // The opaque client message must not become an information leak in the log.
+    expect(String(errorSpy.mock.calls[0][1])).not.toContain('super-secret');
+    expect(String(errorSpy.mock.calls[0][1])).not.toContain('/auth/login');
+  });
+
   it('does NOT retry a timeout, and reports it distinctly', async () => {
     const fetchMock = vi.fn().mockRejectedValue(abortError());
     vi.stubGlobal('fetch', fetchMock);
