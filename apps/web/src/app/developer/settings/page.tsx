@@ -4,6 +4,7 @@ import type { AxiosResponse } from 'axios';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { AccountErasure } from '@/components/account-erasure';
+import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { NumberField } from '@/components/ui/number-field';
 import { stringifyApiData } from '@/lib/api/client';
@@ -11,18 +12,14 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 
+import { AD_SERVING } from '@ateva/shared';
 import { useToast } from '@ateva/ui';
 
 /**
- * Mirrors the API's own bounds for `maxAdsPerHour`
- * (`apps/api/src/developer/dto/developer.dto.ts`: @Min(1) @Max(12)).
- *
- * Deliberately NOT `AD_SERVING.MAX_ADS_PER_HOUR_MAX`, which is 20. That
- * constant disagrees with what the API accepts, so offering 20 here would let
- * a developer submit a value the server rejects.
+ * Mirrors the API's own bounds for `maxAdsPerHour`.
  */
-const MAX_ADS_PER_HOUR_MIN = 1;
-const MAX_ADS_PER_HOUR_MAX = 12;
+const MAX_ADS_PER_HOUR_MIN = AD_SERVING.MAX_ADS_PER_HOUR_MIN;
+const MAX_ADS_PER_HOUR_MAX = AD_SERVING.MAX_ADS_PER_HOUR_MAX;
 
 interface DevSettings {
   adsEnabled: boolean;
@@ -544,6 +541,8 @@ export default function DevSettingsPage() {
               </div>
             </div>
           </div>
+
+          <GoogleAccountLink initiallyLinked={user?.googleVerified === true} />
 
           {/* Shared account security: all roles use the same API-accurate flow. */}
           <TwoFactorEnrolment

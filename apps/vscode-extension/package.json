@@ -100,7 +100,7 @@
           "type": "number",
           "default": 6,
           "minimum": 1,
-          "maximum": 30,
+          "maximum": 12,
           "description": "Maximum ads shown per hour"
         },
         "ateva.inactivityTimeoutMs": {

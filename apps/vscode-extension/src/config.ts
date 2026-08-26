@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { AD_SERVING } from '@ateva/shared';
+
 const CONFIG_SECTION = 'ateva';
 
 const DEFAULT_API_URL = 'https://ateva.vercel.app/api/v1';
@@ -149,12 +151,16 @@ export class ConfigurationManager {
   }
 
   async getMaxAdsPerHour(): Promise<number> {
-    const raw = vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ?? 6;
-    // Clamp to 0–60: a malformed/negative/huge setting must never make the
-    // frequency-cap logic behave pathologically (0 disables ads entirely;
-    // >60 would effectively disable the cap).
-    if (typeof raw !== 'number' || Number.isNaN(raw)) return 6;
-    return Math.max(0, Math.min(60, Math.floor(raw)));
+    const raw =
+      vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ??
+      AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT;
+    // Clamp to the same range accepted by the API. A malformed setting must
+    // never make the extension send an exposure cap the server rejects.
+    if (typeof raw !== 'number' || Number.isNaN(raw)) return AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT;
+    return Math.max(
+      AD_SERVING.MAX_ADS_PER_HOUR_MIN,
+      Math.min(AD_SERVING.MAX_ADS_PER_HOUR_MAX, Math.floor(raw)),
+    );
   }
 
   /**

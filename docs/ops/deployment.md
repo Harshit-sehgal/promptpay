@@ -95,7 +95,7 @@ HTTPS origin. Configure these Vercel build/runtime variables:
 
 The API Google client ID is the sole Google OAuth client-ID configuration; the
 web discovers it at runtime through the same-origin auth config route. Do not
-set a separate NEXT_PUBLIC_GOOGLE_CLIENT_ID build variable. The Vercel build
+set a separate `NEXT_PUBLIC_GOOGLE_CLIENT_ID` build variable. The Vercel build
 preflight rejects missing auth/API configuration. A successful web build is not
 a completed deployment until the auth config and login routes reach the API
 rather than returning 5xx.

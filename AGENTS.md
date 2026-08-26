@@ -679,9 +679,8 @@ advertiser interest capture while billing is closed.
 **Remaining (operator-only, unchanged):** Dodo live credentials + webhook
 semantics (#39), production infrastructure + release secrets (#40), staging-
 to-production deployment (#41), independent wait attestation operator (#45),
-GitHub credential rotation, Google OAuth browser-origin authorization and
-successful callback (the API client-ID/runtime path is verified), client
-publishing tokens, legal review, and the production payout-operator / float
+GitHub credential rotation, Sentry DSN provisioning, stable API front door,
+client publishing tokens, legal review, and the production payout-operator / float
 decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launch
 policy are resolved: Dodo cannot pay developers, and developer payouts remain
 disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
@@ -2753,8 +2752,8 @@ Verification: the focused integration spec and the API typecheck/lint gates.
 7. **Google OAuth browser integration** for live Google sign-in (decision D6:
    enable at launch). CSP `frame-src` is verified live; the API
    `GOOGLE_CLIENT_ID` and web `/api/auth/config` runtime path are verified.
-   Still verify that `ateva.vercel.app` is an authorized JavaScript origin in
-   Google Cloud and complete a real browser callback.
+   The authorized production origin and real browser callback are verified;
+   explicit linking is available for existing password accounts.
 8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
    the provider level; launch countries/currencies, KYC/tax/legal docs.
    Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only

@@ -15,6 +15,8 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
+import { AD_SERVING } from '@ateva/shared';
+
 export class UpdateSettingsDto {
   @ApiProperty({ required: false })
   @IsOptional()
@@ -56,7 +58,7 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(12)
+  @Max(AD_SERVING.MAX_ADS_PER_HOUR_MAX)
   @Type(() => Number)
   maxAdsPerHour?: number;
 

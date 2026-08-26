@@ -51,7 +51,10 @@ export const RATE_LIMITS = {
 /** Ad serving */
 export const AD_SERVING = {
   MAX_ADS_PER_HOUR_DEFAULT: 6,
-  MAX_ADS_PER_HOUR_MAX: 20,
+  // Keep every client below the API DTO's @Max boundary. This is the
+  // platform-wide exposure cap; clients must not advertise a value the API
+  // will reject.
+  MAX_ADS_PER_HOUR_MAX: 12,
   MAX_ADS_PER_HOUR_MIN: 1,
   MIN_CAMPAIGN_BUDGET_MINOR: 50_00, // $50 minimum
   MAX_CAMPAIGN_BUDGET_MINOR: 1_000_000_00, // $1M max
