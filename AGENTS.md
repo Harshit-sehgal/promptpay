@@ -2730,10 +2730,13 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    as historical evidence); the API is exposed by Tailscale Funnel on its
    `*.ts.net` HTTPS hostname (`docs/ops/oci-api-deployment.md`), and the web
    BFF reaches it server-side — verified live 2026-08-23.
-   Remaining before a production launch: review the existing
-   `NEXT_PUBLIC_API_URL` build setting (left untouched during cleanup), and
-   decide between shipping on the current origins or acquiring an owned
-   domain. ~~Shipped-client defaults still reference `api.ateva.com`~~
+   Current operating decision (2026-08-27): keep the current origins for
+   staging/private-beta use and make no new ingress spend yet. Before a
+   general-availability production launch, acquire an owned domain and put
+   the API behind a stable HTTPS front door; then update the web build inputs
+   and client-release contract together. The existing `NEXT_PUBLIC_API_URL`
+   build setting still needs review as part of that launch work.
+   ~~Shipped-client defaults still reference `api.ateva.com`~~
    **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
    their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
    see the dated entry above. Before any client publish, verify that origin
