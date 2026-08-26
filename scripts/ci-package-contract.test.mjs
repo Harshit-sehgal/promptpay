@@ -64,7 +64,7 @@ function assertNoPrivateRuntimeDependencies(pkg) {
 test('CI blocks on production browser E2E and recovered Playwright flakes', () => {
   const workflow = read('.github/workflows/ci.yml');
   assert.equal(
-    (workflow.match(/actions\/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57/g) ?? []).length,
+    (workflow.match(/actions\/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9/g) ?? []).length,
     2,
     'both browser jobs must cache their Playwright browser installation',
   );
