@@ -77,9 +77,10 @@ try {
   errors.push('API_INTERNAL_URL or NEXT_PUBLIC_API_URL must be configured');
 }
 
-if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
-  errors.push('NEXT_PUBLIC_GOOGLE_CLIENT_ID is required for production sign-in');
-}
+// Google Identity Services receives its client ID from the API at runtime via
+// the same-origin /api/auth/config route. There is no web build-time Google ID
+// to validate; requiring NEXT_PUBLIC_GOOGLE_CLIENT_ID here would allow a stale
+// value to masquerade as the API verifier's audience.
 if (process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true') {
   errors.push('NEXT_PUBLIC_ALLOW_MOCK_AUTH must not be enabled in a deployment');
 }

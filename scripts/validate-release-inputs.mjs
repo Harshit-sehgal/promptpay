@@ -143,7 +143,6 @@ export function validateProductionWebInputs(env) {
   const errors = [];
   const apiUrl = env.NEXT_PUBLIC_API_URL?.trim();
   const webUrl = env.NEXT_PUBLIC_WEB_URL?.trim();
-  const googleClientId = env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim();
   const publicKey = env.JWT_PUBLIC_KEY?.trim();
 
   if (!apiUrl || !isHttpsApiBase(apiUrl)) {
@@ -158,9 +157,9 @@ export function validateProductionWebInputs(env) {
       'NEXT_PUBLIC_WEB_URL must be a credential-free non-loopback HTTPS origin with no path or trailing slash',
     );
   }
-  if (!googleClientId) {
-    fail(errors, 'NEXT_PUBLIC_GOOGLE_CLIENT_ID is required for the production web build');
-  }
+  // Google client ID discovery is a runtime API concern. The web fetches the
+  // API-owned value through /api/auth/config, so it is not a production image
+  // input and must not be required here.
   if (!publicKey || !isRsaPublicKey(publicKey)) {
     fail(errors, 'JWT_PUBLIC_KEY must be a valid RSA public key for the production web build');
   }

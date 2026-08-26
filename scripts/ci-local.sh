@@ -37,12 +37,10 @@ if [ "${DOCKER_BUILD:-0}" = "1" ]; then
     docker build -t ateva-api --target api \
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
-      --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \
       .
     docker build -t ateva-web --target web \
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
-      --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \
       .
   fi
 fi

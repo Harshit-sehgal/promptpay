@@ -41,29 +41,30 @@ The standalone production Compose example fails interpolation before starting
 when a core value is absent. Keep these in `.env.production` or inject them from
 the host secret manager; never commit that file.
 
-| Variable                       | Source         | Required In                  |
-| ------------------------------ | -------------- | ---------------------------- |
-| `DATABASE_URL`                 | Secret manager | API                          |
-| `REDIS_URL`                    | Secret manager | API                          |
-| `API_BASE_URL`                 | Deploy config  | API, public HTTPS origin     |
-| `WEB_BASE_URL`                 | Deploy config  | API, public HTTPS origin     |
-| `JWT_PRIVATE_KEY`              | Secret manager | API runtime                  |
-| `JWT_PUBLIC_KEY`               | Deploy config  | API + Web build/runtime      |
-| `JWT_SECRET`                   | Secret manager | API + Web runtime, 32+ chars |
-| `TOTP_SECRET_ENCRYPTION_KEY`   | Secret manager | API, 32+ chars               |
-| `PRIVACY_HASH_KEY`             | Secret manager | API, 32+ chars               |
-| `EMAIL_QUEUE_SECRET`           | Secret manager | API, 32+ chars               |
-| `OPS_ALERT_EMAIL`              | Deploy config  | API                          |
-| `EMAIL_FROM`                   | Deploy config  | API, verified sender         |
-| `RESEND_API_KEY`               | Secret manager | API                          |
-| `GOOGLE_CLIENT_ID`             | Google console | API                          |
-| `NEXT_PUBLIC_API_URL`          | Deploy config  | Web build, public HTTPS URL  |
-| `NEXT_PUBLIC_WEB_URL`          | Deploy config  | Web build                    |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google console | Web build                    |
+| Variable                     | Source         | Required In                  |
+| ---------------------------- | -------------- | ---------------------------- |
+| `DATABASE_URL`               | Secret manager | API                          |
+| `REDIS_URL`                  | Secret manager | API                          |
+| `API_BASE_URL`               | Deploy config  | API, public HTTPS origin     |
+| `WEB_BASE_URL`               | Deploy config  | API, public HTTPS origin     |
+| `JWT_PRIVATE_KEY`            | Secret manager | API runtime                  |
+| `JWT_PUBLIC_KEY`             | Deploy config  | API + Web build/runtime      |
+| `JWT_SECRET`                 | Secret manager | API + Web runtime, 32+ chars |
+| `TOTP_SECRET_ENCRYPTION_KEY` | Secret manager | API, 32+ chars               |
+| `PRIVACY_HASH_KEY`           | Secret manager | API, 32+ chars               |
+| `EMAIL_QUEUE_SECRET`         | Secret manager | API, 32+ chars               |
+| `OPS_ALERT_EMAIL`            | Deploy config  | API                          |
+| `EMAIL_FROM`                 | Deploy config  | API, verified sender         |
+| `RESEND_API_KEY`             | Secret manager | API                          |
+| `GOOGLE_CLIENT_ID`           | Google console | API                          |
+| `NEXT_PUBLIC_API_URL`        | Deploy config  | Web build, public HTTPS URL  |
+| `NEXT_PUBLIC_WEB_URL`        | Deploy config  | Web build                    |
 
 `JWT_PUBLIC_KEYS` is optional during rotation, but when present the same set
 must reach the API and web build. `JWT_ISSUER` / `JWT_AUDIENCE` default to
 `ateva` / `ateva-client`; custom values must also match on both tiers.
+Google Sign-In uses the API's GOOGLE_CLIENT_ID; the web fetches that value from
+the API's same-origin auth config route at runtime.
 The example fixes `PAYOUT_REQUIRE_2FA=true`, `WEBHOOK_RECLAIM_CRON=true`, and
 production email mode. Stripe, PayPal, Wise, and Sentry variables are required
 only when the corresponding integration is enabled.
@@ -81,7 +82,6 @@ export JWT_AUDIENCE="${JWT_AUDIENCE:-ateva-client}"
 # During rotation only: export JWT_PUBLIC_KEYS="$(cat previous-jwt-public.pem)"
 export NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 export NEXT_PUBLIC_WEB_URL=https://app.example.com
-export NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 
 # The API target shares the monorepo build stage with web, so pass the same
 # non-secret web verification/build inputs to both targets.
@@ -89,13 +89,11 @@ docker build --target api \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
-  --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
   -t "$ATEVA_API_IMAGE" .
 docker build --target web \
   --build-arg JWT_PUBLIC_KEY --build-arg JWT_PUBLIC_KEYS \
   --build-arg JWT_ISSUER --build-arg JWT_AUDIENCE \
   --build-arg NEXT_PUBLIC_API_URL --build-arg NEXT_PUBLIC_WEB_URL \
-  --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID \
   -t "$ATEVA_WEB_IMAGE" .
 
 docker push "$ATEVA_API_IMAGE"

@@ -25,7 +25,6 @@ const BASE = {
   API_INTERNAL_URL: 'http://api:4002/api/v1',
   NEXT_PUBLIC_WEB_URL: 'https://app.example.com',
   GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
-  NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
   JWT_PRIVATE_KEY: PRIVATE_PEM.replaceAll('\n', '\\n'),
   JWT_PUBLIC_KEY: PUBLIC_PEM.replaceAll('\n', '\\n'),
   JWT_SECRET: 'a-production-secret-that-is-long-enough-123',
@@ -81,12 +80,13 @@ test('rejects non-HTTPS public endpoints and inconsistent API paths', () => {
   assert.equal(finding(findings, 'web-base-url').level, 'FAIL');
 });
 
-test('requires matching Google OAuth IDs and complete Dodo configuration', () => {
+test('uses the API Google OAuth ID as the sole client-ID source and validates Dodo configuration', () => {
   const oauth = diagnoseEnvironment({
     ...BASE,
     NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'other.apps.googleusercontent.com',
   });
-  assert.match(finding(oauth, 'google-oauth').detail, /do not match/);
+  assert.equal(finding(oauth, 'google-oauth').level, 'PASS');
+  assert.match(finding(oauth, 'google-oauth').detail, /\/auth\/config/);
 
   const dodoEnv = {
     ...BASE,

@@ -544,7 +544,6 @@ jobs:
         run: docker compose -f docker-compose.yml build web
         env:
           NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
-          NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
       # The web image is built INSIDE Docker, so the host apps/web/.next path
       # does not exist in this job — scanning it would pass vacuously. Extract

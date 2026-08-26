@@ -16,6 +16,10 @@ const productionCompose = readFileSync(
   new URL('../docs/ops/docker-compose.images.example.yml', import.meta.url),
   'utf8',
 );
+const webPreflight = readFileSync(
+  new URL('../apps/web/scripts/verify-deploy-env.mjs', import.meta.url),
+  'utf8',
+);
 const prismaConfig = readFileSync(
   new URL('../packages/db/prisma.config.ts', import.meta.url),
   'utf8',
@@ -116,10 +120,17 @@ test('validates the exact public URLs and RSA key embedded in the production web
   const valid = {
     NEXT_PUBLIC_API_URL: 'https://api.ateva.example/api/v1',
     NEXT_PUBLIC_WEB_URL: 'https://www.ateva.example',
-    NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'client.apps.googleusercontent.com',
     JWT_PUBLIC_KEY: testPublicKey,
   };
   assert.deepEqual(validateProductionWebInputs(valid), []);
+  assert.deepEqual(
+    validateProductionWebInputs({
+      ...valid,
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'stale-client.apps.googleusercontent.com',
+    }),
+    [],
+    'a legacy web Google ID must not affect production web validation',
+  );
 
   for (const [name, value] of [
     ['NEXT_PUBLIC_API_URL', 'https://api.ateva.example'],
@@ -134,6 +145,13 @@ test('validates the exact public URLs and RSA key embedded in the production web
       `${name}=${value} must be rejected`,
     );
   }
+});
+
+test('release workflow does not require a separate web Google client ID', () => {
+  assert.doesNotMatch(webPreflight, /process\.env\.NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
+  assert.doesNotMatch(webPreflight, /NEXT_PUBLIC_GOOGLE_CLIENT_ID is required/);
+  assert.doesNotMatch(releaseWorkflow, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
+  assert.doesNotMatch(releaseWorkflow, /STAGING_GOOGLE_CLIENT_ID|PRODUCTION_GOOGLE_CLIENT_ID/);
 });
 
 test('release workflow configures Buildx and signs every pushed image digest', () => {
@@ -262,10 +280,7 @@ test('production image Compose declares the full fail-closed runtime contract', 
   assert.match(productionCompose, /WAIT_ATTESTATION_ISSUERS:\n/);
   assert.doesNotMatch(productionCompose, /WAIT_ATTESTATION_ISSUERS: \$\{/);
   assert.match(productionCompose, /ATEVA_REQUIRE_DEPLOY_ENV: '1'/);
-  assert.match(
-    productionCompose,
-    /NEXT_PUBLIC_GOOGLE_CLIENT_ID: \$\{NEXT_PUBLIC_GOOGLE_CLIENT_ID:\?/,
-  );
+  assert.doesNotMatch(productionCompose, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
   assert.match(productionCompose, /NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'/);
   assert.match(productionCompose, /ALLOW_MOCK_GOOGLE: 'false'/);
   assert.match(productionCompose, /MOCK_GOOGLE_ENABLED: '0'/);
