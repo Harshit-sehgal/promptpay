@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AccountErasure } from '@/components/account-erasure';
+import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { stringifyApiData } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -93,6 +94,8 @@ export default function AdvertiserSettingsPage() {
             });
           }}
         />
+
+        <GoogleAccountLink initiallyLinked={user?.googleVerified === true} />
 
         <AccountErasure
           role="advertiser"
