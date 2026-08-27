@@ -61,6 +61,12 @@ hardcoded Google client-ID default. Real GIS testing now requires an explicit
 `GOOGLE_CLIENT_ID`; the local mock path remains available without one, so a
 local default cannot masquerade as the API's live OAuth authority.
 
+On 2026-08-27, the payout documentation was aligned with the current provider
+registry. PayPal Payouts, Stripe Connect, and Wise have implemented provider
+paths but remain credential/approval-gated and `coming_soon`; Payoneer,
+Razorpay, and Dodo Payments remain fail-closed payout stubs. The strategy and
+architecture docs now distinguish implementation from launch availability.
+
 ## Resolved 2026-08-27 — Sentry monitoring is provisioned for live staging and web
 
 The Ateva Sentry organization and `javascript-nextjs` project were created via

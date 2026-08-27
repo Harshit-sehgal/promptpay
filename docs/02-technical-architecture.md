@@ -172,18 +172,20 @@ interface PayoutProviderHandler {
 }
 ```
 
-MVP providers:
+Launch-safe providers:
 
 - ManualProvider.
 - PayPalEmailProvider, which validates email format and records destination for manual payout.
 
-Later providers:
+Implemented but credential- and approval-gated providers:
 
-- PayPalPayoutsProvider.
-- StripeConnectProvider.
-- PayoneerProvider.
-- WiseProvider.
-- RazorpayProvider.
+- PayPalPayoutsProvider (sandbox validation required before promotion).
+- StripeConnectProvider (approved Connect platform and tested onboarding required).
+- WiseProvider (verified recipient capability required).
+
+Unavailable providers:
+
+- PayoneerProvider, RazorpayProvider, and Dodo Payments remain fail-closed stubs.
 
 ## Privacy architecture
 

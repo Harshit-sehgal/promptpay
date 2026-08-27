@@ -80,7 +80,7 @@ attestable integration is deployed and reviewed.
 - **Auth**: Email/password signup, Google OAuth, JWT refresh rotation + reuse detection, password reset, TOTP 2FA with encrypted secrets
 - **Campaigns**: Draft → submitted → approved → active lifecycle with budget/bid validation
 - **Ledger**: Three-ledger accounting (earnings, advertiser, platform) with 60/30/10 revenue split
-- **Payouts**: Multi-provider architecture with PayPal Payouts, Stripe Connect, and Wise wired, Razorpay/Payoneer stubs fail-closed in production, hold periods by trust level, optional 2FA gating
+- **Payouts**: Multi-provider architecture with PayPal Payouts, Stripe Connect, and Wise wired, Razorpay/Payoneer/Dodo stubs fail-closed in production, hold periods by trust level, optional 2FA gating
 - **Fraud**: Redis-backed rate limits, brute-force lockouts, CTR analysis, self-click detection, trust scoring, automatic earning holds
 - **Extensions**: HMAC-signed event pipeline per device, privacy-enforced, idempotent, with password/Google/support device-secret recovery
 - **Referrals**: Code-based referral system with $5 reward on first payout
