@@ -137,6 +137,41 @@ test('rejects known unowned project domains from public release inputs', () => {
   }
 });
 
+test('rejects fully qualified trailing-dot forms of known unowned domains', () => {
+  const staging = {
+    ...validStagingUrls,
+    STAGING_WAIT_ATTESTATION_PROVIDER: 'independent-attestor',
+    STAGING_WAIT_ATTESTATION_ISSUERS: independentIssuer,
+    STAGING_WAIT_ATTESTATION_VERSIONS: 'attestor-v2',
+  };
+  for (const [name, value] of [
+    ['STAGING_API_URL', 'https://api.ateva.com.'],
+    ['STAGING_WEB_URL', 'https://ateva.dev.'],
+  ]) {
+    assert.ok(
+      validateStagingInputs({ ...staging, [name]: value }).some((error) =>
+        error.startsWith(`${name} must`),
+      ),
+      `${name}=${value} must be rejected`,
+    );
+  }
+
+  const production = {
+    NEXT_PUBLIC_API_URL: 'https://api.example.com/api/v1',
+    NEXT_PUBLIC_WEB_URL: 'https://app.example.com',
+    JWT_PUBLIC_KEY: testPublicKey,
+  };
+  for (const [name, value] of [
+    ['NEXT_PUBLIC_API_URL', 'https://api.waitlayer.com./api/v1'],
+    ['NEXT_PUBLIC_WEB_URL', 'https://ateva.com.'],
+  ]) {
+    assert.ok(
+      validateProductionWebInputs({ ...production, [name]: value }).length > 0,
+      `${name}=${value} must be rejected`,
+    );
+  }
+});
+
 test('requires immutable image digests for promotion', () => {
   assert.deepEqual(
     validateDigestInputs({

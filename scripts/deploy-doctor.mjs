@@ -60,7 +60,10 @@ function isSingleLabel(hostname) {
 }
 
 function usesUnownedProjectDomain(hostname) {
-  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/, '');
   return UNOWNED_PROJECT_DOMAIN_SUFFIXES.some(
     (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`),
   );

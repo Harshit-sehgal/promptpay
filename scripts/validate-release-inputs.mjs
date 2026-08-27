@@ -21,7 +21,10 @@ function fail(errors, message) {
 
 function usesUnownedProjectDomain(value) {
   try {
-    const hostname = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const hostname = new URL(value).hostname
+      .toLowerCase()
+      .replace(/^\[|\]$/g, '')
+      .replace(/\.+$/, '');
     return UNOWNED_PROJECT_DOMAIN_SUFFIXES.some(
       (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
     );
