@@ -151,97 +151,99 @@ export default function AdminUsersPage() {
         {users.length === 0 ? (
           <div className="text-ink-300 text-sm py-12 text-center">No users found.</div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-ink-700/50 border-b border-ink-600/30">
-              <tr>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">User</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Role</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Status</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Trust</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Flags</th>
-                <th className="text-right px-4 py-3 text-ink-200 font-medium">Joined</th>
-                <th className="text-right px-4 py-3 text-ink-200 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-600/20">
-              {visibleUsers.map((u) => (
-                <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <div>
-                      <p className="text-white text-sm">{u.name || u.email}</p>
-                      <p className="text-ink-500 text-xs">{u.email}</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={u.role} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`text-xs font-medium ${
-                        u.status === 'banned'
-                          ? 'text-red-400'
-                          : u.status === 'restricted'
-                            ? 'text-amber-400'
-                            : 'text-emerald-400'
-                      }`}
-                    >
-                      {u.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`font-mono text-sm ${trustColorClass(u.trustLevel)}`}>
-                      {TRUST_LEVEL_SCORE[u.trustLevel] ?? 0}/100
-                      <span className="ml-1 text-ink-500 text-xs normal-case">
-                        ({u.trustLevel})
-                      </span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {u.openFlags > 0 ? (
-                      <span className="text-red-400 text-xs font-medium">{u.openFlags} open</span>
-                    ) : (
-                      <span className="text-ink-500 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right text-ink-300 text-xs">
-                    {formatRelativeTime(u.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      {u.status === 'banned' ? (
-                        <button
-                          type="button"
-                          onClick={() => openAction(u, 'unban')}
-                          className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
-                        >
-                          Unban
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openAction(u, u.status === 'restricted' ? 'restrict' : 'ban')
-                          }
-                          className="text-amber-400 hover:text-amber-300 text-xs font-medium"
-                        >
-                          {u.status === 'restricted' ? 'Restrict' : 'Ban'}
-                        </button>
-                      )}
-                      {u.role !== 'super_admin' && u.role !== 'admin' && (
-                        <button
-                          type="button"
-                          onClick={() => openAction(u, 'erase')}
-                          className="text-red-400 hover:text-red-300 text-xs font-medium"
-                        >
-                          Erase
-                        </button>
-                      )}
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                <tr>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">User</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Role</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Trust</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Flags</th>
+                  <th className="text-right px-4 py-3 text-ink-200 font-medium">Joined</th>
+                  <th className="text-right px-4 py-3 text-ink-200 font-medium">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-ink-600/20">
+                {visibleUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-white text-sm">{u.name || u.email}</p>
+                        <p className="text-ink-500 text-xs">{u.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={u.role} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs font-medium ${
+                          u.status === 'banned'
+                            ? 'text-red-400'
+                            : u.status === 'restricted'
+                              ? 'text-amber-400'
+                              : 'text-emerald-400'
+                        }`}
+                      >
+                        {u.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`font-mono text-sm ${trustColorClass(u.trustLevel)}`}>
+                        {TRUST_LEVEL_SCORE[u.trustLevel] ?? 0}/100
+                        <span className="ml-1 text-ink-500 text-xs normal-case">
+                          ({u.trustLevel})
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.openFlags > 0 ? (
+                        <span className="text-red-400 text-xs font-medium">{u.openFlags} open</span>
+                      ) : (
+                        <span className="text-ink-500 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-ink-300 text-xs">
+                      {formatRelativeTime(u.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {u.status === 'banned' ? (
+                          <button
+                            type="button"
+                            onClick={() => openAction(u, 'unban')}
+                            className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                          >
+                            Unban
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openAction(u, u.status === 'restricted' ? 'restrict' : 'ban')
+                            }
+                            className="text-amber-400 hover:text-amber-300 text-xs font-medium"
+                          >
+                            {u.status === 'restricted' ? 'Restrict' : 'Ban'}
+                          </button>
+                        )}
+                        {u.role !== 'super_admin' && u.role !== 'admin' && (
+                          <button
+                            type="button"
+                            onClick={() => openAction(u, 'erase')}
+                            className="text-red-400 hover:text-red-300 text-xs font-medium"
+                          >
+                            Erase
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

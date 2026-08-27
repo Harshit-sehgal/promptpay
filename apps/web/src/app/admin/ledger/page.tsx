@@ -120,7 +120,7 @@ export default function AdminLedgerPage() {
 
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-6">
             <h2 className="text-white font-semibold mb-4">Revenue split</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <p className="text-ink-300 text-xs uppercase">User share (60-80%)</p>
                 <p className="text-emerald-400 font-mono text-lg">
@@ -177,44 +177,46 @@ export default function AdminLedgerPage() {
             {entries.length === 0 ? (
               <div className="text-ink-300 text-sm py-12 text-center">No ledger entries.</div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-ink-700/50 border-b border-ink-600/30">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Ledger</th>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
-                    <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-600/20">
-                  {entries.map((e) => (
-                    <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
-                      <td className="px-4 py-3 text-ink-200 text-xs">
-                        {formatRelativeTime(e.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        <span
-                          className={`px-2 py-0.5 rounded ${
-                            e.ledgerKind === 'earnings'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : e.ledgerKind === 'advertiser'
-                                ? 'bg-purple-500/20 text-purple-400'
-                                : 'bg-brand-500/20 text-brand-500'
-                          }`}
-                        >
-                          {e.ledgerKind}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-white text-xs capitalize">
-                        {e.entryType.replace('_', ' ')}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-white">
-                        {formatCurrency(e.amountMinor, e.currency)}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[820px] text-sm">
+                  <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Ledger</th>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
+                      <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-ink-600/20">
+                    {entries.map((e) => (
+                      <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
+                        <td className="px-4 py-3 text-ink-200 text-xs">
+                          {formatRelativeTime(e.createdAt)}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <span
+                            className={`px-2 py-0.5 rounded ${
+                              e.ledgerKind === 'earnings'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : e.ledgerKind === 'advertiser'
+                                  ? 'bg-purple-500/20 text-purple-400'
+                                  : 'bg-brand-500/20 text-brand-500'
+                            }`}
+                          >
+                            {e.ledgerKind}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-white text-xs capitalize">
+                          {e.entryType.replace('_', ' ')}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-white">
+                          {formatCurrency(e.amountMinor, e.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>
