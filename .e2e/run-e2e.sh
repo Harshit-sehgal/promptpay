@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-cd /home/harshit/Documents/Work/Money/promptpay
+# Derive the checkout root from this script's location. This was previously a
+# hardcoded absolute path to one machine's clone, which made the dev runner
+# fail on any other checkout layout; scripts/bootstrap-environment-marker.mjs
+# and run-e2e-production.sh already derive their roots, and audit-claims.mjs
+# now guards both e2e runners against a hardcoded `/home/...` cd returning.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
 
 # E2E auth collapses when root .env and apps/api/.env hold different JWT
 # keypairs (AGENTS.md 2026-08-02): the BFF issues tokens signed by one key,
@@ -46,7 +52,7 @@ API_PID=$!
 cd apps/web
 NODE_ENV=production NEXT_PUBLIC_API_URL="http://localhost:4002/api/v1" NEXT_PUBLIC_ALLOW_MOCK_AUTH="true" pnpm exec next start -p 3000 > ../../.e2e/web.log 2>&1 &
 WEB_PID=$!
-cd /home/harshit/Documents/Work/Money/promptpay
+cd "$REPO_ROOT"
 
 # Cleanup function
 cleanup() {

@@ -140,6 +140,37 @@ check(
   !workspaceConfig.includes('@hono/node-server'),
 );
 
+// The product is Ateva. The rename left `@waitlayer/*` names lingering in
+// untracked build artifacts (apps/web/.vercel/node/package-manifest.json still
+// listed them long after the source moved), which shows this drift class can
+// survive invisibly in generated files. The tracked source of truth must not
+// drift the same way: every workspace manifest carries the Ateva identity, so
+// a future package cannot silently revive the old scope.
+const workspacePackageDirs = ['apps', 'packages', 'tools'].flatMap((dir) =>
+  readdirSync(resolve(ROOT, dir), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `${dir}/${entry.name}`),
+);
+const nonAtevaPackages = workspacePackageDirs.filter((dir) => {
+  try {
+    return !/^(@ateva\/|ateva-)/.test(JSON.parse(read(`${dir}/package.json`)).name);
+  } catch {
+    return true; // a workspace directory without a readable manifest is itself drift
+  }
+});
+check('every workspace package name carries the Ateva identity', nonAtevaPackages.length === 0);
+
+// `.e2e/run-e2e.sh` hardcoded this checkout's absolute path at BOTH of its
+// `cd` sites, so the dev browser-e2e runner only worked from one machine's
+// clone layout (run-e2e-production.sh already derived its root correctly).
+// The runners must derive the checkout root from their own location; a
+// hardcoded `/home/...` cd is exactly how that regression returns.
+const e2eRunners = ['.e2e/run-e2e.sh', '.e2e/run-e2e-production.sh'];
+check(
+  'e2e runners derive the checkout root instead of hardcoding an absolute path',
+  e2eRunners.every((script) => !/cd\s+"?\/home\//.test(read(script))),
+);
+
 // AGENTS.md reflects the CI-guarded correction (narrative tied to the guard).
 const agents = read('AGENTS.md');
 check(

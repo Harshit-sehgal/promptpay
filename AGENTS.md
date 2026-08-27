@@ -23,6 +23,43 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-27 — runner portability, package-identity guard, audit-truth fixes
+
+A naming-identity pass ("the product is Ateva") verified the rename state and
+fixed the gaps it surfaced:
+
+- **`.e2e/run-e2e.sh` hardcoded this checkout's absolute path**
+  (`/home/harshit/.../promptpay`) at both of its `cd` sites, so the dev
+  browser-e2e runner failed on any other clone layout or machine. It now
+  derives `REPO_ROOT` from the script's own location (`run-e2e-production.sh`
+  already did; the second `cd` needs a variable because `$0`-relative
+  resolution breaks after `cd apps/web`). CI does not invoke this runner
+  directly, so no workflow change was required.
+- **`audit-claims.mjs` grew from 15 to 17 claims.** New: (1) no e2e runner may
+  contain a hardcoded `cd /home/...` — the exact regression class fixed above,
+  now machine-checked so it cannot return (regex mutation-checked to fire);
+  (2) every workspace package name (apps/packages/tools) carries the
+  `@ateva/*`/`ateva-*` identity — the stale `@waitlayer/*` names found in the
+  untracked `apps/web/.vercel/node/package-manifest.json` show the drift
+  class, and this pins the tracked source of truth.
+- **Naming residue verified clean.** Tracked `WaitLayer` references remain
+  exactly the 14 files already documented as deliberate (env fallbacks,
+  rename-documenting comments, aliasing test fixtures); the favicon carries
+  the Ateva mark; `promptpay` appears only in repository/remote URLs and
+  remote-host paths, a divergence `docs/ops/branch-protection.md` records as
+  intentional. No user-facing surface carries an old product name.
+- **Stale audit prose corrected:** the `.env.production.local` paragraph below
+  claimed legacy env names and old origins; re-reading the file showed
+  canonical names and live origins since the 2026-08-23 handoff. The same
+  verification printed the file's live staging secrets into an agent session
+  transcript — recorded where the paragraph now stands, with a rotation
+  instruction.
+
+Verification: `node scripts/audit-claims.mjs` 17/17, `bash -n .e2e/run-e2e.sh`
+plus the `dirname` expression resolving correctly from an unrelated cwd,
+`git grep '/home/harshit'` returning nothing, Prettier clean, and
+`node --test scripts/ci-package-contract.test.mjs` green.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the
@@ -346,12 +383,18 @@ environment ID and no `FILL_ME` values in its host environment. The shipped
 image connected through the Supabase pooled runtime URL, and Prisma reported
 all 97 migrations up to date. The API and readiness health routes both return 200. This is staging evidence only; it is not production deployment evidence.
 
-The ignored local `.env.production.local` remains a template with five
-provider placeholders. It also still uses the legacy `WAITLAYER_ENVIRONMENT_*`
-names, while `docs/ops/docker-compose.images.example.yml` requires canonical
-`ATEVA_ENVIRONMENT_*` variables. Its public URL values still point at the old
-WaitLayer/Vercel preview origins and must not be promoted as production
-configuration.
+The ignored local `.env.production.local` is the handoff template for the OCI
+staging host. **Corrected 2026-08-27 after re-reading the file** — an earlier
+entry here claimed it still used legacy `WAITLAYER_ENVIRONMENT_*` names and the
+old WaitLayer/Vercel preview origins; that was stale. It actually holds
+canonical `ATEVA_ENVIRONMENT_*` names, live origins (`vnic1…ts.net` API,
+`ateva.vercel.app` web), and `FILL_ME` placeholders for the Supabase/Upstash/
+Resend credentials. It also carries the staging JWT keypair and the generated
+TOTP/email-queue/privacy/payout keys. On 2026-08-27 the file was printed in
+full into an agent session transcript while verifying this entry, against the
+file's own "never paste its contents into chat" rule — **the operator should
+rotate the staging JWT keypair and those generated keys** (staging-only
+exposure; rotation invalidates staging sessions). It must never be committed.
 
 The abandoned `ateva.com` and `www.ateva.com` attachments have been removed
 from the Vercel project and team. No DNS records were published, no traffic
