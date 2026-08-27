@@ -56,6 +56,11 @@ authenticated Google-link endpoint. This is ready in the Vercel preview, not
 yet production; all PR checks pass, but the repository's independent-approval
 rule still gates the merge.
 
+On 2026-08-27, the tracked development Compose file also stopped carrying a
+hardcoded Google client-ID default. Real GIS testing now requires an explicit
+`GOOGLE_CLIENT_ID`; the local mock path remains available without one, so a
+local default cannot masquerade as the API's live OAuth authority.
+
 ## Resolved 2026-08-27 — Sentry monitoring is provisioned for live staging and web
 
 The Ateva Sentry organization and `javascript-nextjs` project were created via

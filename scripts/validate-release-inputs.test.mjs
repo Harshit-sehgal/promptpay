@@ -156,6 +156,12 @@ test('release workflow does not require a separate web Google client ID', () => 
   assert.doesNotMatch(releaseWorkflow, /STAGING_GOOGLE_CLIENT_ID|PRODUCTION_GOOGLE_CLIENT_ID/);
 });
 
+test('development Compose does not carry a hardcoded Google client ID', () => {
+  assert.match(developmentCompose, /GOOGLE_CLIENT_ID: \$\{GOOGLE_CLIENT_ID:-\}/);
+  assert.doesNotMatch(developmentCompose, /GOOGLE_CLIENT_ID: \$\{GOOGLE_CLIENT_ID:-[^}]+\}/);
+  assert.doesNotMatch(developmentCompose, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
+});
+
 test('release workflow configures Buildx and signs every pushed image digest', () => {
   const stagingJob = releaseWorkflow.slice(
     releaseWorkflow.indexOf('  staging-smoke:'),

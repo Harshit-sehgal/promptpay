@@ -107,7 +107,10 @@ services:
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
       API_PORT: '4002'
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
+      # Optional for local development: the mock verifier does not need a real
+      # Google client, and a real client must be supplied explicitly when
+      # testing GIS so this file cannot silently drift from the API authority.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       # docker-compose is a developer convenience — run with dev NODE_ENV so the
       # google-token verifier's mock path remains available. Production deploys
