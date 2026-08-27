@@ -426,8 +426,11 @@ proxy-hop setting were populated from the matching
 local/staging configuration without printing their values. The temporary
 Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
 existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
-not the custom-domain setting being cleaned up; it must be reviewed separately
-before a future production launch.
+not the custom-domain setting being cleaned up. **Verified 2026-08-28:** the
+live Vercel artifact embeds the current Funnel API base
+(`https://vnic1.tail76eb88.ts.net/api/v1`), and the web/API health probes return 200. This closes the current staging/private-beta URL review; an owned domain
+and stable API front door are still required before a general-availability
+launch.
 
 GitHub now has a lowercase `staging` environment plus approval protection on
 both `staging` and `Production`. The registry identifiers and package-only
@@ -2850,7 +2853,9 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    general-availability production launch, acquire an owned domain and put
    the API behind a stable HTTPS front door; then update the web build inputs
    and client-release contract together. The existing `NEXT_PUBLIC_API_URL`
-   build setting still needs review as part of that launch work.
+   build setting is verified for the current staging/private-beta Funnel origin;
+   it must be replaced with the owned API front door as part of that launch
+   work.
    ~~Shipped-client defaults still reference `api.ateva.com`~~
    **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
    their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
