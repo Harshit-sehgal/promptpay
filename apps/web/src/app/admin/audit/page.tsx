@@ -106,7 +106,12 @@ export default function AdminAuditPage() {
             recorded.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Audit log table, scrolls horizontally"
+          >
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-ink-700/50 border-b border-ink-600/30">
                 <tr>

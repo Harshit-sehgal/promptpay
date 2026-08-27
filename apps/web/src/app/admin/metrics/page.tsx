@@ -505,7 +505,12 @@ export default function AdminMetricsPage() {
             <summary className="px-6 py-4 text-white text-sm font-semibold cursor-pointer hover:bg-ink-700/30 transition-colors">
               Daily breakdown table
             </summary>
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Metrics table, scrolls horizontally"
+            >
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-ink-700/30 text-ink-300 font-medium uppercase tracking-wider">

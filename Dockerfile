@@ -221,7 +221,13 @@ RUN chmod +x /app/docker-entrypoint.sh
 # COPY below. Measured by the image-size report added alongside A-112, which is
 # how this was found at all.
 FROM node:22-alpine AS api
-RUN apk add --no-cache wget
+# Patch OS packages before installing anything else. The pinned base tag
+# lags Alpine's security stream, so a newly published CVE fails the trivy
+# gate on a build whose own code has not changed — CVE-2026-14456 (OpenSSL
+# denial of service, HIGH) landed exactly that way, with libcrypto3/libssl3
+# at 3.5.7-r0 against a 3.5.8-r0 fix. Upgrading here keeps the runtime
+# images current without chasing base-image tags.
+RUN apk upgrade --no-cache && apk add --no-cache wget
 # `base` set this and every previously-shipped image inherited it, so dropping
 # it when the runtime stages were rebased was an uncontrolled behaviour change,
 # not a cleanup. Libraries commonly branch on CI — some prompt or block when it
@@ -300,7 +306,13 @@ RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 # See the api stage: NOT `FROM base`, which would bake in a 1.73 GB dev install
 # the runtime never uses.
 FROM node:22-alpine AS web
-RUN apk add --no-cache wget
+# Patch OS packages before installing anything else. The pinned base tag
+# lags Alpine's security stream, so a newly published CVE fails the trivy
+# gate on a build whose own code has not changed — CVE-2026-14456 (OpenSSL
+# denial of service, HIGH) landed exactly that way, with libcrypto3/libssl3
+# at 3.5.7-r0 against a 3.5.8-r0 fix. Upgrading here keeps the runtime
+# images current without chasing base-image tags.
+RUN apk upgrade --no-cache && apk add --no-cache wget
 # `base` set this and every previously-shipped image inherited it, so dropping
 # it when the runtime stages were rebased was an uncontrolled behaviour change,
 # not a cleanup. Libraries commonly branch on CI — some prompt or block when it

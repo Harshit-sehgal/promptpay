@@ -152,7 +152,12 @@ export default function AdminFencedPayoutAccountsPage() {
         !loading && (
           <>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Fenced payout accounts table, scrolls horizontally"
+              >
                 <table className="w-full text-sm">
                   <thead className="bg-ink-700/50 border-b border-ink-600/30">
                     <tr>

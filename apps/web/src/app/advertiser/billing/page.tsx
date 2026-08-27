@@ -349,7 +349,12 @@ export default function AdvertiserBillingPage() {
                 No transactions yet. Add funds to start running campaigns.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Billing history table, scrolls horizontally"
+              >
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-ink-700/50 border-b border-ink-600/30">
                     <tr>
