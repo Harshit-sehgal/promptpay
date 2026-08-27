@@ -114,7 +114,9 @@ current safety boundary permissive.
 
 Verification: `scripts/validate-release-inputs.test.mjs` and
 `scripts/deploy-doctor.test.mjs` pass 30/30 together, Prettier and lint pass,
-and the full CI matrix is required before this entry is treated as shipped.
+and CI run [33108998719](https://github.com/Harshit-sehgal/promptpay/actions/runs/33108998719)
+passed all 14 jobs, including Docker-build, full tests, security, and both E2E
+suites.
 
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
