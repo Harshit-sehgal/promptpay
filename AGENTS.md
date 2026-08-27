@@ -467,10 +467,11 @@ Vercel's empty Preview build-time `JWT_PUBLIC_KEY` and the shared BFF
 proxy-hop setting were populated from the matching
 local/staging configuration without printing their values. The temporary
 Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
-existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
-not the custom-domain setting being cleaned up. **Verified 2026-08-28:** the
-live Vercel artifact embeds the current Funnel API base
-(`https://vnic1.tail76eb88.ts.net/api/v1`), and the web/API health probes return 200. This closes the current staging/private-beta URL review; an owned domain
+Production `NEXT_PUBLIC_API_URL` was corrected on 2026-08-28 from the stale
+loopback build input to the current Funnel API base
+(`https://vnic1.tail76eb88.ts.net/api/v1`) and the production alias was rebuilt.
+The live artifact embeds that base, and the web/API health probes return 200.
+This closes the current staging/private-beta URL review; an owned domain
 and stable API front door are still required before a general-availability
 launch.
 
@@ -478,8 +479,12 @@ GitHub now has a lowercase `staging` environment plus approval protection on
 both `staging` and `Production`. The registry identifiers and package-only
 GHCR credential are present in both environments. The abandoned Resend
 `ateva.com` domain and production API key were deleted, and
-`PRODUCTION_RESEND_API_KEY` was removed from GitHub. No image has been pushed
-and no production promotion has been dispatched or approved.
+`PRODUCTION_RESEND_API_KEY` was removed from GitHub. On 2026-08-28, both
+release environments were verified with `Harshit-sehgal` as the required
+reviewer and self-review allowed, matching the single-collaborator repository;
+the staging URL inputs were also added. The remaining deployment secrets are
+still intentionally absent, so no image has been pushed and no production
+promotion has been dispatched or approved.
 
 ## Resolved 2026-08-23 (second pass) — the stranger's domain out of runtime paths
 
