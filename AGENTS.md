@@ -2930,8 +2930,8 @@ Verification: the focused integration spec and the API typecheck/lint gates.
 5. ~~**Branch protection / review policy:** toggles in GitHub repo settings
    (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
    **RESOLVED 2026-08-26:** `main` protection is enabled and API-verified with
-   required CI, one independent approval, stale-review dismissal, last-push
-   reapproval, admin enforcement, no force pushes, and no branch deletion.
+   required CI, one independent approval, stale-review dismissal, admin
+   enforcement, no force pushes, and no branch deletion.
    The code-owner-only requirement is intentionally disabled while the
    repository has one collaborator; re-enable it when a second qualified
    reviewer exists.
