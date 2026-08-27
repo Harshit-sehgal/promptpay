@@ -7,6 +7,7 @@ import { AuthShell } from '@/components/auth-shell';
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
+import { authApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 import { resolvePostLoginPath } from '@/lib/auth-routing';
 import { isValidTwoFactorInput, normalizeTwoFactorInput } from '@/lib/two-factor-input';
@@ -94,6 +95,9 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState('');
+  // Held from a refused Google sign-in so the password submit below can
+  // complete the link in the same flow instead of sending the visitor away.
+  const [pendingGoogleCredential, setPendingGoogleCredential] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [twoFactorInput, setTwoFactorInput] = useState('');
   const [error, setError] = useState('');
@@ -192,8 +196,9 @@ export default function LoginPage() {
                 // prefill the address Google gave us and say what to do next.
                 const googleEmail = emailFromIdToken(response.credential);
                 if (googleEmail) setEmail(googleEmail);
+                setPendingGoogleCredential(response.credential);
                 setError(
-                  'You already have a password account for this email. Sign in below, then link Google from Settings so next time one tap is enough.',
+                  'You already have a password account for this email. Enter your password below to link Google — after this, one tap signs you in.',
                 );
               } else {
                 setError(errorMsg.error);
@@ -242,6 +247,20 @@ export default function LoginPage() {
         return;
       }
       const user = await login(email, password, twoFactorInput);
+      if (pendingGoogleCredential) {
+        // Both accounts are now proven: the password account by this sign-in,
+        // and the Google identity by the token the API re-verifies. This is the
+        // "suggested linking" shape — never a silent match on email, which
+        // OpenID Connect does not guarantee to be stable or unreassigned.
+        try {
+          await authApi.linkGoogle(pendingGoogleCredential, password);
+        } catch (linkErr: unknown) {
+          // The sign-in itself succeeded, so send them onward rather than
+          // stranding them; the link can still be made from Settings.
+          console.warn('Google link after sign-in failed', linkErr);
+        }
+        setPendingGoogleCredential(null);
+      }
       router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
