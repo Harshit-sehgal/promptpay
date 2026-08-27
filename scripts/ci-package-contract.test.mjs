@@ -159,6 +159,26 @@ test('release gates build every fixture they execute, before running scenario te
   );
 });
 
+test('Prisma generation completes before the database package typechecks', () => {
+  const turbo = JSON.parse(read('turbo.json'));
+  const dependencies = turbo.tasks?.['@ateva/db#typecheck']?.dependsOn ?? [];
+  assert.ok(
+    dependencies.includes('build'),
+    'database typecheck must wait for its own build, which generates Prisma declarations',
+  );
+  assert.ok(
+    dependencies.includes('^build'),
+    'database typecheck must retain the workspace dependency-build ordering',
+  );
+
+  const db = JSON.parse(read('packages/db/package.json'));
+  assert.match(
+    db.scripts.build,
+    /^prisma generate &&/,
+    'the database build must remain the generation barrier for its typecheck',
+  );
+});
+
 test('production Compose documentation does not hardcode a migration count', () => {
   const compose = read('docker-compose.yml');
   assert.doesNotMatch(

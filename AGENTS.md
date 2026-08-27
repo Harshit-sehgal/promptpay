@@ -60,6 +60,24 @@ plus the `dirname` expression resolving correctly from an unrelated cwd,
 `git grep '/home/harshit'` returning nothing, Prettier clean, and
 `node --test scripts/ci-package-contract.test.mjs` green.
 
+## Resolved 2026-08-27 — Prisma generation cannot race database typecheck
+
+The isolated CI typecheck job exposed a fresh-checkout race that local caches
+had hidden: Turbo's generic `typecheck` task waited for workspace dependency
+builds (`^build`) but not `@ateva/db`'s own `build`. That build runs
+`prisma generate`, so the database typecheck could read the generated
+declarations while they were being replaced and report that `PrismaClient` and
+the schema enums did not exist.
+
+`turbo.json` now makes `@ateva/db#typecheck` wait for both its own `build` and
+the existing dependency builds. A package-contract test protects that ordering
+and the `prisma generate` build barrier from being removed accidentally.
+
+Verification: a forced uncached `TURBO_FORCE=true pnpm run typecheck` completed
+18/18 locally; the original CI run's annotations showed the generated-client
+failure, while lint, build, package clients, security, and the other completed
+jobs remained green. The replacement CI run must remain the final remote gate.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the
