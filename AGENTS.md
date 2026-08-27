@@ -48,6 +48,14 @@ account chooser with the same client, passed device verification, and returned
 to `/developer`. The developer settings page then showed the verified email and
 `Google is linked to this account`.
 
+The current `fix/google-existing-account-guidance` branch carries the follow-up
+in PR #94: when Google reports the existing-password-account conflict, the
+login page retains the GIS credential in memory, prefills the returned email,
+and requires the password sign-in before calling the API's existing
+authenticated Google-link endpoint. This is ready in the Vercel preview, not
+yet production; all PR checks pass, but the repository's independent-approval
+rule still gates the merge.
+
 ## Resolved 2026-08-27 — Sentry monitoring is provisioned for live staging and web
 
 The Ateva Sentry organization and `javascript-nextjs` project were created via
