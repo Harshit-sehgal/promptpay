@@ -5,9 +5,14 @@ what to watch and how to alert.
 
 ## Error monitoring (Sentry)
 
-- Configured via `SENTRY_DSN` (no-op when unset). Both `api` (NestJS) and `web`
-  (Next.js) use the Sentry SDKs; source maps are uploaded in CI when
-  `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` secrets are present.
+- The API and web server use `SENTRY_DSN`; the consent-gated browser client uses
+  the build-time `NEXT_PUBLIC_SENTRY_DSN`. All are no-ops when unset. Set the
+  matching `SENTRY_ENVIRONMENT` and `NEXT_PUBLIC_SENTRY_ENVIRONMENT` labels for
+  each deployment. Next.js source maps are uploaded when the build receives
+  `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; the token is supplied
+  through a BuildKit secret in image builds and must never be injected into the
+  runtime image. Runtime DSN ingestion and source-map upload are separate
+  checks.
 - Uncaught exceptions and unhandled rejections are captured automatically.
 - Use `SENTRY_ENVIRONMENT` to separate `production` / `staging` events.
 - **Do not** log secrets, tokens, or PII — Sentry captures stack/local vars.

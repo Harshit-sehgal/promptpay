@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # ── Base Stage: pnpm + dependencies ──
 FROM node:22-alpine AS base
 # A-075 resilience: install pnpm via npm instead of `corepack prepare` so the
@@ -76,6 +78,14 @@ ARG NEXT_PUBLIC_SENTRY_DSN=
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=
 ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
+# Sentry organization/project identify the build's source-map destination.
+# The auth token is deliberately NOT an ARG or ENV: the web build receives it
+# through the BuildKit secret mount below, so it cannot persist in an image
+# layer or the runtime environment.
+ARG SENTRY_ORG=
+ENV SENTRY_ORG=$SENTRY_ORG
+ARG SENTRY_PROJECT=
+ENV SENTRY_PROJECT=$SENTRY_PROJECT
 # Build as production so Next.js inlines NODE_ENV='production' into the Edge
 # middleware (its production fail-fast paths depend on it) and the web
 # prerender does not crash in dev mode (A-001).
@@ -95,7 +105,11 @@ ENV NODE_ENV=production
 ARG BUILD_SCOPE=all
 ARG NODE_OPTIONS=
 ENV NODE_OPTIONS=$NODE_OPTIONS
-RUN if [ "$BUILD_SCOPE" = "api" ]; then \
+RUN --mount=type=secret,id=sentry_auth_token \
+    if [ -s /run/secrets/sentry_auth_token ]; then \
+      export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
+    fi; \
+    if [ "$BUILD_SCOPE" = "api" ]; then \
       pnpm --filter ateva-api... run build; \
     else \
       pnpm run build; \

@@ -297,7 +297,9 @@ treated as an acceptable hour-long operating mode.
 - [ ] Database migrations run on production database
 - [ ] Docker images built and pushed
 - [ ] SSL certificates valid
-- [ ] Sentry DSN configured and test error captured
+- [ ] Sentry runtime DSN configured and a test error captured; current
+      private-beta evidence includes source maps in the Vercel production
+      release, and every new release must repeat both checks.
 - [ ] Dodo webhook endpoint configured in the Dodo dashboard (money-in is Dodo at launch — decision D1; Stripe is inactive)
 - [ ] Health checks passing
 - [ ] Rollback procedure tested

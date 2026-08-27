@@ -1,5 +1,11 @@
 name: ateva
 
+secrets:
+  # Optional build-only secret. Production CI supplies this through the
+  # runner environment; local builds remain no-ops when it is absent.
+  sentry_auth_token:
+    environment: SENTRY_AUTH_TOKEN
+
 # Docker Compose reference for Ateva.
 #
 # Profiles:
@@ -185,6 +191,10 @@ services:
         NEXT_PUBLIC_ALLOW_MOCK_AUTH: ${NEXT_PUBLIC_ALLOW_MOCK_AUTH:-"true"}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-}
+        SENTRY_ORG: ${SENTRY_ORG:-}
+        SENTRY_PROJECT: ${SENTRY_PROJECT:-}
+      secrets:
+        - sentry_auth_token
     ports:
       - '3000:3000'
     environment:
