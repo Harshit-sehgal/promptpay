@@ -113,10 +113,12 @@ be added through an explicit source change rather than silently making the
 current safety boundary permissive.
 
 Verification: `scripts/validate-release-inputs.test.mjs` and
-`scripts/deploy-doctor.test.mjs` pass 30/30 together, Prettier and lint pass,
-and CI run [33108998719](https://github.com/Harshit-sehgal/promptpay/actions/runs/33108998719)
-passed all 14 jobs, including Docker-build, full tests, security, and both E2E
-suites.
+`scripts/deploy-doctor.test.mjs` cover both ordinary and fully qualified
+trailing-dot forms of the rejected domains. Prettier and lint pass, and the
+replacement CI run
+[33112459599](https://github.com/Harshit-sehgal/promptpay/actions/runs/33112459599)
+passed all 13 repository jobs, including Docker-build, full tests, security,
+and both E2E suites.
 
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
@@ -2925,11 +2927,14 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    `provenance`/`sbom` keys outright, so attestations moved to explicit buildx
    flags in the release workflow and the release gate asserts cosign instead.
    `DOCKER_ATTEST` survives only in comments explaining its removal.
-5. ~~**Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
-   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
-   **RESOLVED 2026-08-18:** `main` protection is enabled and API-verified with
-   required CI, CODEOWNERS review, stale-review dismissal, last-push
+5. ~~**Branch protection / review policy:** toggles in GitHub repo settings
+   (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
+   **RESOLVED 2026-08-26:** `main` protection is enabled and API-verified with
+   required CI, one independent approval, stale-review dismissal, last-push
    reapproval, admin enforcement, no force pushes, and no branch deletion.
+   The code-owner-only requirement is intentionally disabled while the
+   repository has one collaborator; re-enable it when a second qualified
+   reviewer exists.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
 7. ~~**Google OAuth browser integration** for live Google sign-in (decision D6:
