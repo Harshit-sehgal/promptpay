@@ -33,7 +33,7 @@ export default function AdvertisersPage() {
         />
         <div className="relative mx-auto grid max-w-[1240px] gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-start lg:gap-20">
           <div className="lg:pt-6">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-600">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
               Advertiser access · private beta
             </p>
             <h1 className="mt-5 max-w-2xl text-balance font-serif text-[clamp(3.25rem,6.5vw,5.25rem)] font-normal leading-[0.98] tracking-[-0.04em] text-surface-950">
@@ -53,7 +53,7 @@ export default function AdvertisersPage() {
                   className="grid gap-2 border-b border-surface-200/80 py-5 last:border-b-0 sm:grid-cols-[32px_150px_1fr] sm:items-start sm:gap-4"
                 >
                   <dt className="contents">
-                    <span className="font-mono text-[10px] text-brand-600">
+                    <span className="font-mono text-[11px] text-brand-600">
                       {String(index + 1).padStart(2, '0')}
                     </span>
                     <span className="text-sm font-semibold text-surface-900">{note.title}</span>
@@ -83,7 +83,7 @@ export default function AdvertisersPage() {
             />
             <section className="relative rounded-[30px] border border-surface-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(23,25,28,0.04),0_24px_70px_-32px_rgba(23,25,28,0.28)] sm:p-9">
               <div className="mb-7 border-b border-surface-200/80 pb-6">
-                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-surface-400">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
                   Founding sponsor register
                 </p>
                 <h2 className="mt-3 font-serif text-3xl font-normal tracking-[-0.025em] text-surface-950 sm:text-4xl">
@@ -95,7 +95,7 @@ export default function AdvertisersPage() {
                 </p>
               </div>
               <WaitlistSignup />
-              <p className="mt-6 border-t border-surface-200/80 pt-5 font-mono text-[9px] uppercase tracking-[0.11em] text-surface-400">
+              <p className="mt-6 border-t border-surface-200/80 pt-5 font-mono text-[11px] uppercase tracking-[0.11em] text-surface-400">
                 No charge · no campaign activation · consent required
               </p>
             </section>

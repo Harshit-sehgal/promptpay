@@ -82,7 +82,7 @@ export default function StatusPage() {
             <p className="text-rose-700 text-sm mb-4">{error}</p>
             <button
               onClick={fetchHealth}
-              className="text-rose-700 hover:text-rose-800 text-xs font-semibold underline"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-rose-300 px-5 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100 hover:text-rose-800"
             >
               Retry connection
             </button>

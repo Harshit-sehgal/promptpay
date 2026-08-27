@@ -43,7 +43,7 @@ function VerificationTrace() {
       <div className="relative overflow-hidden rounded-[28px] border border-surface-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(23,25,28,0.04),0_24px_70px_-32px_rgba(23,25,28,0.28)] sm:p-7">
         <div className="flex items-center justify-between gap-4 border-b border-surface-200/80 pb-5">
           <div>
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-surface-400">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-surface-400">
               Verification trace
             </p>
             <p className="mt-1.5 text-sm font-medium text-surface-900">Illustrative agent wait</p>
@@ -65,13 +65,13 @@ function VerificationTrace() {
               <p className="text-[13px] font-medium text-surface-900">Eligible wait detected</p>
               <p className="mt-1 text-xs leading-5 text-surface-500">Agent is running tests.</p>
             </div>
-            <time className="font-mono text-[10px] text-surface-400">00:00.0</time>
+            <time className="font-mono text-[11px] text-surface-400">00:00.0</time>
           </div>
 
           <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
             <span className="relative z-10 mt-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-brand-500 ring-1 ring-brand-300" />
             <div className="rounded-2xl bg-brand-200 p-4 text-brand-900">
-              <p className="font-mono text-[9px] font-medium uppercase tracking-[0.14em] text-brand-700">
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-brand-700">
                 Sponsored · example
               </p>
               <p className="mt-2 text-[14px] font-medium leading-5">
@@ -81,7 +81,7 @@ function VerificationTrace() {
                 Clearly labelled inside the eligible waiting surface.
               </p>
             </div>
-            <time className="font-mono text-[10px] text-surface-400">00:05.2</time>
+            <time className="font-mono text-[11px] text-surface-400">00:05.2</time>
           </div>
 
           <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
@@ -92,7 +92,7 @@ function VerificationTrace() {
                 Duration, session, and duplicate controls passed.
               </p>
             </div>
-            <time className="font-mono text-[10px] text-surface-400">00:10.8</time>
+            <time className="font-mono text-[11px] text-surface-400">00:10.8</time>
           </div>
 
           <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
@@ -105,11 +105,11 @@ function VerificationTrace() {
                 Reporting only; reward settlement remains disabled.
               </p>
             </div>
-            <time className="font-mono text-[10px] text-surface-400">00:11.0</time>
+            <time className="font-mono text-[11px] text-surface-400">00:11.0</time>
           </div>
         </div>
 
-        <figcaption className="mt-6 flex flex-wrap gap-x-4 gap-y-1 border-t border-surface-200/80 pt-4 font-mono text-[9px] uppercase tracking-[0.12em] text-surface-400">
+        <figcaption className="mt-6 flex flex-wrap gap-x-4 gap-y-1 border-t border-surface-200/80 pt-4 font-mono text-[11px] uppercase tracking-[0.12em] text-surface-400">
           <span>No source code</span>
           <span>No prompts</span>
           <span>No terminal output</span>
@@ -142,7 +142,7 @@ export default function HomePage() {
           <div className="relative mx-auto grid max-w-[1240px] gap-16 lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,.92fr)] lg:items-center xl:gap-20">
             <div>
               <div className="mb-7 flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-2 rounded-full border border-brand-300/80 bg-brand-100 px-3.5 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.13em] text-brand-800">
+                <span className="inline-flex items-center gap-2 rounded-full border border-brand-300/80 bg-brand-100 px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.13em] text-brand-800">
                   <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
                   Private beta · rewards disabled
                 </span>
@@ -179,7 +179,7 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="mt-10 grid max-w-[690px] gap-y-3 border-t border-surface-200/80 pt-5 font-mono text-[10px] uppercase tracking-[0.09em] text-surface-500 sm:grid-cols-3 sm:gap-x-5">
+              <div className="mt-10 grid max-w-[690px] gap-y-3 border-t border-surface-200/80 pt-5 font-mono text-[11px] uppercase tracking-[0.09em] text-surface-500 sm:grid-cols-3 sm:gap-x-5">
                 <span>Integrated apps only</span>
                 <span>Explicit consent</span>
                 <span>Separate payment rails</span>
@@ -196,7 +196,7 @@ export default function HomePage() {
         >
           <div className="mx-auto max-w-[1240px]">
             <div className="grid gap-8 lg:grid-cols-[.72fr_1.28fr] lg:gap-16">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-600">
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
                 Verification, not self-reporting
               </p>
               <div>
@@ -216,7 +216,7 @@ export default function HomePage() {
                   key={step.title}
                   className="border-b border-surface-300/70 py-6 last:border-b-0 md:border-b-0 md:px-6 md:first:pl-0 md:last:pr-0"
                 >
-                  <p className="font-mono text-[10px] text-brand-600">
+                  <p className="font-mono text-[11px] text-brand-600">
                     {String(index + 1).padStart(2, '0')} / 04
                   </p>
                   <h3 className="mt-5 text-sm font-semibold text-surface-900">{step.title}</h3>
@@ -234,7 +234,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-[1240px]">
             <div className="grid gap-10 lg:grid-cols-[.9fr_1.1fr] lg:items-start lg:gap-20">
               <div>
-                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-600">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
                   For developers
                 </p>
                 <h2 className="mt-4 max-w-xl text-balance font-serif text-[clamp(2.7rem,5vw,4.25rem)] font-normal leading-[1.02] tracking-[-0.03em] text-surface-950">
@@ -250,7 +250,7 @@ export default function HomePage() {
               <div className="rounded-[28px] border border-surface-200/80 bg-surface-50 p-6 sm:p-8">
                 <div className="flex items-end justify-between gap-5 border-b border-surface-200 pb-6">
                   <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-surface-500">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-surface-500">
                       Future qualifying split
                     </p>
                     <p className="mt-2 font-serif text-4xl tracking-[-0.03em] text-surface-950">
@@ -283,7 +283,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-[1240px] overflow-hidden rounded-[32px] bg-surface-950 px-6 py-10 text-white sm:px-10 sm:py-14 lg:px-14 lg:py-16">
             <div className="grid gap-12 lg:grid-cols-[1.02fr_.98fr] lg:items-end lg:gap-20">
               <div>
-                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-300">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-300">
                   For advertisers
                 </p>
                 <h2 className="mt-4 max-w-2xl text-balance font-serif text-[clamp(2.7rem,5vw,4.35rem)] font-normal leading-[1.02] tracking-[-0.03em]">
@@ -299,7 +299,7 @@ export default function HomePage() {
 
             <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-white/12 bg-white/12 md:grid-cols-2">
               <div className="bg-surface-950 p-6 sm:p-8">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
                   Customer payment
                 </p>
                 <p className="mt-5 text-lg font-medium text-white">
@@ -311,7 +311,7 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="bg-surface-950 p-6 sm:p-8">
-                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
                   Future participant payout
                 </p>
                 <p className="mt-5 text-lg font-medium text-white">
@@ -332,7 +332,7 @@ export default function HomePage() {
         >
           <div className="mx-auto grid max-w-[1240px] gap-12 lg:grid-cols-[.88fr_1.12fr] lg:gap-20">
             <div>
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-600">
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
                 Trust boundary
               </p>
               <h2 className="mt-4 max-w-lg text-balance font-serif text-[clamp(2.8rem,5vw,4.4rem)] font-normal leading-[1] tracking-[-0.03em] text-surface-950">
@@ -346,7 +346,7 @@ export default function HomePage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-[26px] border border-surface-200/80 bg-white p-6 sm:p-7">
-                <span className="inline-flex rounded-full border border-surface-200 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.13em] text-surface-500">
+                <span className="inline-flex rounded-full border border-surface-200 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.13em] text-surface-500">
                   Never required
                 </span>
                 <p className="mt-6 text-sm font-semibold text-surface-950">The work itself</p>
@@ -356,7 +356,7 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="rounded-[26px] border border-brand-300/80 bg-white p-6 sm:p-7">
-                <span className="inline-flex rounded-full bg-brand-100 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.13em] text-brand-700">
+                <span className="inline-flex rounded-full bg-brand-100 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.13em] text-brand-700">
                   Narrow evidence
                 </span>
                 <p className="mt-6 text-sm font-semibold text-surface-950">The delivery trace</p>
@@ -387,7 +387,7 @@ export default function HomePage() {
         <section className="px-5 py-20 sm:px-6 lg:px-8 lg:py-24">
           <div className="mx-auto flex max-w-[1240px] flex-col justify-between gap-8 border-b border-surface-200 pb-16 md:flex-row md:items-end">
             <div>
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-600">
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
                 Private beta
               </p>
               <h2 className="mt-4 max-w-3xl text-balance font-serif text-[clamp(2.7rem,5vw,4.2rem)] font-normal leading-[1.02] tracking-[-0.03em] text-surface-950">

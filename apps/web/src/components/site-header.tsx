@@ -72,7 +72,7 @@ export function SiteHeader({
           )}
           <Link
             href={primaryHref}
-            className="inline-flex h-10 items-center rounded-full bg-surface-950 px-5 text-[13px] font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-surface-800 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex h-11 sm:h-10 items-center rounded-full bg-surface-950 px-5 text-[13px] font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-surface-800 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {primaryLabel}
           </Link>
