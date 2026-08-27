@@ -432,8 +432,11 @@ jobs:
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.PRODUCTION_SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_ENVIRONMENT: production
+          SENTRY_AUTH_TOKEN: ${{ secrets.PRODUCTION_SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ateva
+          SENTRY_PROJECT: javascript-nextjs
         run: |
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS ATEVA_WEB_IMAGE JWT_PUBLIC_KEY NEXT_PUBLIC_API_URL NEXT_PUBLIC_WEB_URL; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS ATEVA_WEB_IMAGE JWT_PUBLIC_KEY NEXT_PUBLIC_API_URL NEXT_PUBLIC_WEB_URL NEXT_PUBLIC_SENTRY_DSN SENTRY_AUTH_TOKEN; do
             if [ -z "${!required}" ]; then
               echo "$required is required to build the production web artifact" >&2
               exit 1

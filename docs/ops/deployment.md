@@ -54,7 +54,9 @@ Or rely on CI/registry builds. The API image:
   set plus matching `JWT_ISSUER` / `JWT_AUDIENCE` because Edge middleware is
   compiled at build time. The web runtime receives `JWT_SECRET` for server-side
   BFF identity signing; never bake that symmetric secret into an image.
-- Sentry optional via `SENTRY_DSN`.
+- Sentry runtime reporting uses `SENTRY_DSN` and `SENTRY_ENVIRONMENT` (optional
+  for local development, expected for deployed environments). Browser builds
+  additionally receive `NEXT_PUBLIC_SENTRY_DSN` and its environment label.
 
 ## Docker Compose (single host)
 
@@ -92,10 +94,17 @@ HTTPS origin. Configure these Vercel build/runtime variables:
 - `JWT_PUBLIC_KEY` and optional `JWT_PUBLIC_KEYS` matching the API key set
 - `JWT_ISSUER` and `JWT_AUDIENCE` when either differs from its default
 - `JWT_SECRET` matching the API BFF-identity secret
+- `SENTRY_DSN` and `SENTRY_ENVIRONMENT` for server-side reporting
+- `NEXT_PUBLIC_SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_ENVIRONMENT` for the
+  consent-gated browser client
+- `SENTRY_ORG`, `SENTRY_PROJECT`, and the build-only `SENTRY_AUTH_TOKEN` for
+  Next.js source-map upload. The Docker build passes the token through the
+  `sentry_auth_token` BuildKit secret; never put it in the image or runtime
+  Compose environment.
 
 The API Google client ID is the sole Google OAuth client-ID configuration; the
 web discovers it at runtime through the same-origin auth config route. Do not
-set a separate NEXT_PUBLIC_GOOGLE_CLIENT_ID build variable. The Vercel build
+set a separate `NEXT_PUBLIC_GOOGLE_CLIENT_ID` build variable. The Vercel build
 preflight rejects missing auth/API configuration. A successful web build is not
 a completed deployment until the auth config and login routes reach the API
 rather than returning 5xx.

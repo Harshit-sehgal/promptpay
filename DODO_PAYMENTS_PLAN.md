@@ -332,10 +332,10 @@ launch. Order matters — the cold-start sequence is documented in
    and every money switch.
 6. **Branch protection / CODEOWNERS** — resolved and API-verified on
    2026-08-18. The leaked GitHub credential still needs rotation (open item
-   #6). Google OAuth is approved for launch (D6); the API-side client ID and
-   runtime config path are verified, while the authorized browser origin and
-   successful callback still need verification. CI test-DB reset consent
-   remains a deliberate local test prerequisite, not a product-launch blocker.
+   #6). Google OAuth is approved for launch (D6); the API-side client ID,
+   runtime config path, authorized browser origin, and real callback are
+   verified. CI test-DB reset consent remains a deliberate local test
+   prerequisite, not a product-launch blocker.
 
 ---
 

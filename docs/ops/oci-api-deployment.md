@@ -16,6 +16,16 @@ setup, which failed for a reason no log made obvious.
 | Image        | `ateva-api:main`                                    |
 | Env          | `/home/ubuntu/promptpay/.env.production`, mode 600  |
 
+## Current operating decision (2026-08-27)
+
+Keep this Funnel endpoint for staging and the private beta. The service is
+healthy and the web BFF can reach it, so there is no reason to add ingress
+spend while the product remains in this posture. This is **not** a production
+front door: before general availability, move the API behind an owned-domain,
+stable HTTPS ingress and then update the web build inputs and client-release
+contract together. Do not label the current `staging-oci` environment as
+production merely because its Funnel URL is publicly reachable.
+
 There is **no public DNS record and no certificate to renew**. Tailscale
 Funnel terminates TLS and proxies to `127.0.0.1:4002`:
 

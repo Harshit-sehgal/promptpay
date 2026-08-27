@@ -23,13 +23,23 @@ a file. Apply these settings to `main` (and any release branches):
   - `backup-restore`
   - `verify-audit-claims`
   - `security`
-- **Approvals:** require ≥ 1 approval from a CODEOWNERS owner of the touched
-  paths. Enable **"Prevent approval by author"** and **"Require new approval
-  after new commits"** so stale approvals cannot merge stale code.
-- **CODEOWNERS:** enable "Require approval from code owners" so money-critical
-  and auth paths cannot merge without the right reviewer.
+- **Approvals:** require ≥ 1 independent approval. Enable **"Prevent approval
+  by author"** and **"Require new approval after new commits"** so stale
+  approvals cannot merge stale code.
+- **CODEOWNERS:** the repository currently has only one collaborator, who is
+  also the PR author. `require_code_owner_reviews` is therefore disabled;
+  re-enable it when a second qualified code-owner reviewer is added.
 - **Stale approval dismissal:** enable so an approve from before a force-push
   (or a significant rebase) is invalidated.
+
+### Current `main` verification (2026-08-26)
+
+The live GitHub branch-protection setting has been checked after the operator
+choice to drop the code-owner-only requirement: admins remain enforced, one
+independent approval is required, stale approvals are dismissed, and
+`require_code_owner_reviews` is false. This is a GitHub setting, not a
+repository file; verify it again after adding a collaborator or changing the
+review policy.
 
 ## Supply-chain hygiene
 

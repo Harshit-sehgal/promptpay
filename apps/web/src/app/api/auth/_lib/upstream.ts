@@ -96,7 +96,8 @@ async function attemptFetch(url: string, init: RequestInit): Promise<UpstreamRes
  * browser must not learn about our network topology. But that opacity also made
  * a real production incident undiagnosable: sign-in returned 502 while the API
  * was demonstrably healthy, and nothing anywhere recorded the underlying cause.
- * Sentry would not have helped either; SENTRY_DSN is unset in production.
+ * Sentry would not have helped either; SENTRY_DSN was unset in production at
+ * the time of that incident.
  *
  * Only the origin is logged, never the full URL — auth paths carry tokens in
  * the query string on some providers, and this line goes to a shared log.

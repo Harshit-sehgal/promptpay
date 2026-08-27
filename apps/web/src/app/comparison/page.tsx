@@ -237,7 +237,12 @@ export default function ComparisonPage() {
             <p className="text-surface-500 text-sm mb-8">
               Not all tools support every feature. Here's what's available for each integration.
             </p>
-            <div className="overflow-hidden rounded-3xl border border-surface-200/80">
+            <div
+              className="overflow-x-auto rounded-3xl border border-surface-200/80"
+              tabIndex={0}
+              role="region"
+              aria-label="Features by tool comparison table, scrolls horizontally"
+            >
               <table className="w-full text-sm">
                 <thead className="bg-surface-100">
                   <tr>
@@ -283,7 +288,12 @@ export default function ComparisonPage() {
               Ateva vs other ad platforms. We focus on privacy, developer trust, and AI-native
               integrations.
             </p>
-            <div className="overflow-hidden rounded-3xl border border-surface-200/80">
+            <div
+              className="overflow-x-auto rounded-3xl border border-surface-200/80"
+              tabIndex={0}
+              role="region"
+              aria-label="How we compare comparison table, scrolls horizontally"
+            >
               <table className="w-full text-sm">
                 <thead className="bg-surface-100">
                   <tr>

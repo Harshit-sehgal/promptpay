@@ -137,7 +137,12 @@ export default function DevEarningsPage() {
               No earnings yet. Install the Ateva VS Code extension to start tracking wait states.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Earnings ledger table, scrolls horizontally"
+            >
               <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-surface-50/50 border-b border-surface-200/80">
                   <tr>

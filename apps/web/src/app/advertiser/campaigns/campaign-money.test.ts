@@ -11,7 +11,9 @@ describe('campaign money input policy', () => {
       minimumBid: '1',
       minimumBudget: '50',
       maximumBudget: '1000000',
+      minimumBidLabel: '$1.00',
       minimumBudgetLabel: '$50.00',
+      maximumBudgetLabel: '$1,000,000.00',
     });
   });
 
@@ -27,6 +29,10 @@ describe('campaign money input policy', () => {
       maximumBudget: '150000000',
     });
     expect(policy.minimumBudgetLabel).toContain('7,500');
+    // Both new labels are shown in the campaign form, so they must format
+    // for a zero-decimal currency rather than inheriting the USD shape.
+    expect(policy.maximumBudgetLabel).toContain('150,000,000');
+    expect(policy.minimumBidLabel).toContain('100');
     expect(parseCampaignAmountMinor('5000', 'JPY')).toBe(5000n);
     expect(campaignMinimumBudgetMinor('JPY')).toBe(7500n);
   });

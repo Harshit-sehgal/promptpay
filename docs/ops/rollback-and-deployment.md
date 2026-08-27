@@ -63,8 +63,8 @@ the host secret manager; never commit that file.
 `JWT_PUBLIC_KEYS` is optional during rotation, but when present the same set
 must reach the API and web build. `JWT_ISSUER` / `JWT_AUDIENCE` default to
 `ateva` / `ateva-client`; custom values must also match on both tiers.
-Google Sign-In uses the API's GOOGLE_CLIENT_ID; the web fetches that value from
-the API's same-origin auth config route at runtime.
+Google Sign-In uses the API's `GOOGLE_CLIENT_ID`; the web fetches that value
+from the API's same-origin auth config route at runtime.
 The example fixes `PAYOUT_REQUIRE_2FA=true`, `WEBHOOK_RECLAIM_CRON=true`, and
 production email mode. Stripe, PayPal, Wise, and Sentry variables are required
 only when the corresponding integration is enabled.
@@ -297,7 +297,9 @@ treated as an acceptable hour-long operating mode.
 - [ ] Database migrations run on production database
 - [ ] Docker images built and pushed
 - [ ] SSL certificates valid
-- [ ] Sentry DSN configured and test error captured
+- [ ] Sentry runtime DSN configured and a test error captured; current
+      private-beta evidence includes source maps in the Vercel production
+      release, and every new release must repeat both checks.
 - [ ] Dodo webhook endpoint configured in the Dodo dashboard (money-in is Dodo at launch — decision D1; Stripe is inactive)
 - [ ] Health checks passing
 - [ ] Rollback procedure tested

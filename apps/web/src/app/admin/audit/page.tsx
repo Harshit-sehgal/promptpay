@@ -106,49 +106,56 @@ export default function AdminAuditPage() {
             recorded.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-ink-700/50 border-b border-ink-600/30">
-              <tr>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Actor</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Action</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">Target</th>
-                <th className="text-left px-4 py-3 text-ink-200 font-medium">IP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-600/20">
-              {visibleEntries.map((e) => (
-                <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
-                  <td className="px-4 py-3 text-ink-200 text-xs">
-                    {new Date(e.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    <span
-                      className={`px-2 py-0.5 rounded ${
-                        e.actorRole === 'admin'
-                          ? 'bg-red-500/20 text-red-400'
-                          : e.actorRole === 'system'
-                            ? 'bg-purple-500/20 text-purple-400'
-                            : 'bg-blue-500/20 text-blue-400'
-                      }`}
-                    >
-                      {e.actorRole}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-white font-mono text-xs">{e.action}</td>
-                  <td className="px-4 py-3 text-ink-300 text-xs">
-                    {e.targetType && (
-                      <span>
-                        {e.targetType} ·{' '}
-                        <span className="font-mono">{e.targetId?.slice(0, 8)}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-ink-500 text-xs font-mono">{e.ip || '—'}</td>
+          <div
+            className="overflow-x-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Audit log table, scrolls horizontally"
+          >
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                <tr>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Actor</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Action</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Target</th>
+                  <th className="text-left px-4 py-3 text-ink-200 font-medium">IP</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-ink-600/20">
+                {visibleEntries.map((e) => (
+                  <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
+                    <td className="px-4 py-3 text-ink-200 text-xs">
+                      {new Date(e.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      <span
+                        className={`px-2 py-0.5 rounded ${
+                          e.actorRole === 'admin'
+                            ? 'bg-red-500/20 text-red-400'
+                            : e.actorRole === 'system'
+                              ? 'bg-purple-500/20 text-purple-400'
+                              : 'bg-blue-500/20 text-blue-400'
+                        }`}
+                      >
+                        {e.actorRole}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-white font-mono text-xs">{e.action}</td>
+                    <td className="px-4 py-3 text-ink-300 text-xs">
+                      {e.targetType && (
+                        <span>
+                          {e.targetType} ·{' '}
+                          <span className="font-mono">{e.targetId?.slice(0, 8)}</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-ink-500 text-xs font-mono">{e.ip || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

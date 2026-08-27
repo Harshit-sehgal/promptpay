@@ -24,6 +24,8 @@ const prismaConfig = readFileSync(
   new URL('../packages/db/prisma.config.ts', import.meta.url),
   'utf8',
 );
+const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+const developmentCompose = readFileSync(new URL('../docker-compose.yml', import.meta.url), 'utf8');
 
 const independentIssuer = JSON.stringify([
   {
@@ -202,6 +204,21 @@ test('release workflow serializes deploys and builds a production-specific web d
   assert.doesNotMatch(releaseWorkflow, /docker tag "\$STAGING_WEB_DIGEST"/);
   assert.doesNotMatch(releaseWorkflow, /ATEVA_WEB_IMAGE='\$STAGING_WEB_DIGEST'/);
   assert.doesNotMatch(releaseWorkflow, /PRODUCTION_WEB_DIGEST="?\$STAGING_WEB_DIGEST/);
+});
+
+test('production web source maps use a build-only least-privilege secret', () => {
+  assert.match(
+    releaseWorkflow,
+    /SENTRY_AUTH_TOKEN: \$\{\{ secrets\.PRODUCTION_SENTRY_AUTH_TOKEN \}\}/,
+  );
+  assert.match(
+    releaseWorkflow,
+    /for required in [^\n]*NEXT_PUBLIC_SENTRY_DSN SENTRY_AUTH_TOKEN; do/,
+  );
+  assert.match(dockerfile, /RUN --mount=type=secret,id=sentry_auth_token/);
+  assert.doesNotMatch(dockerfile, /^(?:ARG|ENV)\s+SENTRY_AUTH_TOKEN/m);
+  assert.match(developmentCompose, /sentry_auth_token:\s*\n\s*environment: SENTRY_AUTH_TOKEN/);
+  assert.match(developmentCompose, /secrets:\s*\n\s*- sentry_auth_token/);
 });
 
 test('staging boots the shipped artifacts under production Node semantics', () => {

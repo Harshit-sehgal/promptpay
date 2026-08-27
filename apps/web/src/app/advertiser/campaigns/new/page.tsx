@@ -309,6 +309,7 @@ export default function NewCampaignPage() {
                   type="number"
                   step={moneyPolicy.minorUnitStep}
                   min={moneyPolicy.minimumBudget}
+                  max={moneyPolicy.maximumBudget}
                   value={budgetTotal}
                   onChange={(e) => setBudgetTotal(e.target.value)}
                   required
@@ -316,7 +317,7 @@ export default function NewCampaignPage() {
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
                 <p className="text-ink-500 text-xs mt-1">
-                  Minimum {moneyPolicy.minimumBudgetLabel}
+                  {moneyPolicy.minimumBudgetLabel} – {moneyPolicy.maximumBudgetLabel}
                 </p>
               </div>
               <div>

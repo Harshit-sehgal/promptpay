@@ -165,8 +165,16 @@ DATABASE_URL=<production-url> \
       `VERIFIED_WAIT_ATTESTATION_VERSIONS` reference an independently operated
       provider; `wait.earnings` remains disabled until its launch experiment is
       evidenced.
-- [ ] Sentry `SENTRY_DSN` + `SENTRY_ENVIRONMENT` configured; source maps upload
-      verified in CI.
+- [ ] Sentry runtime `SENTRY_DSN` + `SENTRY_ENVIRONMENT` configured and a
+      non-PII smoke event accepted. Current private-beta evidence was recorded
+      on 2026-08-27; repeat it for each target deployment.
+- [ ] Next.js source-map upload verified in the release build using the
+      build-only `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`.
+      Docker image builds must pass the token through the BuildKit secret
+      `sentry_auth_token`; it must not be an image `ARG`, `ENV`, or runtime
+      Compose variable. Current Vercel production evidence (2026-08-27) is
+      release `25e6248babde` with 527 uploaded artifacts; repeat this check for
+      every release.
 
 ## Deploy
 

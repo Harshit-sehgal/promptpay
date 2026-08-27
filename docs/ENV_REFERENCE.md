@@ -117,10 +117,15 @@ rail (decision D1); Stripe is inactive at launch (D2).** See
 
 ## Sentry (error monitoring)
 
-| Variable             | Req | Default | Purpose                     |
-| -------------------- | --- | ------- | --------------------------- |
-| `SENTRY_DSN`         | opt | —       | Sentry DSN. No-op if unset. |
-| `SENTRY_ENVIRONMENT` | opt | —       | Sentry environment label.   |
+| Variable                         | Req | Default | Purpose                                                                   |
+| -------------------------------- | --- | ------- | ------------------------------------------------------------------------- |
+| `SENTRY_DSN`                     | opt | —       | Server-side Sentry DSN. No-op if unset.                                   |
+| `SENTRY_ENVIRONMENT`             | opt | —       | Server-side Sentry environment label.                                     |
+| `NEXT_PUBLIC_SENTRY_DSN`         | opt | —       | Build-time browser Sentry DSN. No-op if unset.                            |
+| `NEXT_PUBLIC_SENTRY_ENVIRONMENT` | opt | —       | Build-time browser Sentry environment label; should match the deployment. |
+| `SENTRY_ORG`                     | opt | —       | Sentry organization slug for build-time source-map upload.                |
+| `SENTRY_PROJECT`                 | opt | —       | Sentry project slug for build-time source-map upload.                     |
+| `SENTRY_AUTH_TOKEN`              | opt | —       | Build-only Sentry token for source-map upload; never a runtime secret.    |
 
 ## Payout security
 

@@ -24,7 +24,9 @@ export function campaignMoneyInputPolicy(currency: string) {
     minimumBid: minorToMajorInputValue(minBid, currency),
     minimumBudget: minorToMajorInputValue(minBudget, currency),
     maximumBudget: minorToMajorInputValue(maxBudget, currency),
+    minimumBidLabel: formatMinorUnits(minBid, currency),
     minimumBudgetLabel: formatMinorUnits(minBudget, currency),
+    maximumBudgetLabel: formatMinorUnits(maxBudget, currency),
   };
 }
 

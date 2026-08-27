@@ -1,5 +1,7 @@
 import chalk from 'chalk';
 
+import { AD_SERVING } from '@ateva/shared';
+
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
 import { printSandboxBanner } from '../lib/environment-label';
@@ -87,11 +89,19 @@ export async function runConfig() {
         }
         case '3': {
           const raw = await prompt(
-            `Max ads per hour (1–12, current: ${settings.maxAdsPerHour ?? 6}):`,
+            `Max ads per hour (${AD_SERVING.MAX_ADS_PER_HOUR_MIN}–${AD_SERVING.MAX_ADS_PER_HOUR_MAX}, current: ${settings.maxAdsPerHour ?? AD_SERVING.MAX_ADS_PER_HOUR_DEFAULT}):`,
           );
           const num = parseInt(raw, 10);
-          if (isNaN(num) || num < 1 || num > 12) {
-            console.error(chalk.red('Enter a number between 1 and 12.'));
+          if (
+            isNaN(num) ||
+            num < AD_SERVING.MAX_ADS_PER_HOUR_MIN ||
+            num > AD_SERVING.MAX_ADS_PER_HOUR_MAX
+          ) {
+            console.error(
+              chalk.red(
+                `Enter a number between ${AD_SERVING.MAX_ADS_PER_HOUR_MIN} and ${AD_SERVING.MAX_ADS_PER_HOUR_MAX}.`,
+              ),
+            );
             process.exit(1);
           }
           await api.updateSettings({ maxAdsPerHour: num });

@@ -38,16 +38,61 @@ the value that Google Identity Services initializes with.
   web discovers it through `/auth/config`; a stale web variable cannot create a
   false mismatch.
 
-Operator live verification also confirmed that invalid Google credentials
-return a structured 401 through the web BFF without a 502 or API crash. On
-2026-08-26, the stale Vercel Production `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entry
-was removed, and the Google Cloud `Ateva-web` client in project `Ateva` was
-verified in the console with `https://ateva.vercel.app` as an authorized
-JavaScript origin. A real browser callback reached Google's account chooser
-with the same client, passed the account owner's device verification, and
-returned to Ateva. The API then rejected the sign-in because that email already
-has an Ateva password account; the user must sign in with the password and link
-Google from account settings.
+Operator live verification confirmed that invalid Google credentials return a
+structured 401 through the web BFF without a 502 or API crash. On 2026-08-26,
+the stale Vercel Production `NEXT_PUBLIC_GOOGLE_CLIENT_ID` entry was removed,
+and the Google Cloud `Ateva-web` client in project `Ateva` was verified in the
+console with `https://ateva.vercel.app` as an authorized JavaScript origin. A
+real browser callback using `harshit10sehgal@gmail.com` reached Google's
+account chooser with the same client, passed device verification, and returned
+to `/developer`. The developer settings page then showed the verified email and
+`Google is linked to this account`.
+
+## Resolved 2026-08-27 — Sentry monitoring is provisioned for live staging and web
+
+The Ateva Sentry organization and `javascript-nextjs` project were created via
+Google OAuth in the EU/Germany region without enabling paid billing. The same
+project DSN is wired to the two live runtime surfaces with distinct environment
+labels:
+
+- Vercel Production has `SENTRY_DSN` and the build-time
+  `NEXT_PUBLIC_SENTRY_DSN`, both labelled `production`, and the current
+  production deployment was rebuilt so the public client value is effective.
+- The protected GitHub `Production` environment has
+  `PRODUCTION_SENTRY_DSN` and `PRODUCTION_SENTRY_AUTH_TOKEN`, and the
+  production web workflow fails closed if either value is missing instead of
+  silently producing an unmonitored image or an unmapped artifact.
+- The OCI staging host `vnic1` has `SENTRY_DSN` labelled `staging`; its env file
+  remains mode 600, the API container loaded the value after a service restart,
+  and the container is healthy.
+
+Verification: the rebuilt Vercel production deployment is Ready and aliases
+`ateva.vercel.app`; the live `/api/health`, `/api/auth/config`, and
+invalid-Google-token probe returned 200, 200, and structured 401 respectively;
+OCI liveness/readiness and the public Funnel returned 200; a labelled,
+non-PII staging envelope was accepted by Sentry with HTTP 200; and the
+rebuilt `vercel-production` release contained 527 source-map artifacts.
+The organization token is scoped only to `org:ci` and is supplied to builds
+through Vercel's build environment or the Docker BuildKit secret.
+
+## Resolved 2026-08-26 — ads-per-hour ceiling is API-authoritative
+
+`AD_SERVING.MAX_ADS_PER_HOUR_MAX` was 20 while the API DTO rejected values above 12. The shared constant is now 12, the DTO consumes it directly, and the web,
+CLI, and VS Code clients use the same ceiling. Their manifests, input bounds,
+and tests no longer advertise values the API cannot persist.
+
+## Resolved 2026-08-26 — branch protection matches the single-reviewer repository
+
+The repository has one collaborator, so requiring a code-owner approval made
+the protected `main` branch impossible to merge without routing around its
+controls. The operator-selected policy is now: admins enforced, one
+independent approval required, stale approvals dismissed, and
+`require_code_owner_reviews=false`. The one-approval requirement remains in
+place; re-enable code-owner reviews when a second qualified reviewer exists.
+
+Verification: `gh api repos/Harshit-sehgal/promptpay/branches/main/protection`
+returned the policy above on 2026-08-26; collaborators were checked separately
+and only `Harshit-sehgal` is present.
 
 ## Resolved 2026-08-26 (second pass) — production sign-in outage, and four defects CI could not see
 
@@ -70,11 +115,11 @@ Two fixes landed:
   refresh and logout, where a replay could create a second account or burn a
   refresh token twice. Timeouts are not retried either.
 - **#86** — nothing recorded WHY the fetch failed. The BFF returns an opaque
-  message to the browser by design, and `SENTRY_DSN` is unset in production, so
-  the incident had to be reconstructed from response timings. The failure cause
-  is now logged server-side (code, name, message, connect-vs-timeout, attempt
-  count), logging only the upstream ORIGIN — these are auth paths and some
-  providers put tokens in query strings.
+  message to the browser by design, and `SENTRY_DSN` was unset in production at
+  the time, so the incident had to be reconstructed from response timings. The
+  failure cause is now logged server-side (code, name, message,
+  connect-vs-timeout, attempt count), logging only the upstream ORIGIN — these
+  are auth paths and some providers put tokens in query strings.
 
 **Not solved.** The retry covers sub-second blips. One observed outage lasted
 about six minutes (502s from 16:06:04, recovering to 401 at 16:09:55), which no
@@ -83,14 +128,24 @@ deploy showed no outage at all. Funnel also runs 1.7–6.2s against a 15s BFF
 timeout. This is external item 3 (production API host) surfacing, not a
 separate bug.
 
+**Verified recovery 2026-08-26:** the operator restarted `ateva-api.service` on
+the OCI staging host. The unit is enabled with `Restart=always`, the
+`ateva-api:main` container is healthy, Funnel proxies to `127.0.0.1:4002`, and
+local plus three repeated public API/BFF health probes returned 200 with the
+database and Redis connected. This restores the current staging service; it
+does not replace the separate decision for a stable production front door.
+
 ### Diagnostic traps worth recording
 
 - `dig` from a tailnet member returns the **CGNAT** address `100.111.181.4` via
   MagicDNS, which makes the Funnel host look private. Public resolvers return
   the real ingress. Do not diagnose reachability from a tailnet member without
   checking a public resolver — an early conclusion here was wrong because of it.
-- `SENTRY_DSN` is **unset in Vercel Production**. A real production outage
-  therefore left no trace anywhere. Worth setting independently of any code fix.
+- **Resolved 2026-08-27:** Sentry runtime DSNs are configured in Vercel
+  Production and OCI staging, with environment labels and a successful
+  ingestion smoke event. The production Vercel release also contains 527
+  source-map artifacts; Docker release builds receive the same `org:ci` token
+  through a BuildKit secret.
 
 ### Defects that passed CI because of the environment it runs in
 
@@ -679,9 +734,8 @@ advertiser interest capture while billing is closed.
 **Remaining (operator-only, unchanged):** Dodo live credentials + webhook
 semantics (#39), production infrastructure + release secrets (#40), staging-
 to-production deployment (#41), independent wait attestation operator (#45),
-GitHub credential rotation, Google OAuth browser-origin authorization and
-successful callback (the API client-ID/runtime path is verified), client
-publishing tokens, legal review, and the production payout-operator / float
+GitHub credential rotation, stable API front door,
+client publishing tokens, legal review, and the production payout-operator / float
 decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launch
 policy are resolved: Dodo cannot pay developers, and developer payouts remain
 disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
@@ -2711,10 +2765,13 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    as historical evidence); the API is exposed by Tailscale Funnel on its
    `*.ts.net` HTTPS hostname (`docs/ops/oci-api-deployment.md`), and the web
    BFF reaches it server-side — verified live 2026-08-23.
-   Remaining before a production launch: review the existing
-   `NEXT_PUBLIC_API_URL` build setting (left untouched during cleanup), and
-   decide between shipping on the current origins or acquiring an owned
-   domain. ~~Shipped-client defaults still reference `api.ateva.com`~~
+   Current operating decision (2026-08-27): keep the current origins for
+   staging/private-beta use and make no new ingress spend yet. Before a
+   general-availability production launch, acquire an owned domain and put
+   the API behind a stable HTTPS front door; then update the web build inputs
+   and client-release contract together. The existing `NEXT_PUBLIC_API_URL`
+   build setting still needs review as part of that launch work.
+   ~~Shipped-client defaults still reference `api.ateva.com`~~
    **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
    their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
    see the dated entry above. Before any client publish, verify that origin
@@ -2750,11 +2807,11 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
-7. **Google OAuth browser integration** for live Google sign-in (decision D6:
-   enable at launch). CSP `frame-src` is verified live; the API
-   `GOOGLE_CLIENT_ID` and web `/api/auth/config` runtime path are verified.
-   Still verify that `ateva.vercel.app` is an authorized JavaScript origin in
-   Google Cloud and complete a real browser callback.
+7. ~~**Google OAuth browser integration** for live Google sign-in (decision D6:
+   enable at launch).~~ **CLOSED 2026-08-27:** CSP `frame-src`, the API
+   `GOOGLE_CLIENT_ID`, and the web `/api/auth/config` runtime path are verified.
+   A real browser callback using `harshit10sehgal@gmail.com` returned to
+   `/developer`; settings showed the verified email and that Google is linked.
 8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
    the provider level; launch countries/currencies, KYC/tax/legal docs.
    Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only

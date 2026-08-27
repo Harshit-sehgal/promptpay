@@ -6,12 +6,20 @@ import { LoadingSpinner } from '@/components';
 import { AccountErasure } from '@/components/account-erasure';
 import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
+import { NumberField } from '@/components/ui/number-field';
 import { stringifyApiData } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 
+import { AD_SERVING } from '@ateva/shared';
 import { useToast } from '@ateva/ui';
+
+/**
+ * Mirrors the API's own bounds for `maxAdsPerHour`.
+ */
+const MAX_ADS_PER_HOUR_MIN = AD_SERVING.MAX_ADS_PER_HOUR_MIN;
+const MAX_ADS_PER_HOUR_MAX = AD_SERVING.MAX_ADS_PER_HOUR_MAX;
 
 interface DevSettings {
   adsEnabled: boolean;
@@ -395,24 +403,26 @@ export default function DevSettingsPage() {
                 </>
               )}
 
-              <div>
-                <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                  Max ads per hour
-                </label>
-                <input
-                  type="range"
-                  min={1}
-                  max={12}
-                  value={maxAdsPerHour}
-                  onChange={(e) => setMaxAdsPerHour(Number(e.target.value))}
-                  className="w-full accent-brand-500"
-                />
-                <div className="flex justify-between text-surface-400 text-xs mt-1.5 font-medium">
-                  <span>1</span>
-                  <span className="text-brand-600 font-mono font-bold">{maxAdsPerHour} / hr</span>
-                  <span>12</span>
-                </div>
-              </div>
+              {/*
+                  A typed field rather than a slider: this is a number the
+                  developer already has in mind ("no more than four an hour"),
+                  and a slider makes stating a known value a guessing game while
+                  hiding what the permitted range even is.
+
+                  Bounds mirror the API's own validation (`developer.dto.ts`:
+                  @Min(1) @Max(12)). Anything outside is corrected on blur and
+                  the range is stated in the hint rather than discovered by
+                  dragging.
+                */}
+              <NumberField
+                label="Max ads per hour"
+                value={maxAdsPerHour}
+                min={MAX_ADS_PER_HOUR_MIN}
+                max={MAX_ADS_PER_HOUR_MAX}
+                suffix="/ hr"
+                hint={`How many sponsored units may be shown in an hour. Allowed range ${MAX_ADS_PER_HOUR_MIN}–${MAX_ADS_PER_HOUR_MAX}.`}
+                onCommit={setMaxAdsPerHour}
+              />
 
               {/* A-057: blocked category preferences persisted server-side */}
               <div>

@@ -131,7 +131,12 @@ export default function ReferralPage() {
                 No referrals yet. Share your link to grow the beta.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Referrals table, scrolls horizontally"
+              >
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-surface-50/50 border-b border-surface-200/80 text-surface-500 font-medium">

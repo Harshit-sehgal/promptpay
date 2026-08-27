@@ -349,55 +349,62 @@ export default function AdvertiserBillingPage() {
                 No transactions yet. Add funds to start running campaigns.
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-ink-700/50 border-b border-ink-600/30">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Date</th>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Description</th>
-                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
-                    <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-600/20">
-                  {data.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
-                      <td className="px-4 py-3 text-ink-200 text-xs">
-                        {formatRelativeTime(entry.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-white">
-                        {entry.description || entry.entryType.replace(/_/g, ' ')}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs ${
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Billing history table, scrolls horizontally"
+              >
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Date</th>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Description</th>
+                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
+                      <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink-600/20">
+                    {data.entries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
+                        <td className="px-4 py-3 text-ink-200 text-xs">
+                          {formatRelativeTime(entry.createdAt)}
+                        </td>
+                        <td className="px-4 py-3 text-white">
+                          {entry.description || entry.entryType.replace(/_/g, ' ')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              entry.entryType === 'credit'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : entry.entryType === 'debit'
+                                  ? 'bg-red-500/20 text-red-400'
+                                  : entry.entryType === 'refund'
+                                    ? 'bg-amber-500/20 text-amber-400'
+                                    : 'bg-ink-600 text-ink-200'
+                            }`}
+                          >
+                            {entry.entryType.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-right font-mono ${
                             entry.entryType === 'credit'
-                              ? 'bg-emerald-500/20 text-emerald-400'
+                              ? 'text-emerald-400'
                               : entry.entryType === 'debit'
-                                ? 'bg-red-500/20 text-red-400'
-                                : entry.entryType === 'refund'
-                                  ? 'bg-amber-500/20 text-amber-400'
-                                  : 'bg-ink-600 text-ink-200'
+                                ? 'text-red-400'
+                                : 'text-ink-200'
                           }`}
                         >
-                          {entry.entryType.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-right font-mono ${
-                          entry.entryType === 'credit'
-                            ? 'text-emerald-400'
-                            : entry.entryType === 'debit'
-                              ? 'text-red-400'
-                              : 'text-ink-200'
-                        }`}
-                      >
-                        {entry.entryType === 'credit' ? '+' : '−'}
-                        {formatCurrency(entry.amountMinor, entry.currency)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          {entry.entryType === 'credit' ? '+' : '−'}
+                          {formatCurrency(entry.amountMinor, entry.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>
