@@ -97,6 +97,25 @@ Verification: the active-file domain guard passes, the focused configuration
 and contract suites pass, and the full replacement CI matrix for the preceding
 audit update was green before this follow-up.
 
+## Resolved 2026-08-28 — release validators reject known unowned domains
+
+The active fixture cleanup removed stale `ateva.com`/`ateva.dev` values from
+tracked runtime-adjacent paths, but a future secret could still reintroduce one
+of those hosts—or the former WaitLayer host—through a release URL. The
+dependency-free release-input validator and read-only `deploy-doctor` now fail
+closed for those known unowned domain suffixes across staging, production web,
+and runtime URL checks. The guard reports only the field and the reason; it
+never prints the supplied URL or credentials.
+
+The denylist is deliberately limited to names the operator has already
+confirmed are not owned by this project. A future owned production domain must
+be added through an explicit source change rather than silently making the
+current safety boundary permissive.
+
+Verification: `scripts/validate-release-inputs.test.mjs` and
+`scripts/deploy-doctor.test.mjs` pass 30/30 together, Prettier and lint pass,
+and the full CI matrix is required before this entry is treated as shipped.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the

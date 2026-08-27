@@ -80,6 +80,25 @@ test('rejects non-HTTPS public endpoints and inconsistent API paths', () => {
   assert.equal(finding(findings, 'web-base-url').level, 'FAIL');
 });
 
+test('rejects known unowned project domains from public runtime URLs', () => {
+  const findings = diagnoseEnvironment({
+    ...BASE,
+    API_BASE_URL: 'https://api.ateva.com',
+    WEB_BASE_URL: 'https://www.ateva.dev',
+    NEXT_PUBLIC_API_URL: 'https://api.waitlayer.com/api/v1',
+    NEXT_PUBLIC_WEB_URL: 'https://ateva.com',
+  });
+  for (const name of [
+    'api-base-url',
+    'web-base-url',
+    'next-public-api-url',
+    'next-public-web-url',
+  ]) {
+    assert.equal(finding(findings, name).level, 'FAIL', `${name} should fail closed`);
+    assert.match(finding(findings, name).detail, /known unowned project domain/);
+  }
+});
+
 test('uses the API Google OAuth ID as the sole client-ID source and validates Dodo configuration', () => {
   const oauth = diagnoseEnvironment({
     ...BASE,
