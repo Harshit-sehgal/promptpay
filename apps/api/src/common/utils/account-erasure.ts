@@ -112,7 +112,7 @@ function eraseAccountIdentityOnce(
         where: { userId },
         select: { id: true },
       });
-      const deletedEmail = `deleted-${userId}@ateva.com`;
+      const deletedEmail = `deleted-${userId}@example.invalid`;
       const now = new Date();
 
       // Per-row device pseudonyms preserve uniqueness while invalidating every

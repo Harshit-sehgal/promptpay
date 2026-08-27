@@ -212,18 +212,20 @@ created by the first boot that gets far enough to reach it, and after that the
 only ways to change it are editing the row by hand or wiping the database.
 
 `ATEVA_ENVIRONMENT_ID` is optional and defaults to `local`
-(`packages/config/src/index.ts`), and it is **not** in
-`.env.production.local` — so a boot that says nothing stamps this staging
-database as `staging/local` permanently. Set it deliberately first:
+(`packages/config/src/index.ts`). Do not rely on that default: a boot that says
+nothing stamps its database as `<kind>/local` permanently. Set it deliberately
+before the first boot:
 
 ```bash
 scripts/set-host-secret.sh ATEVA_ENVIRONMENT_ID   # e.g. staging-oci
 ```
 
-This has not happened yet only because boot has never reached that line: the
-gate before it (`validateMigrations`, `main.ts:129`) failed on the Prisma CLI
-resolution bug, so `verify()` at `main.ts:144` has never run against the real
-database.
+For the current `vnic1` staging host, this step is complete:
+`ATEVA_ENVIRONMENT_KIND=staging` and `ATEVA_ENVIRONMENT_ID=staging-oci` are
+configured, and the running `ateva-api.service` is healthy. The earlier
+Prisma CLI resolution failure that prevented this check has been fixed. For a
+new host or database, retain the explicit-ID step above and do not copy the
+current marker blindly.
 
 ## Verifying before you start
 

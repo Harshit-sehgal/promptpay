@@ -24,12 +24,14 @@ a file. Apply these settings to `main` (and any release branches):
   - `verify-audit-claims`
   - `security`
 - **Approvals:** require ≥ 1 independent approval. Enable **"Prevent approval
-  by author"** and **"Require new approval after new commits"** so stale
-  approvals cannot merge stale code.
+  by author"** so the PR author cannot satisfy the requirement. The current
+  policy does not separately require a new approval after every commit
+  (`require_last_push_approval=false`); revisit that setting if the review
+  policy changes.
 - **CODEOWNERS:** the repository currently has only one collaborator, who is
   also the PR author. `require_code_owner_reviews` is therefore disabled;
   re-enable it when a second qualified code-owner reviewer is added.
-- **Stale approval dismissal:** enable so an approve from before a force-push
+- **Stale approval dismissal:** enabled, so an approval from before a force-push
   (or a significant rebase) is invalidated.
 
 ### Current `main` verification (2026-08-26)

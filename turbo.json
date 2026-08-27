@@ -9,6 +9,9 @@
     "@ateva/eslint-config#build": {
       "outputs": []
     },
+    "@ateva/db#typecheck": {
+      "dependsOn": ["build", "^build"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

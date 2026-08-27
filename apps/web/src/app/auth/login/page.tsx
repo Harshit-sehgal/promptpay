@@ -7,6 +7,7 @@ import { AuthShell } from '@/components/auth-shell';
 import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
+import { authApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 import { resolvePostLoginPath } from '@/lib/auth-routing';
 import { isValidTwoFactorInput, normalizeTwoFactorInput } from '@/lib/two-factor-input';
@@ -46,6 +47,56 @@ function GoogleG({ size = 20 }: { size?: number }) {
   );
 }
 
+/**
+ * Read the `email` claim out of a Google ID token for display only.
+ *
+ * The token is NOT verified here and must never be trusted for anything but
+ * prefilling the form — the API verifies it properly. Worst case the visitor
+ * sees the wrong address prefilled and edits it.
+ */
+function emailFromIdToken(credential: string): string | null {
+  try {
+    const payload = credential.split('.')[1];
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const claim = (JSON.parse(json) as { email?: unknown }).email;
+    return typeof claim === 'string' ? claim : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The API refuses to link Google to a pre-existing password account by email
+ * alone, because an attacker who controls a Google Workspace domain could
+ * otherwise mint a token for a victim's address and take the account over.
+ * That refusal is correct, but on its own it strands the visitor on the sign-in
+ * page holding a message about settings they cannot reach yet.
+ */
+function isExistingAccountConflict(message: string): boolean {
+  return /account with this email already exists/i.test(message);
+}
+
+function settingsPathForRole(role: string | null | undefined): string | null {
+  if (role === 'advertiser') return '/advertiser/settings';
+  if (role === 'developer') return '/developer/settings';
+  return null;
+}
+
+/** Keep transport errors out of browser-console output, especially request bodies. */
+function safeErrorDetails(error: unknown) {
+  const candidate = (error ?? {}) as {
+    response?: { status?: unknown };
+    code?: unknown;
+    message?: unknown;
+  };
+  return {
+    status: typeof candidate.response?.status === 'number' ? candidate.response.status : undefined,
+    code: typeof candidate.code === 'string' ? candidate.code : undefined,
+    message: typeof candidate.message === 'string' ? candidate.message : 'Unknown error',
+  };
+}
+
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
@@ -62,14 +113,21 @@ async function handleGoogleCredential(
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, googleLogin } = useAuth();
+  const { login, googleLogin, refreshUser } = useAuth();
   const [email, setEmail] = useState('');
+  // Held from a refused Google sign-in so the password submit below can
+  // complete the link in the same flow instead of sending the visitor away.
+  const [pendingGoogleCredential, setPendingGoogleCredential] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [twoFactorInput, setTwoFactorInput] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleLinkFailure, setGoogleLinkFailure] = useState<{
+    message: string;
+    settingsPath: string | null;
+  } | null>(null);
   const [accountDeleted, setAccountDeleted] = useState(false);
   const googleInitialized = useRef(false);
   const twoFactorInputRef = useRef('');
@@ -145,6 +203,7 @@ export default function LoginPage() {
           client_id: googleClientId,
           callback: async (response: GoogleCredentialResponse) => {
             setError('');
+            setGoogleLinkFailure(null);
             if (twoFactorInputRef.current && !isValidTwoFactorInput(twoFactorInputRef.current)) {
               setError(
                 'Enter a 6-digit authenticator code or a backup code in XXXX-XXXX-XXXX format.',
@@ -157,7 +216,18 @@ export default function LoginPage() {
             );
             setLoading(false);
             if (errorMsg.error) {
-              setError(errorMsg.error);
+              if (isExistingAccountConflict(errorMsg.error)) {
+                // Turn the refusal into a route the visitor can actually walk:
+                // prefill the address Google gave us and say what to do next.
+                const googleEmail = emailFromIdToken(response.credential);
+                if (googleEmail) setEmail(googleEmail);
+                setPendingGoogleCredential(response.credential);
+                setError(
+                  'You already have a password account for this email. Enter your password below to link Google — after this, one tap signs you in.',
+                );
+              } else {
+                setError(errorMsg.error);
+              }
             } else {
               router.push(postLoginPath(errorMsg.user?.role));
             }
@@ -194,6 +264,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setGoogleLinkFailure(null);
     setLoading(true);
 
     try {
@@ -202,6 +273,39 @@ export default function LoginPage() {
         return;
       }
       const user = await login(email, password, twoFactorInput);
+      if (pendingGoogleCredential) {
+        // Both accounts are now proven: the password account by this sign-in,
+        // and the Google identity by the token the API re-verifies. This is the
+        // "suggested linking" shape — never a silent match on email, which
+        // OpenID Connect does not guarantee to be stable or unreassigned.
+        const googleCredential = pendingGoogleCredential;
+        setPendingGoogleCredential(null);
+        try {
+          await authApi.linkGoogle(googleCredential, password);
+        } catch (linkErr: unknown) {
+          // Never log the Axios error object: it carries config.data, including
+          // both the current password and the Google ID token.
+          console.warn('Google link after sign-in failed', safeErrorDetails(linkErr));
+          setGoogleLinkFailure({
+            message: `Your password sign-in succeeded, but Google could not be linked. ${getErrorMessage(linkErr, 'Please try again from account settings.')}`,
+            settingsPath: settingsPathForRole(user.role),
+          });
+          return;
+        }
+        try {
+          // `/auth/me` is the authoritative profile and includes googleVerified.
+          // Refresh it before navigation so Settings does not render stale state.
+          await refreshUser();
+        } catch (refreshErr: unknown) {
+          console.warn('Google link profile refresh failed', safeErrorDetails(refreshErr));
+          setGoogleLinkFailure({
+            message:
+              'Google was linked, but we could not refresh your account status. Open account settings to confirm.',
+            settingsPath: settingsPathForRole(user.role),
+          });
+          return;
+        }
+      }
       router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
@@ -242,6 +346,24 @@ export default function LoginPage() {
               aria-live="polite"
             >
               <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+
+          {googleLinkFailure && (
+            <div
+              className="mb-5 rounded-xl border border-amber-200/70 bg-amber-50 p-3.5"
+              role="alert"
+              aria-live="polite"
+            >
+              <p className="text-sm text-amber-800">{googleLinkFailure.message}</p>
+              {googleLinkFailure.settingsPath && (
+                <Link
+                  href={googleLinkFailure.settingsPath}
+                  className="mt-2 inline-block text-sm font-medium text-amber-900 underline underline-offset-2"
+                >
+                  Open account settings to retry
+                </Link>
+              )}
             </div>
           )}
 

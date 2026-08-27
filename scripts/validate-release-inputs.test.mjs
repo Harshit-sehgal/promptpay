@@ -101,6 +101,77 @@ test('requires canonical HTTPS staging origins before building public URLs', () 
   }
 });
 
+test('rejects known unowned project domains from public release inputs', () => {
+  const staging = {
+    ...validStagingUrls,
+    STAGING_WAIT_ATTESTATION_PROVIDER: 'independent-attestor',
+    STAGING_WAIT_ATTESTATION_ISSUERS: independentIssuer,
+    STAGING_WAIT_ATTESTATION_VERSIONS: 'attestor-v2',
+  };
+  for (const [name, value] of [
+    ['STAGING_API_URL', 'https://api.ateva.com'],
+    ['STAGING_WEB_URL', 'https://www.ateva.dev'],
+    ['STAGING_API_URL', 'https://api.waitlayer.com'],
+  ]) {
+    assert.ok(
+      validateStagingInputs({ ...staging, [name]: value }).some((error) =>
+        error.startsWith(`${name} must`),
+      ),
+      `${name}=${value} must be rejected`,
+    );
+  }
+
+  const production = {
+    NEXT_PUBLIC_API_URL: 'https://api.example.com/api/v1',
+    NEXT_PUBLIC_WEB_URL: 'https://app.example.com',
+    JWT_PUBLIC_KEY: testPublicKey,
+  };
+  for (const [name, value] of [
+    ['NEXT_PUBLIC_API_URL', 'https://api.ateva.com/api/v1'],
+    ['NEXT_PUBLIC_WEB_URL', 'https://ateva.dev'],
+  ]) {
+    assert.ok(
+      validateProductionWebInputs({ ...production, [name]: value }).length > 0,
+      `${name}=${value} must be rejected`,
+    );
+  }
+});
+
+test('rejects fully qualified trailing-dot forms of known unowned domains', () => {
+  const staging = {
+    ...validStagingUrls,
+    STAGING_WAIT_ATTESTATION_PROVIDER: 'independent-attestor',
+    STAGING_WAIT_ATTESTATION_ISSUERS: independentIssuer,
+    STAGING_WAIT_ATTESTATION_VERSIONS: 'attestor-v2',
+  };
+  for (const [name, value] of [
+    ['STAGING_API_URL', 'https://api.ateva.com.'],
+    ['STAGING_WEB_URL', 'https://ateva.dev.'],
+  ]) {
+    assert.ok(
+      validateStagingInputs({ ...staging, [name]: value }).some((error) =>
+        error.startsWith(`${name} must`),
+      ),
+      `${name}=${value} must be rejected`,
+    );
+  }
+
+  const production = {
+    NEXT_PUBLIC_API_URL: 'https://api.example.com/api/v1',
+    NEXT_PUBLIC_WEB_URL: 'https://app.example.com',
+    JWT_PUBLIC_KEY: testPublicKey,
+  };
+  for (const [name, value] of [
+    ['NEXT_PUBLIC_API_URL', 'https://api.waitlayer.com./api/v1'],
+    ['NEXT_PUBLIC_WEB_URL', 'https://ateva.com.'],
+  ]) {
+    assert.ok(
+      validateProductionWebInputs({ ...production, [name]: value }).length > 0,
+      `${name}=${value} must be rejected`,
+    );
+  }
+});
+
 test('requires immutable image digests for promotion', () => {
   assert.deepEqual(
     validateDigestInputs({
@@ -154,6 +225,12 @@ test('release workflow does not require a separate web Google client ID', () => 
   assert.doesNotMatch(webPreflight, /NEXT_PUBLIC_GOOGLE_CLIENT_ID is required/);
   assert.doesNotMatch(releaseWorkflow, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
   assert.doesNotMatch(releaseWorkflow, /STAGING_GOOGLE_CLIENT_ID|PRODUCTION_GOOGLE_CLIENT_ID/);
+});
+
+test('development Compose does not carry a hardcoded Google client ID', () => {
+  assert.match(developmentCompose, /GOOGLE_CLIENT_ID: \$\{GOOGLE_CLIENT_ID:-\}/);
+  assert.doesNotMatch(developmentCompose, /GOOGLE_CLIENT_ID: \$\{GOOGLE_CLIENT_ID:-[^}]+\}/);
+  assert.doesNotMatch(developmentCompose, /NEXT_PUBLIC_GOOGLE_CLIENT_ID/);
 });
 
 test('release workflow configures Buildx and signs every pushed image digest', () => {

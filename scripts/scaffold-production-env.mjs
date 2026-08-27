@@ -60,7 +60,7 @@ const SECTIONS = [
       ],
       ['API_PORT', '4000', null],
       ['API_BASE_URL', null, 'HTTPS, credential-free, e.g. https://api.example.com'],
-      ['WEB_BASE_URL', null, 'HTTPS, credential-free, e.g. https://www.ateva.com'],
+      ['WEB_BASE_URL', null, 'HTTPS, credential-free, e.g. https://www.example.com'],
       [
         'BFF_TRUST_PROXY_HOPS',
         null,
@@ -114,7 +114,7 @@ const SECTIONS = [
       [
         'EMAIL_FROM',
         null,
-        'A real verified sender. ateva.local / no-reply@ateva.dev are rejected.',
+        'A real verified sender on a domain you control; development placeholders are rejected.',
       ],
     ],
   ],

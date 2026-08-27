@@ -25,6 +25,9 @@ import { isIP } from 'node:net';
 const DEFAULT_TIMEOUT_MS = 4_000;
 const DODO_HOSTS = new Set(['test.dodopayments.com', 'live.dodopayments.com']);
 const WEB_SMOKE_PATHS = ['/', '/auth/login', '/api/auth/config'];
+// These are historical project-looking domains that are not owned by Ateva.
+// Public release URLs must never point at them, even if a stale secret does.
+const UNOWNED_PROJECT_DOMAIN_SUFFIXES = ['ateva.com', 'ateva.dev', 'waitlayer.com'];
 const MONEY_SWITCHES = [
   ['ads', 'global'],
   ['wait', 'earnings'],
@@ -56,6 +59,16 @@ function isSingleLabel(hostname) {
   return !hostname.includes('.') && !isIP(hostname);
 }
 
+function usesUnownedProjectDomain(hostname) {
+  const normalized = hostname
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/, '');
+  return UNOWNED_PROJECT_DOMAIN_SUFFIXES.some(
+    (suffix) => normalized === suffix || normalized.endsWith(`.${suffix}`),
+  );
+}
+
 function parseUrl(
   value,
   name,
@@ -70,6 +83,11 @@ function parseUrl(
   }
 
   const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (usesUnownedProjectDomain(hostname)) {
+    return {
+      finding: fail(name, `${name} must not use a known unowned project domain`),
+    };
+  }
   const httpAllowed =
     url.protocol === 'https:' ||
     (url.protocol === 'http:' &&

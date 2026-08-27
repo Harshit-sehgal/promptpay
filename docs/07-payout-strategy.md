@@ -73,11 +73,10 @@ Provider implementations:
 
 - ManualProvider: records manual admin payout and external transaction ID.
 - PayPalEmailProvider: stores destination email and routes payout to manual flow.
-- PayPalPayoutsProvider: later automated API.
-- StripeConnectProvider: later for eligible countries.
-- PayoneerProvider: later.
-- WiseProvider: later.
-- RazorpayProvider: later for India where compliant and commercially viable.
+- PayPalPayoutsProvider: implemented automated API, credential-gated and pending sandbox validation.
+- StripeConnectProvider: implemented for eligible countries, credential- and onboarding-gated.
+- WiseProvider: implemented, credential- and recipient-capability-gated.
+- PayoneerProvider, RazorpayProvider, and Dodo Payments: fail-closed stubs; no production payout path.
 
 ## Provider rollout
 

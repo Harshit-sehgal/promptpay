@@ -150,7 +150,12 @@ rail (decision D1); Stripe is inactive at launch (D2).** See
 | `ALLOWED_COUNTRIES`  | yes               | —       | Comma-separated ISO-3166 alpha-2 positive allowlist. Missing user countries are rejected when configured. |
 | `ALLOWED_CURRENCIES` | yes               | —       | Comma-separated ISO-4217 positive settlement allowlist. Missing/unsupported currencies are rejected.      |
 
-## Payout providers (payouts — later / dev stubs)
+## Payout provider credentials (all optional; launch status is separately gated)
+
+PayPal Payouts, Stripe Connect, and Wise have implemented provider paths, but
+remain `coming_soon` until the relevant credentials, provider approval, and
+sandbox/live capability checks are complete. Payoneer, Razorpay, and Dodo
+Payments are fail-closed stubs and cannot be enabled by configuration alone.
 
 | Variable                         | Req | Default   | Purpose                                                     |
 | -------------------------------- | --- | --------- | ----------------------------------------------------------- |

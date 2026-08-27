@@ -238,7 +238,7 @@ describe('AdvertiserService.deleteAccount financial preflight and erasure', () =
     expect(prisma.advertiser.update).toHaveBeenCalledWith({
       where: { id: 'adv-1' },
       data: expect.objectContaining({
-        billingEmail: 'deleted-user-1@ateva.com',
+        billingEmail: 'deleted-user-1@example.invalid',
         stripeCustomerId: null,
       }),
     });

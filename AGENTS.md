@@ -23,6 +23,103 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-27 — runner portability, package-identity guard, audit-truth fixes
+
+A naming-identity pass ("the product is Ateva") verified the rename state and
+fixed the gaps it surfaced:
+
+- **`.e2e/run-e2e.sh` hardcoded this checkout's absolute path**
+  (`/home/harshit/.../promptpay`) at both of its `cd` sites, so the dev
+  browser-e2e runner failed on any other clone layout or machine. It now
+  derives `REPO_ROOT` from the script's own location (`run-e2e-production.sh`
+  already did; the second `cd` needs a variable because `$0`-relative
+  resolution breaks after `cd apps/web`). CI does not invoke this runner
+  directly, so no workflow change was required.
+- **`audit-claims.mjs` grew from 15 to 17 claims.** New: (1) no e2e runner may
+  contain a hardcoded `cd /home/...` — the exact regression class fixed above,
+  now machine-checked so it cannot return (regex mutation-checked to fire);
+  (2) every workspace package name (apps/packages/tools) carries the
+  `@ateva/*`/`ateva-*` identity — the stale `@waitlayer/*` names found in the
+  untracked `apps/web/.vercel/node/package-manifest.json` show the drift
+  class, and this pins the tracked source of truth.
+- **Naming residue verified clean.** Tracked `WaitLayer` references remain
+  exactly the 14 files already documented as deliberate (env fallbacks,
+  rename-documenting comments, aliasing test fixtures); the favicon carries
+  the Ateva mark; `promptpay` appears only in repository/remote URLs and
+  remote-host paths, a divergence `docs/ops/branch-protection.md` records as
+  intentional. No user-facing surface carries an old product name.
+- **Stale audit prose corrected:** the `.env.production.local` paragraph below
+  claimed legacy env names and old origins; re-reading the file showed
+  canonical names and live origins since the 2026-08-23 handoff. The same
+  verification printed the file's live staging secrets into an agent session
+  transcript — recorded where the paragraph now stands, with a rotation
+  instruction.
+
+Verification: `node scripts/audit-claims.mjs` 17/17, `bash -n .e2e/run-e2e.sh`
+plus the `dirname` expression resolving correctly from an unrelated cwd,
+`git grep '/home/harshit'` returning nothing, Prettier clean, and
+`node --test scripts/ci-package-contract.test.mjs` green.
+
+## Resolved 2026-08-27 — Prisma generation cannot race database typecheck
+
+The isolated CI typecheck job exposed a fresh-checkout race that local caches
+had hidden: Turbo's generic `typecheck` task waited for workspace dependency
+builds (`^build`) but not `@ateva/db`'s own `build`. That build runs
+`prisma generate`, so the database typecheck could read the generated
+declarations while they were being replaced and report that `PrismaClient` and
+the schema enums did not exist.
+
+`turbo.json` now makes `@ateva/db#typecheck` wait for both its own `build` and
+the existing dependency builds. A package-contract test protects that ordering
+and the `prisma generate` build barrier from being removed accidentally.
+
+Verification: a forced uncached `TURBO_FORCE=true pnpm run typecheck` completed
+18/18 locally; the original CI run's annotations showed the generated-client
+failure, while lint, build, package clients, security, and the other completed
+jobs remained green. The replacement CI run must remain the final remote gate.
+
+## Resolved 2026-08-28 — active fixtures no longer exercise unowned domains
+
+The earlier domain sweep corrected public surfaces and staging smoke data, but
+an audit of the remaining active paths found project-owned-looking values in
+the demo seed, disaster-recovery seed, CI health-metrics user, account-erasure
+tombstone, `.env.example`, production-env scaffold, and one URL-preservation
+fixture. Those values could create misleading demo links, operator defaults, or
+database identities even though they were not production mailboxes.
+
+They now use reserved `example.com`/`example.invalid` values. Historical
+documents, test-only integration data, and the deliberate `ateva.local`/
+`no-reply@ateva.dev` production-rejection checks remain intentionally explicit;
+they describe safety boundaries rather than exercising an unowned destination.
+`audit-claims.mjs` now guards the active-file set against this regression.
+
+Verification: the active-file domain guard passes, the focused configuration
+and contract suites pass, and the full replacement CI matrix for the preceding
+audit update was green before this follow-up.
+
+## Resolved 2026-08-28 — release validators reject known unowned domains
+
+The active fixture cleanup removed stale `ateva.com`/`ateva.dev` values from
+tracked runtime-adjacent paths, but a future secret could still reintroduce one
+of those hosts—or the former WaitLayer host—through a release URL. The
+dependency-free release-input validator and read-only `deploy-doctor` now fail
+closed for those known unowned domain suffixes across staging, production web,
+and runtime URL checks. The guard reports only the field and the reason; it
+never prints the supplied URL or credentials.
+
+The denylist is deliberately limited to names the operator has already
+confirmed are not owned by this project. A future owned production domain must
+be added through an explicit source change rather than silently making the
+current safety boundary permissive.
+
+Verification: `scripts/validate-release-inputs.test.mjs` and
+`scripts/deploy-doctor.test.mjs` cover both ordinary and fully qualified
+trailing-dot forms of the rejected domains. Prettier and lint pass, and the
+replacement CI run
+[33112459599](https://github.com/Harshit-sehgal/promptpay/actions/runs/33112459599)
+passed all 13 repository jobs, including Docker-build, full tests, security,
+and both E2E suites.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the
@@ -47,6 +144,25 @@ real browser callback using `harshit10sehgal@gmail.com` reached Google's
 account chooser with the same client, passed device verification, and returned
 to `/developer`. The developer settings page then showed the verified email and
 `Google is linked to this account`.
+
+The current `fix/google-existing-account-guidance` branch carries the follow-up
+in PR #94: when Google reports the existing-password-account conflict, the
+login page retains the GIS credential in memory, prefills the returned email,
+and requires the password sign-in before calling the API's existing
+authenticated Google-link endpoint. This is ready in the Vercel preview, not
+yet production; all PR checks pass, but the repository's independent-approval
+rule still gates the merge.
+
+On 2026-08-27, the tracked development Compose file also stopped carrying a
+hardcoded Google client-ID default. Real GIS testing now requires an explicit
+`GOOGLE_CLIENT_ID`; the local mock path remains available without one, so a
+local default cannot masquerade as the API's live OAuth authority.
+
+On 2026-08-27, the payout documentation was aligned with the current provider
+registry. PayPal Payouts, Stripe Connect, and Wise have implemented provider
+paths but remain credential/approval-gated and `coming_soon`; Payoneer,
+Razorpay, and Dodo Payments remain fail-closed payout stubs. The strategy and
+architecture docs now distinguish implementation from launch availability.
 
 ## Resolved 2026-08-27 — Sentry monitoring is provisioned for live staging and web
 
@@ -327,12 +443,18 @@ environment ID and no `FILL_ME` values in its host environment. The shipped
 image connected through the Supabase pooled runtime URL, and Prisma reported
 all 97 migrations up to date. The API and readiness health routes both return 200. This is staging evidence only; it is not production deployment evidence.
 
-The ignored local `.env.production.local` remains a template with five
-provider placeholders. It also still uses the legacy `WAITLAYER_ENVIRONMENT_*`
-names, while `docs/ops/docker-compose.images.example.yml` requires canonical
-`ATEVA_ENVIRONMENT_*` variables. Its public URL values still point at the old
-WaitLayer/Vercel preview origins and must not be promoted as production
-configuration.
+The ignored local `.env.production.local` is the handoff template for the OCI
+staging host. **Corrected 2026-08-27 after re-reading the file** — an earlier
+entry here claimed it still used legacy `WAITLAYER_ENVIRONMENT_*` names and the
+old WaitLayer/Vercel preview origins; that was stale. It actually holds
+canonical `ATEVA_ENVIRONMENT_*` names, live origins (`vnic1…ts.net` API,
+`ateva.vercel.app` web), and `FILL_ME` placeholders for the Supabase/Upstash/
+Resend credentials. It also carries the staging JWT keypair and the generated
+TOTP/email-queue/privacy/payout keys. On 2026-08-27 the file was printed in
+full into an agent session transcript while verifying this entry, against the
+file's own "never paste its contents into chat" rule — **the operator should
+rotate the staging JWT keypair and those generated keys** (staging-only
+exposure; rotation invalidates staging sessions). It must never be committed.
 
 The abandoned `ateva.com` and `www.ateva.com` attachments have been removed
 from the Vercel project and team. No DNS records were published, no traffic
@@ -346,8 +468,11 @@ proxy-hop setting were populated from the matching
 local/staging configuration without printing their values. The temporary
 Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
 existing `NEXT_PUBLIC_API_URL` was intentionally left untouched because it was
-not the custom-domain setting being cleaned up; it must be reviewed separately
-before a future production launch.
+not the custom-domain setting being cleaned up. **Verified 2026-08-28:** the
+live Vercel artifact embeds the current Funnel API base
+(`https://vnic1.tail76eb88.ts.net/api/v1`), and the web/API health probes return 200. This closes the current staging/private-beta URL review; an owned domain
+and stable API front door are still required before a general-availability
+launch.
 
 GitHub now has a lowercase `staging` environment plus approval protection on
 both `staging` and `Production`. The registry identifiers and package-only
@@ -2770,7 +2895,9 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    general-availability production launch, acquire an owned domain and put
    the API behind a stable HTTPS front door; then update the web build inputs
    and client-release contract together. The existing `NEXT_PUBLIC_API_URL`
-   build setting still needs review as part of that launch work.
+   build setting is verified for the current staging/private-beta Funnel origin;
+   it must be replaced with the owned API front door as part of that launch
+   work.
    ~~Shipped-client defaults still reference `api.ateva.com`~~
    **Resolved 2026-08-24:** all shipped-client defaults (CLI/VS Code) plus
    their CI gate assertions now point at `https://ateva.vercel.app/api/v1`;
@@ -2800,11 +2927,14 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    `provenance`/`sbom` keys outright, so attestations moved to explicit buildx
    flags in the release workflow and the release gate asserts cosign instead.
    `DOCKER_ATTEST` survives only in comments explaining its removal.
-5. ~~**Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
-   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
-   **RESOLVED 2026-08-18:** `main` protection is enabled and API-verified with
-   required CI, CODEOWNERS review, stale-review dismissal, last-push
-   reapproval, admin enforcement, no force pushes, and no branch deletion.
+5. ~~**Branch protection / review policy:** toggles in GitHub repo settings
+   (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
+   **RESOLVED 2026-08-26:** `main` protection is enabled and API-verified with
+   required CI, one independent approval, stale-review dismissal, admin
+   enforcement, no force pushes, and no branch deletion.
+   The code-owner-only requirement is intentionally disabled while the
+   repository has one collaborator; re-enable it when a second qualified
+   reviewer exists.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
 7. ~~**Google OAuth browser integration** for live Google sign-in (decision D6:

@@ -47,8 +47,8 @@ describe('ConfigService.getApiUrl override validation', () => {
   it('accepts any https origin — scope: machine is what stops a workspace choosing it', async () => {
     // Deliberate: `scope: machine` is what stops a workspace choosing this.
     // A user who edits their own machine settings may point anywhere.
-    await expect(apiUrl('https://staging.ateva.com/api/v1')).resolves.toBe(
-      'https://staging.ateva.com/api/v1',
+    await expect(apiUrl('https://staging.example.com/api/v1')).resolves.toBe(
+      'https://staging.example.com/api/v1',
     );
   });
 

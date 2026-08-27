@@ -10,12 +10,31 @@ import { fileURLToPath } from 'node:url';
 const REFERENCE_PROVIDER = 'ateva-stub-bridge';
 const REFERENCE_VERSION = 'stub-v1';
 const DIGEST_REFERENCE = /^[^\s@]+@sha256:[a-f0-9]{64}$/i;
+// These names were used by earlier project configurations but are not owned
+// by the project. Keep them out of public release inputs so a stale secret
+// cannot route browser traffic or bearer credentials to a stranger.
+const UNOWNED_PROJECT_DOMAIN_SUFFIXES = ['ateva.com', 'ateva.dev', 'waitlayer.com'];
 
 function fail(errors, message) {
   errors.push(message);
 }
 
+function usesUnownedProjectDomain(value) {
+  try {
+    const hostname = new URL(value).hostname
+      .toLowerCase()
+      .replace(/^\[|\]$/g, '')
+      .replace(/\.+$/, '');
+    return UNOWNED_PROJECT_DOMAIN_SUFFIXES.some(
+      (suffix) => hostname === suffix || hostname.endsWith(`.${suffix}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isHttpsOrigin(value) {
+  if (usesUnownedProjectDomain(value)) return false;
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
@@ -35,6 +54,7 @@ function isHttpsOrigin(value) {
 }
 
 function isHttpsApiBase(value) {
+  if (usesUnownedProjectDomain(value)) return false;
   try {
     const url = new URL(value);
     const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
