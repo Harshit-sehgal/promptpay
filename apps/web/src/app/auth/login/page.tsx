@@ -46,6 +46,36 @@ function GoogleG({ size = 20 }: { size?: number }) {
   );
 }
 
+/**
+ * Read the `email` claim out of a Google ID token for display only.
+ *
+ * The token is NOT verified here and must never be trusted for anything but
+ * prefilling the form — the API verifies it properly. Worst case the visitor
+ * sees the wrong address prefilled and edits it.
+ */
+function emailFromIdToken(credential: string): string | null {
+  try {
+    const payload = credential.split('.')[1];
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const claim = (JSON.parse(json) as { email?: unknown }).email;
+    return typeof claim === 'string' ? claim : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The API refuses to link Google to a pre-existing password account by email
+ * alone, because an attacker who controls a Google Workspace domain could
+ * otherwise mint a token for a victim's address and take the account over.
+ * That refusal is correct, but on its own it strands the visitor on the sign-in
+ * page holding a message about settings they cannot reach yet.
+ */
+function isExistingAccountConflict(message: string): boolean {
+  return /account with this email already exists/i.test(message);
+}
+
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
@@ -157,7 +187,17 @@ export default function LoginPage() {
             );
             setLoading(false);
             if (errorMsg.error) {
-              setError(errorMsg.error);
+              if (isExistingAccountConflict(errorMsg.error)) {
+                // Turn the refusal into a route the visitor can actually walk:
+                // prefill the address Google gave us and say what to do next.
+                const googleEmail = emailFromIdToken(response.credential);
+                if (googleEmail) setEmail(googleEmail);
+                setError(
+                  'You already have a password account for this email. Sign in below, then link Google from Settings so next time one tap is enough.',
+                );
+              } else {
+                setError(errorMsg.error);
+              }
             } else {
               router.push(postLoginPath(errorMsg.user?.role));
             }
