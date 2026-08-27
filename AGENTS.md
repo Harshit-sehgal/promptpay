@@ -469,8 +469,10 @@ local/staging configuration without printing their values. The temporary
 Production `NEXT_PUBLIC_WEB_URL` custom-domain setting was removed. The
 Production `NEXT_PUBLIC_API_URL` was corrected on 2026-08-28 from the stale
 loopback build input to the current Funnel API base
-(`https://vnic1.tail76eb88.ts.net/api/v1`) and the production alias was rebuilt.
-The live artifact embeds that base, and the web/API health probes return 200.
+(`https://vnic1.tail76eb88.ts.net/api/v1`). The same base is now also set as
+the server-side `API_INTERNAL_URL`, and the production alias was rebuilt so
+the BFF uses the explicit internal setting. The live artifact embeds the
+public base, and the web/API health probes return 200.
 This closes the current staging/private-beta URL review; an owned domain
 and stable API front door are still required before a general-availability
 launch.
