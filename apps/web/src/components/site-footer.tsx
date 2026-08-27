@@ -77,7 +77,7 @@ export default function SiteFooter() {
 
         <div className="grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1.35fr_1fr] lg:gap-12">
           <div>
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-surface-400">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
               Product boundary
             </p>
             <p className="mt-4 max-w-[250px] text-[13px] leading-6 text-surface-600">
@@ -86,7 +86,7 @@ export default function SiteFooter() {
           </div>
 
           <div>
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-surface-400">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
               Product
             </p>
             <ul className="mt-4 space-y-2.5">
@@ -101,7 +101,7 @@ export default function SiteFooter() {
           </div>
 
           <div>
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-surface-400">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
               Resources
             </p>
             <ul className="mt-4 space-y-2.5">
@@ -123,7 +123,7 @@ export default function SiteFooter() {
           </div>
 
           <div>
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-surface-400">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
               Company
             </p>
             <ul className="mt-4 space-y-2.5">
@@ -138,7 +138,7 @@ export default function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-surface-200/80 pt-6 font-mono text-[10px] uppercase tracking-[0.1em] text-surface-400 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 border-t border-surface-200/80 pt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-surface-400 sm:flex-row sm:items-center sm:justify-between">
           <span>© {new Date().getFullYear()} Ateva</span>
           <button
             type="button"

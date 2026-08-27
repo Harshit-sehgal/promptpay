@@ -28,7 +28,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
           </Link>
 
           <div className="relative my-14">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-brand-300">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-300">
               The account boundary
             </p>
             <p className="mt-5 max-w-md text-balance font-serif text-[52px] font-normal leading-[1.02] tracking-[-0.03em]">
@@ -38,21 +38,21 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
             <div className="mt-10 rounded-3xl border border-white/12 bg-white/[0.045] p-6">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/55">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
                   Eligible session
                 </p>
-                <span className="inline-flex items-center gap-2 text-[10px] text-emerald-300">
+                <span className="inline-flex items-center gap-2 text-[11px] text-emerald-300">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   Verified
                 </span>
               </div>
               <div className="mt-4 rounded-2xl bg-brand-200 p-4 text-brand-900">
-                <p className="font-mono text-[9px] uppercase tracking-[0.13em] text-brand-700">
+                <p className="font-mono text-[11px] uppercase tracking-[0.13em] text-brand-700">
                   Sponsored · example
                 </p>
                 <p className="mt-2 text-sm font-medium">Clearly labelled inside the wait.</p>
               </div>
-              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[8px] uppercase tracking-[0.12em] text-white/55">
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] uppercase tracking-[0.12em] text-white/55">
                 <span>No source code</span>
                 <span>No prompts</span>
                 <span>No terminal output</span>
@@ -60,7 +60,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             </div>
           </div>
 
-          <p className="relative font-mono text-[9px] uppercase tracking-[0.14em] text-white/55">
+          <p className="relative font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
             Private beta · rewards disabled
           </p>
         </aside>
