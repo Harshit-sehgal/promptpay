@@ -36,7 +36,7 @@ const jwt = jwtRequire('jsonwebtoken');
 const { PrismaClient, createPrismaAdapter } = apiRequire('@ateva/db');
 
 const API_BASE_URL = process.env.API_BASE_URL ?? 'http://localhost:4002';
-const CI_ADMIN_EMAIL = 'ci-admin@ateva.com';
+const CI_ADMIN_EMAIL = 'ci-admin@example.com';
 
 /**
  * Derive the JWT `kid` exactly as the API does (sha256 of the PEM public key,

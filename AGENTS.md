@@ -78,6 +78,25 @@ Verification: a forced uncached `TURBO_FORCE=true pnpm run typecheck` completed
 failure, while lint, build, package clients, security, and the other completed
 jobs remained green. The replacement CI run must remain the final remote gate.
 
+## Resolved 2026-08-28 — active fixtures no longer exercise unowned domains
+
+The earlier domain sweep corrected public surfaces and staging smoke data, but
+an audit of the remaining active paths found project-owned-looking values in
+the demo seed, disaster-recovery seed, CI health-metrics user, account-erasure
+tombstone, `.env.example`, production-env scaffold, and one URL-preservation
+fixture. Those values could create misleading demo links, operator defaults, or
+database identities even though they were not production mailboxes.
+
+They now use reserved `example.com`/`example.invalid` values. Historical
+documents, test-only integration data, and the deliberate `ateva.local`/
+`no-reply@ateva.dev` production-rejection checks remain intentionally explicit;
+they describe safety boundaries rather than exercising an unowned destination.
+`audit-claims.mjs` now guards the active-file set against this regression.
+
+Verification: the active-file domain guard passes, the focused configuration
+and contract suites pass, and the full replacement CI matrix for the preceding
+audit update was green before this follow-up.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the

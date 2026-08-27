@@ -171,6 +171,25 @@ check(
   e2eRunners.every((script) => !/cd\s+"?\/home\//.test(read(script))),
 );
 
+// Runtime fixtures and operator templates must not exercise domains the
+// project does not own. Historical documents, test-only fixtures, and the
+// deliberate production rejection checks are excluded here because they
+// describe or simulate those boundaries rather than sending users there.
+const activeDomainFiles = [
+  '.env.example',
+  'packages/db/prisma/seed.ts',
+  'scripts/seed-dr-data.mjs',
+  'scripts/enforce-health-metrics.mjs',
+  'scripts/scaffold-production-env.mjs',
+  'apps/api/src/common/utils/account-erasure.ts',
+];
+const unownedDomain = /\bateva\.(?:com|dev)\b/i;
+const staleDomainFiles = activeDomainFiles.filter((file) => unownedDomain.test(read(file)));
+check(
+  'active fixtures and templates do not exercise unowned project domains',
+  staleDomainFiles.length === 0,
+);
+
 // AGENTS.md reflects the CI-guarded correction (narrative tied to the guard).
 const agents = read('AGENTS.md');
 check(

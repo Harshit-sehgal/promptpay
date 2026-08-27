@@ -32,7 +32,7 @@ async function main() {
     update: {},
     create: {
       id: 'dr-user-1',
-      email: 'dr@ateva.com',
+      email: 'dr@example.com',
       role: 'developer',
       status: 'active',
       emailVerified: true,
@@ -47,7 +47,7 @@ async function main() {
       id: 'dr-adv-1',
       userId: user.id,
       companyName: 'DR Co',
-      billingEmail: 'dr@ateva.com',
+      billingEmail: 'dr@example.com',
     },
   });
 
@@ -123,7 +123,9 @@ async function main() {
     },
   });
 
-  console.log('Seeded DR reference data: 1 user, 1 advertiser, 1 campaign, 4 balanced ledger rows.');
+  console.log(
+    'Seeded DR reference data: 1 user, 1 advertiser, 1 campaign, 4 balanced ledger rows.',
+  );
 }
 
 main()
