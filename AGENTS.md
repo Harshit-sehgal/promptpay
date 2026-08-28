@@ -23,6 +23,35 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-28 — staging SSH transport and remote Compose contract
+
+The OCI staging host `vnic1` is now reachable through its verified public SSH
+endpoint with the operator-provided deployment key, and the GitHub `staging`
+environment has the corresponding transport metadata (`STAGING_HOST`,
+`STAGING_USER`, `STAGING_DEPLOY_KEY`, `STAGING_KNOWN_HOSTS`, and
+`STAGING_DEPLOY_PATH`). The host checkout is pinned to the current `main`
+commit, Docker Compose v2 is installed, and `.env.staging` points to the
+existing mode-marked staging environment file without exposing its values.
+
+The release workflow now exports the validated `NEXT_PUBLIC_API_URL` and
+`NEXT_PUBLIC_WEB_URL` before remote Compose interpolation. That closes the
+contract gap where the host had the API/web base settings but Compose required
+the corresponding public build settings. The current image Compose template
+contains no separate web Google client ID requirement; the API remains the
+runtime OAuth authority.
+
+Verification: `docker compose ... config --quiet` passed on the OCI host with
+the current staging images and public URL overrides; `ateva-api.service` is
+enabled and active, the `ateva-api` container is healthy, and the public
+platform-health route returns 200. The repository-side fix was merged as PR
+`#101`; its full CI matrix passed, including Docker build, container soak,
+browser E2E, full tests, coverage, security, and audit claims.
+
+This does not claim a runnable staging release: the isolated staging database,
+staging JWT pair, independent attestation provider/bridge values, and the
+production release secrets remain operator-owned inputs and fail closed when
+absent. No rewards, payouts, or production promotion were enabled.
+
 ## Resolved 2026-08-27 — runner portability, package-identity guard, audit-truth fixes
 
 A naming-identity pass ("the product is Ateva") verified the rename state and
@@ -2904,11 +2933,12 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    the staging experiment (immutable digest, real bridge assertion, ledger
    reconciliation, payout sandbox callback, kill-switch rehearsal, second
    operator) passes. Spec: `docs/ops/wait-attestation-launch-gate.md`.
-2. **Release environment secrets:** `CONTAINER_REGISTRY` + credentials,
-   `STAGING_HOST`/`USER`/`DEPLOY_KEY`/`KNOWN_HOSTS`/`DEPLOY_PATH` and the
-   analogous `PRODUCTION_*` values, plus the remote Compose `.env`
-   (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
-   Missing values fail the gate by design.
+2. **Release environment secrets:** `CONTAINER_REGISTRY` + credentials and
+   the staging SSH transport are configured; the remote Compose contract is
+   validated as recorded above. The isolated `STAGING_DATABASE_URL`, staging
+   JWT pair, independent attestation provider/bridge values, and analogous
+   `PRODUCTION_*` host/database/JWT/provider values are still absent or await
+   operator retrieval. Missing values fail the gate by design.
 3. **Public production deployment — domain question resolved; launch pending.**
    The project does not own `ateva.com` (operator-confirmed 2026-08-23). The
    name's DNS belongs to a third party, has no MX record, and `api.ateva.com`
