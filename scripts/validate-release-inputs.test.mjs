@@ -305,6 +305,8 @@ test('staging boots the shipped artifacts under production Node semantics', () =
   );
   assert.match(stagingJob, /export NODE_ENV=production/);
   assert.match(stagingJob, /export ATEVA_ENVIRONMENT_KIND=staging/);
+  assert.match(stagingJob, /export NEXT_PUBLIC_API_URL='\$\{STAGING_API_URL\}\/api\/v1'/);
+  assert.match(stagingJob, /export NEXT_PUBLIC_WEB_URL='\$STAGING_WEB_URL'/);
   assert.doesNotMatch(stagingJob, /export NODE_ENV=development/);
 });
 
