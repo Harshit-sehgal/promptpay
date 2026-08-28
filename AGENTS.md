@@ -322,7 +322,9 @@ Attempting the migration found three layers:
    TypeScript version (7.0.2) does not expose the programmatic compiler API that
    the Nest CLI requires ... the compiler API is expected to return in 7.1."
 
-So #81 stays open and blocked until TypeScript 7.1. Recorded on the PR.
+At the time of this audit, #81 remained open and blocked until TypeScript 7.1;
+it was later closed as superseded after the compatible import-sort update was
+extracted into PR #98 above.
 
 ### Housekeeping
 
