@@ -310,15 +310,125 @@ test('staging boots the shipped artifacts under production Node semantics', () =
   assert.doesNotMatch(stagingJob, /export NODE_ENV=development/);
 });
 
+test('staging hands the API port from the legacy systemd unit to Compose safely', () => {
+  const stagingJob = releaseWorkflow.slice(
+    releaseWorkflow.indexOf('  staging-smoke:'),
+    releaseWorkflow.indexOf('  cleanup-staging-schema:'),
+  );
+  const capture = stagingJob.slice(
+    stagingJob.indexOf('name: Capture legacy staging service state'),
+    stagingJob.indexOf('name: Deploy exact staging image digests'),
+  );
+  const deploy = stagingJob.slice(stagingJob.indexOf('name: Deploy exact staging image digests'));
+  const restore = stagingJob.slice(
+    stagingJob.indexOf('name: Restore staging service ownership before deleting isolated schema'),
+    stagingJob.indexOf('name: Upload immutable staging smoke evidence'),
+  );
+  assert.match(capture, /systemctl list-unit-files --no-legend ateva-api\.service/);
+  assert.match(capture, /systemctl is-enabled --quiet ateva-api\.service/);
+  assert.match(capture, /systemctl is-active --quiet ateva-api\.service/);
+  assert.match(
+    deploy,
+    /COMPOSE='docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml'/,
+  );
+  assert.ok(deploy.includes('\\$COMPOSE config --quiet; \\$COMPOSE pull;'));
+  assert.match(deploy, /LEGACY_UNIT_EXISTS='\$LEGACY_UNIT_EXISTS'/);
+  assert.match(deploy, /LEGACY_UNIT_WAS_ENABLED='\$LEGACY_UNIT_ENABLED'/);
+  assert.match(deploy, /LEGACY_UNIT_WAS_ACTIVE='\$LEGACY_UNIT_ACTIVE'/);
+  assert.match(deploy, /sudo -n systemctl disable --now ateva-api\.service/);
+  assert.match(deploy, /docker rm -f ateva-api/);
+  assert.match(deploy, /\$COMPOSE up -d --wait/);
+  assert.match(deploy, /\$COMPOSE down --remove-orphans/);
+  assert.match(deploy, /sudo -n systemctl enable ateva-api\.service/);
+  assert.match(deploy, /sudo -n systemctl start ateva-api\.service/);
+  assert.match(restore, /if: always\(\) && steps\.staging-legacy-service\.outcome == 'success'/);
+  assert.match(
+    restore,
+    /docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml/,
+  );
+  assert.match(restore, /down --remove-orphans/);
+  assert.match(restore, /LEGACY_UNIT_ENABLED/);
+  assert.match(restore, /LEGACY_UNIT_ACTIVE/);
+  assert.match(stagingJob, /legacy_state_captured: \$\{\{ steps\.staging-legacy-service\.outcome/);
+  assert.match(stagingJob, /ownership_restored: \$\{\{ steps\.restore-staging-ownership\.outcome/);
+  const cleanupJob = releaseWorkflow.slice(
+    releaseWorkflow.indexOf('  cleanup-staging-schema:'),
+    releaseWorkflow.indexOf('  migrate-production:'),
+  );
+  assert.match(
+    cleanupJob,
+    /STAGING_LEGACY_STATE_CAPTURED: \$\{\{ needs\.staging-smoke\.outputs\.legacy_state_captured \}\}/,
+  );
+  assert.match(
+    cleanupJob,
+    /STAGING_OWNERSHIP_RESTORED: \$\{\{ needs\.staging-smoke\.outputs\.ownership_restored \}\}/,
+  );
+  assert.match(cleanupJob, /Refuse schema deletion after an incomplete service handoff/);
+  assert.match(
+    cleanupJob,
+    /env\.STAGING_LEGACY_STATE_CAPTURED == '1' && env\.STAGING_OWNERSHIP_RESTORED != '1'/,
+  );
+  assert.ok(
+    cleanupJob.indexOf('Refuse schema deletion') <
+      cleanupJob.indexOf('Destroy isolated staging schema'),
+  );
+});
+
+test('production promotion captures and restores legacy service ownership', () => {
+  const productionJob = releaseWorkflow.slice(releaseWorkflow.indexOf('  promote-production:'));
+  const capture = productionJob.slice(
+    productionJob.indexOf('name: Capture legacy production service state'),
+    productionJob.indexOf('name: Deploy staged API plus production-specific web image'),
+  );
+  const deploy = productionJob.slice(
+    productionJob.indexOf('name: Deploy staged API plus production-specific web image'),
+    productionJob.indexOf('name: Post-deploy canary'),
+  );
+  const rollback = productionJob.slice(
+    productionJob.indexOf('name: Rollback on canary failure'),
+    productionJob.indexOf('name: Restore legacy production service after failed first deployment'),
+  );
+  const restore = productionJob.slice(
+    productionJob.indexOf('name: Restore legacy production service after failed first deployment'),
+    productionJob.indexOf('name: Record unavailable rollback for failed first deployment'),
+  );
+  assert.match(capture, /systemctl list-unit-files --no-legend ateva-api\.service/);
+  assert.match(capture, /systemctl is-enabled --quiet ateva-api\.service/);
+  assert.match(capture, /systemctl is-active --quiet ateva-api\.service/);
+  assert.match(
+    deploy,
+    /COMPOSE='docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml'/,
+  );
+  assert.match(deploy, /LEGACY_UNIT_EXISTS='\$LEGACY_UNIT_EXISTS'/);
+  assert.match(deploy, /LEGACY_UNIT_WAS_ENABLED='\$LEGACY_UNIT_ENABLED'/);
+  assert.match(deploy, /LEGACY_UNIT_WAS_ACTIVE='\$LEGACY_UNIT_ACTIVE'/);
+  assert.match(deploy, /docker rm -f ateva-api/);
+  assert.match(deploy, /sudo -n systemctl disable --now ateva-api\.service/);
+  assert.match(deploy, /sudo -n systemctl enable ateva-api\.service/);
+  assert.match(deploy, /sudo -n systemctl start ateva-api\.service/);
+  assert.match(restore, /steps\.promote\.outputs\.rollback_available/);
+  assert.match(
+    restore,
+    /docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml/,
+  );
+  assert.match(restore, /down --remove-orphans/);
+  assert.match(restore, /sudo -n systemctl enable ateva-api\.service/);
+  assert.match(
+    rollback,
+    /docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml up -d --wait/,
+  );
+  assert.doesNotMatch(rollback, /systemctl disable/);
+});
+
 test('remote deployments cannot auto-load the development Compose override', () => {
   assert.doesNotMatch(releaseWorkflow, /docker compose (?:pull|up|ps)\b/);
   assert.match(
     releaseWorkflow,
-    /docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml up/,
+    /COMPOSE='docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml'/,
   );
   assert.match(
     releaseWorkflow,
-    /docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml up/,
+    /COMPOSE='docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml'/,
   );
 });
 

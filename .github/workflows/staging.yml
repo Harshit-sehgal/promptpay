@@ -114,6 +114,8 @@ jobs:
     outputs:
       api_digest: ${{ steps.staging-images.outputs.api_digest }}
       web_digest: ${{ steps.staging-images.outputs.web_digest }}
+      legacy_state_captured: ${{ steps.staging-legacy-service.outcome == 'success' && '1' || '0' }}
+      ownership_restored: ${{ steps.restore-staging-ownership.outcome == 'success' && '1' || '0' }}
     env:
       STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
@@ -244,6 +246,24 @@ jobs:
             test -n "$image" || { echo "Cannot sign an empty image digest" >&2; exit 1; }
             cosign sign --yes "$image"
           done
+      - name: Capture legacy staging service state
+        id: staging-legacy-service
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          KEY_FILE="$RUNNER_TEMP/staging_state_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/staging_state_known_hosts"
+          printf '%s\n' "$STAGING_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$STAGING_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          STATE=$(ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
+            "if systemctl list-unit-files --no-legend ateva-api.service 2>/dev/null | grep -q '^ateva-api.service'; then enabled=0; active=0; systemctl is-enabled --quiet ateva-api.service && enabled=1 || true; systemctl is-active --quiet ateva-api.service && active=1 || true; printf 'exists=1\\n'; printf 'enabled=%s\\n' \"\$enabled\"; printf 'active=%s\\n' \"\$active\"; else printf 'exists=0\\n'; printf 'enabled=0\\n'; printf 'active=0\\n'; fi")
+          printf '%s\n' "$STATE" >> "$GITHUB_OUTPUT"
+          echo "Captured legacy staging service state: $STATE"
       - name: Deploy exact staging image digests
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
@@ -260,6 +280,9 @@ jobs:
           STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
           API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
           WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+          LEGACY_UNIT_EXISTS: ${{ steps.staging-legacy-service.outputs.exists }}
+          LEGACY_UNIT_ENABLED: ${{ steps.staging-legacy-service.outputs.enabled }}
+          LEGACY_UNIT_ACTIVE: ${{ steps.staging-legacy-service.outputs.active }}
         run: |
           KEY_FILE="$RUNNER_TEMP/staging_deploy_key"
           KNOWN_HOSTS_FILE="$RUNNER_TEMP/staging_known_hosts"
@@ -273,7 +296,7 @@ jobs:
           ATTESTATION_VERSIONS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_VERSIONS" | base64 -w0)
           DATABASE_URL_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
           ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
-            "set -e; cd '$STAGING_DEPLOY_PATH'; test -f .env.staging; export ATEVA_API_IMAGE='$API_DIGEST'; export ATEVA_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export DIRECT_URL=\"\$DATABASE_URL\"; export NODE_ENV=production; export ATEVA_ENVIRONMENT_KIND=staging; export ATEVA_ENVIRONMENT_ID='staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; export NEXT_PUBLIC_API_URL='${STAGING_API_URL}/api/v1'; export NEXT_PUBLIC_WEB_URL='$STAGING_WEB_URL'; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=staging; export NEXT_PUBLIC_ALLOW_MOCK_AUTH=false; export ALLOW_MOCK_GOOGLE=false; export MOCK_GOOGLE_ENABLED=0; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml up -d --wait"
+            "set -e; cd '$STAGING_DEPLOY_PATH'; test -f .env.staging; export ATEVA_API_IMAGE='$API_DIGEST'; export ATEVA_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export DIRECT_URL=\"\$DATABASE_URL\"; export NODE_ENV=production; export ATEVA_ENVIRONMENT_KIND=staging; export ATEVA_ENVIRONMENT_ID='staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; export NEXT_PUBLIC_API_URL='${STAGING_API_URL}/api/v1'; export NEXT_PUBLIC_WEB_URL='$STAGING_WEB_URL'; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=staging; export NEXT_PUBLIC_ALLOW_MOCK_AUTH=false; export ALLOW_MOCK_GOOGLE=false; export MOCK_GOOGLE_ENABLED=0; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; COMPOSE='docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml'; LEGACY_UNIT_EXISTS='$LEGACY_UNIT_EXISTS'; LEGACY_UNIT_WAS_ENABLED='$LEGACY_UNIT_ENABLED'; LEGACY_UNIT_WAS_ACTIVE='$LEGACY_UNIT_ACTIVE'; \$COMPOSE config --quiet; \$COMPOSE pull; if [ \"\$LEGACY_UNIT_EXISTS\" = 1 ]; then sudo -n systemctl disable --now ateva-api.service; fi; docker rm -f ateva-api >/dev/null 2>&1 || true; if ! \$COMPOSE up -d --wait; then if [ \"\$LEGACY_UNIT_EXISTS\" = 1 ]; then \$COMPOSE down --remove-orphans >/dev/null 2>&1 || true; if [ \"\$LEGACY_UNIT_WAS_ENABLED\" = 1 ]; then sudo -n systemctl enable ateva-api.service; else sudo -n systemctl disable ateva-api.service; fi; if [ \"\$LEGACY_UNIT_WAS_ACTIVE\" = 1 ]; then sudo -n systemctl start ateva-api.service; else sudo -n systemctl stop ateva-api.service; fi; fi; exit 1; fi"
       - name: Run staging smoke test against the deployed digest
         run: node scripts/staging-smoke.mjs
         env:
@@ -287,6 +310,31 @@ jobs:
           STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
           STAGING_API_IMAGE_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
           STAGING_WEB_IMAGE_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+      - name: Restore staging service ownership before deleting isolated schema
+        id: restore-staging-ownership
+        if: always() && steps.staging-legacy-service.outcome == 'success'
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
+          API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
+          WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+          LEGACY_UNIT_EXISTS: ${{ steps.staging-legacy-service.outputs.exists }}
+          LEGACY_UNIT_ENABLED: ${{ steps.staging-legacy-service.outputs.enabled }}
+          LEGACY_UNIT_ACTIVE: ${{ steps.staging-legacy-service.outputs.active }}
+        run: |
+          KEY_FILE="$RUNNER_TEMP/staging_restore_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/staging_restore_known_hosts"
+          printf '%s\n' "$STAGING_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$STAGING_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
+            "set -e; cd '$STAGING_DEPLOY_PATH'; CLEANUP_STATUS=0; if [ -n '$API_DIGEST' ] && [ -n '$WEB_DIGEST' ]; then export ATEVA_API_IMAGE='$API_DIGEST'; export ATEVA_WEB_IMAGE='$WEB_DIGEST'; export NEXT_PUBLIC_API_URL='${STAGING_API_URL}/api/v1'; export NEXT_PUBLIC_WEB_URL='$STAGING_WEB_URL'; COMPOSE='docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml'; \$COMPOSE down --remove-orphans || CLEANUP_STATUS=\$?; fi; if [ '$LEGACY_UNIT_EXISTS' = 1 ]; then if [ '$LEGACY_UNIT_ENABLED' = 1 ]; then sudo -n systemctl enable ateva-api.service; else sudo -n systemctl disable ateva-api.service; fi; if [ '$LEGACY_UNIT_ACTIVE' = 1 ]; then sudo -n systemctl start ateva-api.service; else sudo -n systemctl stop ateva-api.service; fi; fi; exit \$CLEANUP_STATUS"
       - name: Upload immutable staging smoke evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -308,6 +356,8 @@ jobs:
     env:
       STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
+      STAGING_LEGACY_STATE_CAPTURED: ${{ needs.staging-smoke.outputs.legacy_state_captured }}
+      STAGING_OWNERSHIP_RESTORED: ${{ needs.staging-smoke.outputs.ownership_restored }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -318,6 +368,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Refuse schema deletion after an incomplete service handoff
+        if: env.STAGING_LEGACY_STATE_CAPTURED == '1' && env.STAGING_OWNERSHIP_RESTORED != '1'
+        run: |
+          echo "Staging service ownership was captured but not safely restored; refusing to delete the isolated schema." >&2
+          exit 1
       - name: Destroy isolated staging schema
         run: |
           if [ -z "$STAGING_DATABASE_SCHEMA" ]; then
@@ -462,6 +517,24 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
             "$PRODUCTION_WEB_DIGEST"
+      - name: Capture legacy production service state
+        id: production-legacy-service
+        env:
+          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PROD_USER: ${{ secrets.PRODUCTION_USER }}
+          PROD_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PRODUCTION_KNOWN_HOSTS }}
+        run: |
+          KEY_FILE="$RUNNER_TEMP/production_state_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/production_state_known_hosts"
+          printf '%s\n' "$PROD_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$PROD_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          STATE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "if systemctl list-unit-files --no-legend ateva-api.service 2>/dev/null | grep -q '^ateva-api.service'; then enabled=0; active=0; systemctl is-enabled --quiet ateva-api.service && enabled=1 || true; systemctl is-active --quiet ateva-api.service && active=1 || true; printf 'exists=1\\n'; printf 'enabled=%s\\n' \"\$enabled\"; printf 'active=%s\\n' \"\$active\"; else printf 'exists=0\\n'; printf 'enabled=0\\n'; printf 'active=0\\n'; fi")
+          printf '%s\n' "$STATE" >> "$GITHUB_OUTPUT"
+          echo "Captured legacy production service state: $STATE"
       - name: Deploy staged API plus production-specific web image
         id: promote
         env:
@@ -476,6 +549,9 @@ jobs:
           STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
           PRODUCTION_WEB_DIGEST: ${{ steps.production-web.outputs.digest }}
           INITIAL_PRODUCTION_DEPLOY: ${{ inputs.initial_production_deploy == true && '1' || '0' }}
+          LEGACY_UNIT_EXISTS: ${{ steps.production-legacy-service.outputs.exists }}
+          LEGACY_UNIT_ENABLED: ${{ steps.production-legacy-service.outputs.enabled }}
+          LEGACY_UNIT_ACTIVE: ${{ steps.production-legacy-service.outputs.active }}
         run: |
           SHA="$GITHUB_SHA"
           for required in REGISTRY REGISTRY_USER REGISTRY_PASS PROD_HOST PROD_USER PROD_DEPLOY_KEY PROD_KNOWN_HOSTS PROD_DEPLOY_PATH STAGING_API_DIGEST PRODUCTION_WEB_DIGEST; do
@@ -520,7 +596,7 @@ jobs:
           echo "previous_api_image=$PREVIOUS_API_IMAGE" >> "$GITHUB_OUTPUT"
           echo "previous_web_image=$PREVIOUS_WEB_IMAGE" >> "$GITHUB_OUTPUT"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export ATEVA_API_IMAGE='$STAGING_API_DIGEST'; export ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export ATEVA_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export ATEVA_API_IMAGE='$STAGING_API_DIGEST'; export ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export ATEVA_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; COMPOSE='docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml'; LEGACY_UNIT_EXISTS='$LEGACY_UNIT_EXISTS'; LEGACY_UNIT_WAS_ENABLED='$LEGACY_UNIT_ENABLED'; LEGACY_UNIT_WAS_ACTIVE='$LEGACY_UNIT_ACTIVE'; \$COMPOSE config --quiet; \$COMPOSE pull; if [ \"\$LEGACY_UNIT_EXISTS\" = 1 ]; then sudo -n systemctl disable --now ateva-api.service; fi; docker rm -f ateva-api >/dev/null 2>&1 || true; if ! \$COMPOSE up -d --wait; then if [ \"\$LEGACY_UNIT_EXISTS\" = 1 ]; then \$COMPOSE down --remove-orphans >/dev/null 2>&1 || true; if [ \"\$LEGACY_UNIT_WAS_ENABLED\" = 1 ]; then sudo -n systemctl enable ateva-api.service; else sudo -n systemctl disable ateva-api.service; fi; if [ \"\$LEGACY_UNIT_WAS_ACTIVE\" = 1 ]; then sudo -n systemctl start ateva-api.service; else sudo -n systemctl stop ateva-api.service; fi; fi; exit 1; fi"
 
           echo "=== Production image promotion complete ==="
           echo "Commit: ${SHA:0:12}"
@@ -623,6 +699,36 @@ jobs:
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export ATEVA_API_IMAGE='$PREVIOUS_API_IMAGE'; export ATEVA_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; export ATEVA_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
           echo "Rollback completed with the captured predecessor images."
+      - name: Restore legacy production service after failed first deployment
+        if: >-
+          failure() &&
+          steps.promote.outputs.rollback_available != 'true' &&
+          steps.production-legacy-service.outcome == 'success' &&
+          steps.production-legacy-service.outputs.exists == '1' &&
+          (steps.production-legacy-service.outputs.active == '1' ||
+          steps.production-legacy-service.outputs.enabled == '1')
+        env:
+          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PROD_USER: ${{ secrets.PRODUCTION_USER }}
+          PROD_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PRODUCTION_KNOWN_HOSTS }}
+          PROD_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+          PRODUCTION_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
+          STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
+          PRODUCTION_WEB_DIGEST: ${{ steps.production-web.outputs.digest }}
+          LEGACY_UNIT_EXISTS: ${{ steps.production-legacy-service.outputs.exists }}
+          LEGACY_UNIT_ENABLED: ${{ steps.production-legacy-service.outputs.enabled }}
+          LEGACY_UNIT_ACTIVE: ${{ steps.production-legacy-service.outputs.active }}
+        run: |
+          KEY_FILE="$RUNNER_TEMP/production_restore_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/production_restore_known_hosts"
+          printf '%s\n' "$PROD_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$PROD_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "set -e; cd '$PROD_DEPLOY_PATH'; CLEANUP_STATUS=0; if [ -n '$STAGING_API_DIGEST' ] && [ -n '$PRODUCTION_WEB_DIGEST' ]; then export ATEVA_API_IMAGE='$STAGING_API_DIGEST'; export ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export NEXT_PUBLIC_API_URL='$PRODUCTION_API_URL'; export NEXT_PUBLIC_WEB_URL='$PRODUCTION_WEB_URL'; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml down --remove-orphans || CLEANUP_STATUS=\$?; fi; if [ '$LEGACY_UNIT_EXISTS' = 1 ]; then if [ '$LEGACY_UNIT_ENABLED' = 1 ]; then sudo -n systemctl enable ateva-api.service; else sudo -n systemctl disable ateva-api.service; fi; if [ '$LEGACY_UNIT_ACTIVE' = 1 ]; then sudo -n systemctl start ateva-api.service; else sudo -n systemctl stop ateva-api.service; fi; fi; exit \$CLEANUP_STATUS"
       - name: Record unavailable rollback for failed first deployment
         if: failure() && inputs.initial_production_deploy == true && steps.promote.outputs.rollback_available != 'true'
         run: |
