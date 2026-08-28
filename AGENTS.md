@@ -120,6 +120,27 @@ replacement CI run
 passed all 13 repository jobs, including Docker-build, full tests, security,
 and both E2E suites.
 
+## Resolved 2026-08-28 — the compatible dependency update was split from the blocked major bundle
+
+Dependabot PR #81 grouped four major updates that could not be merged as one
+change: TypeScript 7.0.2 does not expose the compiler API required by the
+Nest CLI, Chalk 6 is incompatible with the CLI's current CommonJS/module
+resolution path, and jsdom 30 needs a separate runtime-compatibility review.
+
+The compatible `eslint-plugin-simple-import-sort` 14.0.0 update was extracted
+into [PR #98](https://github.com/Harshit-sehgal/promptpay/pull/98), with only
+the ESLint package manifest and the corresponding lockfile entries changed.
+It passed the full required PR matrix and was squashed into `main` as
+`9fe7bc0` on 2026-08-28. The post-merge
+[main CI run](https://github.com/Harshit-sehgal/promptpay/actions/runs/33132230182)
+then passed all 13 repository jobs, including full tests, both E2E suites,
+Docker-build, security, backup/restore, and production boot smoke.
+
+PR #81 is now closed as superseded/blocked. The remaining TypeScript, Chalk,
+and jsdom upgrades stay at their known-compatible versions until their
+upstream/toolchain constraints can be resolved; no known-broken dependency
+was forced into `main`.
+
 ## Resolved 2026-08-26 — Google OAuth client ID has one runtime authority
 
 The web login and signup flows discover the Google client ID through the
@@ -301,7 +322,9 @@ Attempting the migration found three layers:
    TypeScript version (7.0.2) does not expose the programmatic compiler API that
    the Nest CLI requires ... the compiler API is expected to return in 7.1."
 
-So #81 stays open and blocked until TypeScript 7.1. Recorded on the PR.
+At the time of this audit, #81 remained open and blocked until TypeScript 7.1;
+it was later closed as superseded after the compatible import-sort update was
+extracted into PR #98 above.
 
 ### Housekeeping
 
