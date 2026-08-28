@@ -46,17 +46,23 @@ in the request path. Funnel talks to 4002 directly.
 The current private-beta process is still the legacy API-only
 `ateva-api.service` shown in the table above. The staging release workflow uses
 the standalone image-only Compose file and deploys both immutable API and web
-digests. Its remote deploy step therefore performs a one-time ownership
-handoff:
+digests. Its remote deploy step therefore performs a temporary ownership
+handoff for the smoke window:
 
 1. Validate the Compose file and pull both digests while the legacy API is
    still serving traffic.
-2. If `ateva-api.service` exists, disable and stop it with non-interactive
-   `sudo`, then remove its `ateva-api` container so port 4002 is free.
+2. Capture whether `ateva-api.service` was enabled and active. If it exists,
+   disable and stop it with non-interactive `sudo`, then remove its
+   `ateva-api` container so port 4002 is free.
 3. Start the Compose project with `up -d --wait`.
 4. If Compose fails after the handoff, tear down the partial project and
-   re-enable the legacy unit. A successful handoff leaves Compose's
-   `restart: unless-stopped` policy responsible for reboot recovery.
+   restore the exact captured legacy enabled/active state. After the smoke
+   test, the workflow tears Compose down and restores that state before it
+   destroys the run-specific database schema. This prevents a persistent
+   Compose container from retaining a database URL whose schema has just been
+   deleted. During the smoke window Compose's `restart: unless-stopped`
+   policy is responsible for reboot recovery; production keeps Compose
+   persistent after promotion.
 
 This guard is needed because systemd and Compose cannot own the same port at
 the same time. The workflow checks and pulls before stopping the old service,

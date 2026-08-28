@@ -41,12 +41,15 @@ contains no separate web Google client ID requirement; the API remains the
 runtime OAuth authority.
 
 The staging deploy also handles the host's pre-existing API-only systemd unit:
-it validates and pulls both immutable images first, disables and stops
-`ateva-api.service` only when that unit exists, frees its `ateva-api` container,
-and then starts the Compose project. If the handoff fails, it tears down the
-partial Compose project and re-enables the legacy unit. A successful handoff
-leaves Compose's restart policy responsible for reboot recovery, so the two
-owners cannot race for port 4002.
+it captures its enabled/active state, validates and pulls both immutable images
+first, disables and stops `ateva-api.service` only when that unit exists, frees
+its `ateva-api` container, and then starts the Compose project. If the handoff
+fails, it tears down the partial Compose project and restores the exact legacy
+state. After staging smoke, it tears Compose down and restores that state
+before the isolated schema cleanup; the cleanup job refuses to delete the
+schema if that ownership restoration was not confirmed. Production keeps
+Compose persistent after promotion and has a matching first-deploy recovery
+step, so the two owners cannot race for port 4002.
 
 Verification: `docker compose ... config --quiet` passed on the OCI host with
 the current staging images and public URL overrides; `ateva-api.service` is
