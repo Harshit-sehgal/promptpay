@@ -6,15 +6,15 @@ setup, which failed for a reason no log made obvious.
 
 ## What serves the API
 
-|              |                                                     |
-| ------------ | --------------------------------------------------- |
-| Host         | `vnic1` — OCI, Ubuntu 22.04, **956 MB RAM**, 2 vCPU |
-| Tailscale IP | `100.111.181.4`                                     |
-| SSH          | `ssh -i ~/.ssh/server_key ubuntu@100.111.181.4`     |
-| Public URL   | `https://vnic1.tail76eb88.ts.net`                   |
-| Service      | `ateva-api.service` (systemd, Docker)               |
-| Image        | `ateva-api:main`                                    |
-| Env          | `/home/ubuntu/promptpay/.env.production`, mode 600  |
+|              |                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| Host         | `vnic1` — OCI, Ubuntu 22.04, **956 MB RAM**, 2 vCPU                                      |
+| Tailscale IP | `100.111.181.4`                                                                          |
+| SSH          | `ssh -i ~/.ssh/server_key ubuntu@100.111.181.4`                                          |
+| Public URL   | `https://vnic1.tail76eb88.ts.net`                                                        |
+| Service      | `ateva-api.service` until the first Compose release; then the image-only Compose project |
+| Image        | `ateva-api:main` before handoff; immutable release digest after handoff                  |
+| Env          | `/home/ubuntu/promptpay/.env.production`, mode 600                                       |
 
 ## Current operating decision (2026-08-27)
 
@@ -40,6 +40,30 @@ before assuming a Funnel problem is a Funnel problem.
 
 The nginx vhost on port 80 is a leftover from the previous attempt and is not
 in the request path. Funnel talks to 4002 directly.
+
+## Release ownership handoff (2026-08-28)
+
+The current private-beta process is still the legacy API-only
+`ateva-api.service` shown in the table above. The staging release workflow uses
+the standalone image-only Compose file and deploys both immutable API and web
+digests. Its remote deploy step therefore performs a one-time ownership
+handoff:
+
+1. Validate the Compose file and pull both digests while the legacy API is
+   still serving traffic.
+2. If `ateva-api.service` exists, disable and stop it with non-interactive
+   `sudo`, then remove its `ateva-api` container so port 4002 is free.
+3. Start the Compose project with `up -d --wait`.
+4. If Compose fails after the handoff, tear down the partial project and
+   re-enable the legacy unit. A successful handoff leaves Compose's
+   `restart: unless-stopped` policy responsible for reboot recovery.
+
+This guard is needed because systemd and Compose cannot own the same port at
+the same time. The workflow checks and pulls before stopping the old service,
+and the current host remains on the legacy service until a release has all of
+its isolated database, JWT, attestation, and registry inputs. After a
+successful Compose release, do not manually start `ateva-api.service`; use
+the image-only Compose file for deploys and rollbacks.
 
 ## Building the image
 

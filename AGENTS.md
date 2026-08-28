@@ -40,12 +40,25 @@ the corresponding public build settings. The current image Compose template
 contains no separate web Google client ID requirement; the API remains the
 runtime OAuth authority.
 
+The staging deploy also handles the host's pre-existing API-only systemd unit:
+it validates and pulls both immutable images first, disables and stops
+`ateva-api.service` only when that unit exists, frees its `ateva-api` container,
+and then starts the Compose project. If the handoff fails, it tears down the
+partial Compose project and re-enables the legacy unit. A successful handoff
+leaves Compose's restart policy responsible for reboot recovery, so the two
+owners cannot race for port 4002.
+
 Verification: `docker compose ... config --quiet` passed on the OCI host with
 the current staging images and public URL overrides; `ateva-api.service` is
 enabled and active, the `ateva-api` container is healthy, and the public
 platform-health route returns 200. The repository-side fix was merged as PR
 `#101`; its full CI matrix passed, including Docker build, container soak,
 browser E2E, full tests, coverage, security, and audit claims.
+
+The ownership-handoff contract is covered by the release-input tests. The
+live host intentionally remains on the legacy unit until the first approved
+staging release supplies the isolated database, JWT, attestation, and registry
+inputs below; no live service was stopped by this repository change.
 
 This does not claim a runnable staging release: the isolated staging database,
 staging JWT pair, independent attestation provider/bridge values, and the

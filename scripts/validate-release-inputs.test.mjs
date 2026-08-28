@@ -310,15 +310,54 @@ test('staging boots the shipped artifacts under production Node semantics', () =
   assert.doesNotMatch(stagingJob, /export NODE_ENV=development/);
 });
 
+test('staging hands the API port from the legacy systemd unit to Compose safely', () => {
+  const stagingJob = releaseWorkflow.slice(
+    releaseWorkflow.indexOf('  staging-smoke:'),
+    releaseWorkflow.indexOf('  cleanup-staging-schema:'),
+  );
+  const deploy = stagingJob.slice(stagingJob.indexOf('name: Deploy exact staging image digests'));
+  assert.match(
+    deploy,
+    /COMPOSE='docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml'/,
+  );
+  assert.ok(deploy.includes('\\$COMPOSE config --quiet; \\$COMPOSE pull;'));
+  assert.match(deploy, /systemctl list-unit-files --no-legend ateva-api\.service/);
+  assert.match(deploy, /sudo -n systemctl disable --now ateva-api\.service/);
+  assert.match(deploy, /docker rm -f ateva-api/);
+  assert.match(deploy, /\$COMPOSE up -d --wait/);
+  assert.match(deploy, /\$COMPOSE down --remove-orphans/);
+  assert.match(deploy, /sudo -n systemctl enable --now ateva-api\.service/);
+});
+
+test('production promotion and rollback use the same legacy-service handoff', () => {
+  const productionJob = releaseWorkflow.slice(releaseWorkflow.indexOf('  promote-production:'));
+  const deploy = productionJob.slice(
+    productionJob.indexOf('name: Deploy staged API plus production-specific web image'),
+    productionJob.indexOf('name: Post-deploy canary'),
+  );
+  const rollback = productionJob.slice(productionJob.indexOf('name: Rollback on canary failure'));
+  for (const section of [deploy, rollback]) {
+    assert.match(
+      section,
+      /COMPOSE='docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml'/,
+    );
+    assert.match(section, /systemctl list-unit-files --no-legend ateva-api\.service/);
+    assert.match(section, /docker rm -f ateva-api/);
+  }
+  assert.match(deploy, /sudo -n systemctl disable --now ateva-api\.service/);
+  assert.match(deploy, /sudo -n systemctl enable --now ateva-api\.service/);
+  assert.match(rollback, /\$COMPOSE up -d --wait/);
+});
+
 test('remote deployments cannot auto-load the development Compose override', () => {
   assert.doesNotMatch(releaseWorkflow, /docker compose (?:pull|up|ps)\b/);
   assert.match(
     releaseWorkflow,
-    /docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml up/,
+    /COMPOSE='docker compose --env-file \.env\.staging -f docs\/ops\/docker-compose\.images\.example\.yml'/,
   );
   assert.match(
     releaseWorkflow,
-    /docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml up/,
+    /COMPOSE='docker compose --env-file \.env\.production -f docs\/ops\/docker-compose\.images\.example\.yml'/,
   );
 });
 
