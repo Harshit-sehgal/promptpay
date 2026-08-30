@@ -1,6 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
 import { PrismaService } from '../config/prisma.service';
+import {
+  AttentionShadowFactCron,
+  type AttentionShadowFactJobStatus,
+} from './attention-shadow-fact.cron';
 
 export type AttentionShadowAdminSnapshot = {
   generatedAt: string;
@@ -30,45 +34,66 @@ export type AttentionShadowAdminSnapshot = {
     assignmentCount: number;
     outcomeCount: number;
   }[];
+  materializer: AttentionShadowFactJobStatus & {
+    pendingSessions: number;
+  };
   financialSideEffects: false;
 };
 
 /** Read-only shadow observability plus explicit operator freeze controls. */
 @Injectable()
 export class AttentionShadowAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly factCron?: AttentionShadowFactCron,
+  ) {}
 
   async snapshot(): Promise<AttentionShadowAdminSnapshot> {
-    const [facts, unverified, verified, unknownRisk, policies, models, experiments] =
-      await Promise.all([
-        this.prisma.attentionSessionFact.count(),
-        this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'unverified' } }),
-        this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'verified' } }),
-        this.prisma.attentionSessionFact.count({ where: { fraudRiskStatus: 'unknown' } }),
-        this.prisma.attentionPricingPolicy.findMany({
-          orderBy: { version: 'desc' },
-          select: { version: true, status: true, effectiveAt: true, retiredAt: true },
-        }),
-        this.prisma.attentionModelArtifact.findMany({
-          orderBy: { trainedAt: 'desc' },
-          select: {
-            modelId: true,
-            modelVersion: true,
-            modelFamily: true,
-            status: true,
-            artifactDigest: true,
-          },
-        }),
-        this.prisma.attentionExperiment.findMany({
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            status: true,
-            assignmentUnit: true,
-            _count: { select: { assignments: true, outcomes: true } },
-          },
-        }),
-      ]);
+    const [
+      facts,
+      unverified,
+      verified,
+      unknownRisk,
+      pendingSessions,
+      policies,
+      models,
+      experiments,
+    ] = await Promise.all([
+      this.prisma.attentionSessionFact.count(),
+      this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'unverified' } }),
+      this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'verified' } }),
+      this.prisma.attentionSessionFact.count({ where: { fraudRiskStatus: 'unknown' } }),
+      this.prisma.agentSession.count({
+        where: {
+          status: { in: ['ended', 'abandoned'] },
+          endedAt: { not: null },
+          shadowFact: null,
+        },
+      }),
+      this.prisma.attentionPricingPolicy.findMany({
+        orderBy: { version: 'desc' },
+        select: { version: true, status: true, effectiveAt: true, retiredAt: true },
+      }),
+      this.prisma.attentionModelArtifact.findMany({
+        orderBy: { trainedAt: 'desc' },
+        select: {
+          modelId: true,
+          modelVersion: true,
+          modelFamily: true,
+          status: true,
+          artifactDigest: true,
+        },
+      }),
+      this.prisma.attentionExperiment.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          assignmentUnit: true,
+          _count: { select: { assignments: true, outcomes: true } },
+        },
+      }),
+    ]);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -93,6 +118,10 @@ export class AttentionShadowAdminService {
         assignmentCount: experiment._count.assignments,
         outcomeCount: experiment._count.outcomes,
       })),
+      materializer: {
+        ...(this.factCron?.getStatus() ?? emptyFactJobStatus()),
+        pendingSessions,
+      },
       financialSideEffects: false,
     };
   }
@@ -159,4 +188,17 @@ function assertOperatorReason(operatorId: string, reason?: string): void {
   if (reason !== undefined && (reason.length === 0 || reason.length > 500)) {
     throw new Error('freeze reason must be bounded when supplied');
   }
+}
+
+function emptyFactJobStatus(): AttentionShadowFactJobStatus {
+  return {
+    configured: false,
+    enabled: false,
+    running: false,
+    lastRunStatus: 'never',
+    lastStartedAt: null,
+    lastCompletedAt: null,
+    lastFailureAt: null,
+    lastResult: null,
+  };
 }
