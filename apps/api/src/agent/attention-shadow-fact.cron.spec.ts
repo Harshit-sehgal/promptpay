@@ -75,10 +75,8 @@ describe('AttentionShadowFactCron', () => {
       persist: vi.fn().mockResolvedValue({ status: 'created' }),
     };
 
-    const result = await new AttentionShadowFactCron(
-      prisma as never,
-      facts as never,
-    ).tick();
+    const cron = new AttentionShadowFactCron(prisma as never, facts as never);
+    const result = await cron.tick();
 
     expect(result).toMatchObject({
       scanned: 1,
@@ -89,5 +87,12 @@ describe('AttentionShadowFactCron', () => {
       financialSideEffects: false,
     });
     expect(facts.persist).toHaveBeenCalledWith('session-new', expect.anything());
+    expect(cron.getStatus()).toMatchObject({
+      configured: true,
+      enabled: false,
+      running: false,
+      lastRunStatus: 'completed',
+      lastResult: result,
+    });
   });
 });

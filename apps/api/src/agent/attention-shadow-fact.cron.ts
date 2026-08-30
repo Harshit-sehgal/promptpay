@@ -23,6 +23,17 @@ export type AttentionShadowFactRunResult = {
   financialSideEffects: false;
 };
 
+export type AttentionShadowFactJobStatus = {
+  configured: boolean;
+  enabled: boolean;
+  running: boolean;
+  lastRunStatus: 'never' | 'running' | 'completed' | 'failed';
+  lastStartedAt: string | null;
+  lastCompletedAt: string | null;
+  lastFailureAt: string | null;
+  lastResult: AttentionShadowFactRunResult | null;
+};
+
 /**
  * Materializes completed, policy-bound agent sessions into immutable shadow
  * facts. It is intentionally opt-in: without an operator-managed
@@ -38,6 +49,12 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
   );
   private intervalId?: NodeJS.Timeout;
   private running = false;
+  private enabled = false;
+  private lastRunStatus: AttentionShadowFactJobStatus['lastRunStatus'] = 'never';
+  private lastStartedAt: string | null = null;
+  private lastCompletedAt: string | null = null;
+  private lastFailureAt: string | null = null;
+  private lastResult: AttentionShadowFactRunResult | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -50,6 +67,7 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
       this.logger.warn('Shadow fact materialization disabled: pseudonym key is not configured');
       return;
     }
+    this.enabled = true;
     void this.tick().catch((error: unknown) => {
       this.logger.error('Initial shadow fact materialization failed', error);
     });
@@ -62,6 +80,20 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
 
   onModuleDestroy(): void {
     if (this.intervalId) clearInterval(this.intervalId);
+    this.enabled = false;
+  }
+
+  getStatus(): AttentionShadowFactJobStatus {
+    return {
+      configured: Boolean(process.env.ATTENTION_SHADOW_PSEUDONYM_KEY?.trim()),
+      enabled: this.enabled,
+      running: this.running,
+      lastRunStatus: this.lastRunStatus,
+      lastStartedAt: this.lastStartedAt,
+      lastCompletedAt: this.lastCompletedAt,
+      lastFailureAt: this.lastFailureAt,
+      lastResult: this.lastResult ? { ...this.lastResult } : null,
+    };
   }
 
   async tick(): Promise<AttentionShadowFactRunResult> {
@@ -70,6 +102,8 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
     if (!pseudonymKey) return emptyResult();
 
     this.running = true;
+    this.lastRunStatus = 'running';
+    this.lastStartedAt = new Date().toISOString();
     const result = emptyResult();
     try {
       const sessions = await this.prisma.agentSession.findMany({
@@ -179,7 +213,16 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
           );
         }
       }
+      this.lastRunStatus = 'completed';
+      this.lastCompletedAt = new Date().toISOString();
+      this.lastResult = { ...result };
       return result;
+    } catch (error: unknown) {
+      this.lastRunStatus = 'failed';
+      this.lastFailureAt = new Date().toISOString();
+      this.lastCompletedAt = this.lastFailureAt;
+      this.lastResult = null;
+      throw error;
     } finally {
       this.running = false;
     }
