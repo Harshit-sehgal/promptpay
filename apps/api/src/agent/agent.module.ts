@@ -9,6 +9,7 @@ import { AttentionExperimentService } from './attention-experiment.service';
 import { AttentionModelArtifactService } from './attention-model-artifact.service';
 import { AttentionPolicyService } from './attention-policy.service';
 import { AttentionShadowAdminService } from './attention-shadow-admin.service';
+import { AttentionShadowDatasetService } from './attention-shadow-dataset.service';
 import { AttentionShadowFactCron } from './attention-shadow-fact.cron';
 import { AttentionShadowFactService } from './attention-shadow-fact.service';
 import { AttentionShadowOutcomeService } from './attention-shadow-outcome.service';
@@ -19,6 +20,7 @@ import { AttentionShadowOutcomeService } from './attention-shadow-outcome.servic
     AgentService,
     AgentShadowAggregationService,
     AttentionShadowFactService,
+    AttentionShadowDatasetService,
     AttentionShadowFactCron,
     AttentionExperimentService,
     AttentionModelArtifactService,
@@ -28,6 +30,6 @@ import { AttentionShadowOutcomeService } from './attention-shadow-outcome.servic
     AgentSessionReconciliationCron,
     AdOpportunityExpiryCron,
   ],
-  exports: [AttentionShadowAdminService],
+  exports: [AttentionShadowAdminService, AttentionShadowDatasetService],
 })
 export class AgentModule {}
