@@ -76,6 +76,12 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
         where: {
           status: { in: ['ended', 'abandoned'] },
           endedAt: { not: null },
+          // Do not spend the bounded batch on sessions that have already been
+          // materialized. The per-session idempotency check below remains a
+          // race-safe fallback, but it must not be the normal way a completed
+          // fact is discovered: otherwise the oldest 100 sessions can be
+          // selected forever and newer sessions never reach the dataset.
+          shadowFact: null,
         },
         orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
         take: 100,
