@@ -186,19 +186,20 @@ Payments are fail-closed stubs and cannot be enabled by configuration alone.
 
 ## Cron intervals (ms)
 
-| Variable                           | Req | Default    | Purpose                                   |
-| ---------------------------------- | --- | ---------- | ----------------------------------------- |
-| `PAYOUT_POLL_INTERVAL_MS`          | opt | `600000`   | Payout provider poll loop (min 60000).    |
-| `PAYOUT_POLL_BATCH_SIZE`           | opt | `100`      | Payouts processed per poll (1-500).       |
-| `RETENTION_CRON_INTERVAL_MS`       | opt | `86400000` | Data-retention sweep (min 3600000).       |
-| `LEDGER_MATURATION_INTERVAL_MS`    | opt | `600000`   | Ledger maturation job (min 60000).        |
-| `LEDGER_MATURATION_BATCH_SIZE`     | opt | `500`      | Entries processed per maturation batch.   |
-| `LEDGER_MATURATION_RUN_CAP`        | opt | `5000`     | Maximum entries processed per run.        |
-| `WEBHOOK_RECLAIM_CRON`             | opt | —          | May not be `false` in production.         |
-| `WEBHOOK_RECLAIM_CRON_INTERVAL_MS` | opt | `300000`   | Stale webhook reclaim interval.           |
-| `WEBHOOK_RECLAIM_CRON_AGE_MS`      | opt | `2100000`  | Minimum webhook age before reclaim.       |
-| `WEBHOOK_RECLAIM_CRON_BATCH_SIZE`  | opt | `100`      | Webhooks reclaimed per batch.             |
-| `PROVIDER_CALL_TIMEOUT_MS`         | opt | `15000`    | Per-call external PSP timeout (min 1000). |
+| Variable                            | Req | Default    | Purpose                                   |
+| ----------------------------------- | --- | ---------- | ----------------------------------------- |
+| `PAYOUT_POLL_INTERVAL_MS`           | opt | `600000`   | Payout provider poll loop (min 60000).    |
+| `PAYOUT_POLL_BATCH_SIZE`            | opt | `100`      | Payouts processed per poll (1-500).       |
+| `RETENTION_CRON_INTERVAL_MS`        | opt | `86400000` | Data-retention sweep (min 3600000).       |
+| `LEDGER_MATURATION_INTERVAL_MS`     | opt | `600000`   | Ledger maturation job (min 60000).        |
+| `ATTENTION_SHADOW_FACT_INTERVAL_MS` | opt | `900000`   | Shadow fact materialization (min 60000).  |
+| `LEDGER_MATURATION_BATCH_SIZE`      | opt | `500`      | Entries processed per maturation batch.   |
+| `LEDGER_MATURATION_RUN_CAP`         | opt | `5000`     | Maximum entries processed per run.        |
+| `WEBHOOK_RECLAIM_CRON`              | opt | —          | May not be `false` in production.         |
+| `WEBHOOK_RECLAIM_CRON_INTERVAL_MS`  | opt | `300000`   | Stale webhook reclaim interval.           |
+| `WEBHOOK_RECLAIM_CRON_AGE_MS`       | opt | `2100000`  | Minimum webhook age before reclaim.       |
+| `WEBHOOK_RECLAIM_CRON_BATCH_SIZE`   | opt | `100`      | Webhooks reclaimed per batch.             |
+| `PROVIDER_CALL_TIMEOUT_MS`          | opt | `15000`    | Per-call external PSP timeout (min 1000). |
 
 ## Privacy and OAuth verification
 
