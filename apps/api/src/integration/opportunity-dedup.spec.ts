@@ -471,7 +471,7 @@ describe('Sandbox opportunity dedup matrix (real app, real DB)', () => {
       idempotencyKey: 'key-cap-2',
     });
     expect(served(second)).toBeNull();
-    expect(second.body.reason).toBe('no_sandbox_placement');
+    expect(second.body.reason).toBe('account_attention_cap_reached');
     expect(await claimedRows('key-cap-2')).toBe(0);
   });
 
