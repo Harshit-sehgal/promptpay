@@ -469,12 +469,36 @@ export function normalizeFixture(fixture: ProviderFixture): SanitizedHookPayload
   return sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload);
 }
 
+export {
+  assignShadowPolicyToSession,
+  ATTENTION_PPM_SCALE,
+  type AttentionPolicyStatus,
+  attentionPolicyStatusSchema,
+  type AttentionState,
+  attentionStateSchema,
+  evaluateShadowAttention,
+  type ShadowAttentionMeasurement,
+  shadowAttentionMeasurementSchema,
+  type ShadowAttentionPolicy,
+  shadowAttentionPolicySchema,
+  type ShadowPolicyRecord,
+  shadowPolicyRecordSchema,
+  type ShadowSessionPolicyAssignment,
+} from './attention-contract';
 export type { GoldenAgentFixture } from './golden-fixtures';
 export {
   AGENT_GOLDEN_FIXTURES,
   goldenFixtureProviders,
   loadGoldenAgentFixtures,
 } from './golden-fixtures';
+export {
+  type AttentionExperimentAssignment,
+  attentionExperimentAssignmentSchema,
+  type AttentionExperimentStatus,
+  attentionExperimentStatusSchema,
+  type AttentionModelArtifact,
+  attentionModelArtifactSchema,
+} from './model-contract';
 
 export function scanForbiddenAgentFields(value: unknown): string[] {
   const found = new Set<string>();

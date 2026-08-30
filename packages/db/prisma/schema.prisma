@@ -192,6 +192,43 @@ enum RecoveryDebtCaseStatus {
   closed
 }
 
+enum AttentionPolicyStatus {
+  draft
+  shadow
+  experiment
+  canary
+  active
+  retired
+  revoked
+}
+
+enum AttentionExperimentStatus {
+  draft
+  running
+  paused
+  completed
+}
+
+enum AttentionExperimentEligibility {
+  eligible
+  ineligible
+}
+
+enum AttentionModelStatus {
+  candidate
+  shadow
+  approved
+  retired
+  revoked
+}
+
+enum AttentionModelFamily {
+  advertiser_outcome
+  advertiser_retention
+  user_retention
+  cost
+}
+
 // ══════════════════════════════════════════════════════════
 // User & Identity
 // ══════════════════════════════════════════════════════════
@@ -680,6 +717,103 @@ model WaitStateEvent {
 // Environment identity is persisted in the database so a deployment cannot
 // silently point a sandbox API at a production-marked database (or reuse a
 // prior run's sandbox database with a different tenant identity).
+// Versioned adaptive-attention policy metadata. This is telemetry/shadow
+// configuration only until the separately gated Wave 6 settlement work is
+// approved. It intentionally has no relation to ledgers, campaigns, payouts,
+// or money switches.
+model AttentionPricingPolicy {
+  id                    String              @id @default(uuid())
+  version               Int                 @unique
+  status                AttentionPolicyStatus
+  alphaPpm              BigInt              @map("alpha_ppm")
+  passiveCapRatioPpm    BigInt              @map("passive_cap_ratio_ppm")
+  passiveSessionCapMs   Int                 @map("passive_session_cap_ms")
+  minimumQualifiedMs    Int                 @map("minimum_qualified_ms")
+  effectiveAt           DateTime            @map("effective_at") @db.Timestamptz
+  retiredAt             DateTime?           @map("retired_at") @db.Timestamptz
+  parentPolicyId        String?             @map("parent_policy_id")
+  optimizerModelVersion String?             @map("optimizer_model_version")
+  trainingWindow        String?             @map("training_window")
+  experimentId          String?             @map("experiment_id")
+  policyDigest          String              @map("policy_digest")
+  createdBy             String?             @map("created_by")
+  approvedBy            String?             @map("approved_by")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  sessionAssignments AttentionSessionPolicyAssignment[]
+
+  @@index([status, effectiveAt])
+  @@index([parentPolicyId])
+  @@map("attention_pricing_policies")
+}
+
+// A session receives one policy version at creation. This record is additive
+// and non-financial: it preserves reproducibility for telemetry/shadow
+// calculations without authorizing charges, rewards, or settlement.
+model AttentionSessionPolicyAssignment {
+  id                 String                 @id @default(uuid())
+  sessionId          String                 @unique @map("session_id")
+  policyId           String                 @map("policy_id")
+  policy             AttentionPricingPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  assignedAt         DateTime               @default(now()) @map("assigned_at") @db.Timestamptz
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([policyId, assignedAt])
+  @@map("attention_session_policy_assignments")
+}
+
+model AttentionExperiment {
+  id          String                   @id @default(uuid())
+  status      AttentionExperimentStatus
+  name        String
+  description String?
+  startedAt   DateTime?                @map("started_at") @db.Timestamptz
+  endedAt     DateTime?                @map("ended_at") @db.Timestamptz
+  createdAt   DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+
+  assignments AttentionExperimentAssignment[]
+
+  @@index([status, startedAt])
+  @@map("attention_experiments")
+}
+
+model AttentionExperimentAssignment {
+  id            String                       @id @default(uuid())
+  experimentId  String                       @map("experiment_id")
+  experiment    AttentionExperiment          @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  subjectKey    String                       @map("subject_key")
+  variant       String
+  policyVersion Int                          @map("policy_version")
+  eligibility   AttentionExperimentEligibility
+  assignedAt    DateTime                     @default(now()) @map("assigned_at") @db.Timestamptz
+  createdAt     DateTime                     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([experimentId, subjectKey])
+  @@index([experimentId, variant])
+  @@map("attention_experiment_assignments")
+}
+
+model AttentionModelArtifact {
+  id                String              @id @default(uuid())
+  modelId           String              @map("model_id")
+  modelVersion      String              @map("model_version")
+  modelFamily       AttentionModelFamily @map("model_family")
+  datasetDigest     String              @map("dataset_digest")
+  featureNames      String[]            @map("feature_names")
+  trainWindowStart  DateTime            @map("train_window_start") @db.Timestamptz
+  trainWindowEnd    DateTime            @map("train_window_end") @db.Timestamptz
+  validationStart   DateTime            @map("validation_start") @db.Timestamptz
+  validationEnd     DateTime            @map("validation_end") @db.Timestamptz
+  trainedAt         DateTime            @map("trained_at") @db.Timestamptz
+  artifactDigest    String              @map("artifact_digest")
+  status            AttentionModelStatus
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([modelId, modelVersion])
+  @@index([modelFamily, status, trainedAt])
+  @@map("attention_model_artifacts")
+}
+
 model EnvironmentMarker {
   id              Int      @id @default(1)
   environmentKind String   @map("environment_kind")
