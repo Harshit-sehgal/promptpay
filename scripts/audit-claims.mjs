@@ -190,6 +190,56 @@ check(
   staleDomainFiles.length === 0,
 );
 
+// The canonical agent metadata is enforced in TypeScript by
+// `canonicalAgentMetadataSchema` (strict, allowlist-copied), but the column it
+// lands in is a Prisma `Json`, so the DATABASE cannot enforce that shape. Today
+// exactly one production writer exists — AgentService, inside one transaction —
+// which is what makes the type-level guarantee hold in practice. A second
+// writer elsewhere would quietly reintroduce the unbounded-metadata escape
+// hatch that the protocol package was built to close, so the single-writer
+// property is pinned here rather than left as a convention.
+function sourceFilesUnder(dir) {
+  const out = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(resolve(ROOT, rel), { withFileTypes: true })) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) walk(child);
+      else if (/\.ts$/.test(entry.name) && !/\.spec\.ts$/.test(entry.name)) out.push(child);
+    }
+  };
+  walk(dir);
+  return out;
+}
+const lifecycleWriteCall =
+  /agentLifecycleEvent\s*\.\s*(create|createMany|update|updateMany|upsert)\b/;
+const rogueLifecycleWriters = ['apps/api/src', 'apps/web/src']
+  .filter((dir) => existsSync(resolve(ROOT, dir)))
+  .flatMap(sourceFilesUnder)
+  .filter((file) => !file.startsWith('apps/api/src/agent/'))
+  .filter((file) => lifecycleWriteCall.test(read(file)));
+check(
+  'agent lifecycle events are written only by the agent module',
+  rogueLifecycleWriters.length === 0,
+);
+
+// The local bridge is trusted only within the OS-user boundary: an installation
+// secret in a 0600 file cannot distinguish two processes running as the same
+// user. That is an acceptable trust model ONLY while locally reported lifecycle
+// telemetry can never, on its own, move money — which is exactly what the agent
+// module's isolation provides today. If the agent domain ever reached a ledger
+// or a billable impression directly, the bridge's threat model would silently
+// become insufficient, so the isolation is machine-checked instead of asserted
+// in a comment.
+const financialSymbols =
+  /\b(earningsLedger|advertiserLedger|platformLedger|adImpression|adClick|payoutRequest|billingAuthorizedAt)\b/;
+const agentFinancialLeaks = sourceFilesUnder('apps/api/src/agent').filter((file) =>
+  financialSymbols.test(read(file)),
+);
+check(
+  'the agent lifecycle domain never touches ledgers, impressions, or billing',
+  agentFinancialLeaks.length === 0,
+);
+
 // AGENTS.md reflects the CI-guarded correction (narrative tied to the guard).
 const agents = read('AGENTS.md');
 check(

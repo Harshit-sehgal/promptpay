@@ -9,6 +9,7 @@ import { getCredentials } from '../lib/credentials';
 import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorMessage } from '../lib/errors';
 import { createGenericWrapperEvent } from '../lib/generic-wrapper-adapter';
+import { canPresentTo } from '../lib/presentation-context';
 import { normalizeToolType } from '../lib/tool-types';
 
 const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
@@ -215,11 +216,17 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
     const telemetry = started ? 'recorded' : 'unavailable';
     // Completion summaries belong on stderr so the wrapped agent's stdout
     // remains byte-for-byte compatible for pipes, scripts, and IDE terminals.
-    console.error(
-      chalk.dim(
-        `Ateva: supervised session ${outcome} (${toolType}); telemetry ${telemetry}; rewards are not enabled.`,
-      ),
-    );
+    // Stderr is not enough on its own: under `2>build.log` or a CI runner the
+    // summary still lands in a log nobody reads, so the surface additionally
+    // requires an attached terminal. Failure warnings above are diagnostics and
+    // stay unconditional.
+    if (canPresentTo(process.stderr)) {
+      console.error(
+        chalk.dim(
+          `Ateva: supervised session ${outcome} (${toolType}); telemetry ${telemetry}; rewards are not enabled.`,
+        ),
+      );
+    }
   }
 }
 

@@ -49,6 +49,12 @@ export type IntegrationChangeResult = IntegrationStatusResult & {
   backupPath?: string;
 };
 
+/** An install that was computed but not written, plus the diff it would make. */
+export type IntegrationPlanResult = IntegrationChangeResult & {
+  /** Unified-style diff lines (`+`/`-`/` `), empty when nothing would change. */
+  diff: string[];
+};
+
 export type HookConfigManagerOptions = {
   homeDir?: string;
   configPaths?: Partial<Record<IntegrationProvider, string>>;
@@ -124,34 +130,96 @@ export class HookConfigManager {
     };
   }
 
-  install(provider: IntegrationProvider): IntegrationChangeResult {
-    if (provider === 'codex') return this.unsupportedResult(provider);
+  /**
+   * Decide what an install would do, without doing any of it.
+   *
+   * Split out so `install()` and `plan()` cannot disagree. A dry-run that
+   * re-implements the real path's branching is worse than no dry-run at all:
+   * it drifts silently and then reassures the operator about a write that never
+   * happens that way. Both callers evaluate exactly this decision; only the
+   * application of it differs.
+   */
+  private resolveInstall(provider: IntegrationProvider):
+    | { kind: 'unsupported' }
+    | { kind: 'invalid'; reason: string }
+    | {
+        kind: 'apply';
+        current: ConfigShape;
+        raw: string | undefined;
+        next: ConfigShape;
+        changed: boolean;
+      } {
+    if (provider === 'codex') return { kind: 'unsupported' };
     const current = this.readConfig(provider);
-    if (current.kind === 'invalid') return this.invalidResult(provider, current.reason);
+    if (current.kind === 'invalid') return { kind: 'invalid', reason: current.reason };
     if (current.kind === 'missing') {
-      // A missing config is safe to create, but still use the same atomic path
+      // A missing config is safe to create, but still uses the same atomic path
       // and protected permissions as an existing provider file.
-      const config: ConfigShape = {};
-      const next = mergeOwnedHooks(config, provider, this.executable);
-      const backupPath = this.writeConfig(provider, next, undefined);
-      this.persistState(provider, next);
-      return this.result(provider, next, true, backupPath);
+      return {
+        kind: 'apply',
+        current: {},
+        raw: undefined,
+        next: mergeOwnedHooks({}, provider, this.executable),
+        changed: true,
+      };
     }
 
     if (hasManagedLock(current.config)) {
-      return this.invalidResult(
-        provider,
-        'provider configuration is managed or locked; edit it manually',
-      );
+      return {
+        kind: 'invalid',
+        reason: 'provider configuration is managed or locked; edit it manually',
+      };
     }
 
     const unsupportedShape = findUnsupportedHookShape(current.config, provider);
-    if (unsupportedShape) return this.invalidResult(provider, unsupportedShape);
+    if (unsupportedShape) return { kind: 'invalid', reason: unsupportedShape };
     const next = mergeOwnedHooks(current.config, provider, this.executable);
-    const changed = JSON.stringify(current.config) !== JSON.stringify(next);
-    const backupPath = changed ? this.writeConfig(provider, next, current.raw) : undefined;
-    this.persistState(provider, next);
-    return this.result(provider, next, changed, backupPath);
+    return {
+      kind: 'apply',
+      current: current.config,
+      raw: current.raw,
+      next,
+      changed: JSON.stringify(current.config) !== JSON.stringify(next),
+    };
+  }
+
+  install(provider: IntegrationProvider): IntegrationChangeResult {
+    const decision = this.resolveInstall(provider);
+    if (decision.kind === 'unsupported') return this.unsupportedResult(provider);
+    if (decision.kind === 'invalid') return this.invalidResult(provider, decision.reason);
+
+    const backupPath = decision.changed
+      ? this.writeConfig(provider, decision.next, decision.raw)
+      : undefined;
+    this.persistState(provider, decision.next);
+    return this.result(provider, decision.next, decision.changed, backupPath);
+  }
+
+  /**
+   * Report exactly what `install()` would write to the provider config, and
+   * write nothing.
+   *
+   * This closes the "show diff before install where feasible" requirement. It
+   * matters more than a normal preview because the file being edited is the
+   * operator's live coding-agent configuration on their own machine: the
+   * cheapest moment to notice that Ateva is about to touch something
+   * unexpected is before the first install, not from a backup afterwards.
+   */
+  plan(provider: IntegrationProvider): IntegrationPlanResult {
+    const decision = this.resolveInstall(provider);
+    if (decision.kind === 'unsupported') {
+      return { ...this.unsupportedResult(provider), diff: [] };
+    }
+    if (decision.kind === 'invalid') {
+      return { ...this.invalidResult(provider, decision.reason), diff: [] };
+    }
+
+    // Reported from the PROSPECTIVE config, so the operator sees the state the
+    // install would produce rather than the state they already have.
+    return {
+      ...this.result(provider, decision.next, decision.changed),
+      diff: diffJsonLines(decision.current, decision.next),
+    };
   }
 
   repair(provider: IntegrationProvider): IntegrationChangeResult {
@@ -585,4 +653,69 @@ function readState(file: string): { disabled?: boolean; configHash?: string } | 
   } catch {
     return null;
   }
+}
+
+/**
+ * Line diff between two configs, rendered as unified-style `+`/`-`/` ` lines.
+ *
+ * Uses a real LCS rather than a set difference over lines. A set difference
+ * looks correct on the common case (Ateva only ever appends owned entries) and
+ * then misreports the case that actually matters: a config whose keys moved,
+ * where every shared line appears as both an addition and a deletion and the
+ * operator cannot see what genuinely changed.
+ *
+ * Context is trimmed to a few lines around each hunk so a large provider config
+ * does not bury the change.
+ */
+export function diffJsonLines(before: unknown, after: unknown, context = 3): string[] {
+  const left = JSON.stringify(before, null, 2).split('\n');
+  const right = JSON.stringify(after, null, 2).split('\n');
+  if (left.join('\n') === right.join('\n')) return [];
+
+  // lcs[i][j] = length of the longest common subsequence of left[i:] / right[j:]
+  const lcs: number[][] = Array.from({ length: left.length + 1 }, () =>
+    new Array<number>(right.length + 1).fill(0),
+  );
+  for (let i = left.length - 1; i >= 0; i -= 1) {
+    for (let j = right.length - 1; j >= 0; j -= 1) {
+      lcs[i][j] =
+        left[i] === right[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+
+  const all: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] === right[j]) {
+      all.push(`  ${left[i]}`);
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      all.push(`- ${left[i]}`);
+      i += 1;
+    } else {
+      all.push(`+ ${right[j]}`);
+      j += 1;
+    }
+  }
+  while (i < left.length) all.push(`- ${left[i++]}`);
+  while (j < right.length) all.push(`+ ${right[j++]}`);
+
+  const keep = new Set<number>();
+  all.forEach((line, index) => {
+    if (line.startsWith('  ')) return;
+    for (let k = index - context; k <= index + context; k += 1) {
+      if (k >= 0 && k < all.length) keep.add(k);
+    }
+  });
+
+  const trimmed: string[] = [];
+  let previous = -1;
+  for (const index of [...keep].sort((a, b) => a - b)) {
+    if (previous !== -1 && index > previous + 1) trimmed.push('  ...');
+    trimmed.push(all[index]);
+    previous = index;
+  }
+  return trimmed;
 }

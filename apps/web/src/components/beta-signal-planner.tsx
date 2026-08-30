@@ -80,7 +80,7 @@ function formatDuration(totalSeconds: number): string {
 
 function ResultPair({ caption, value, unit }: { caption: string; value: string; unit: string }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className="landing-planner-result flex flex-col gap-1">
       <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-500">
         {caption}
       </span>
@@ -134,7 +134,7 @@ export function BetaSignalPlanner() {
       type="button"
       onClick={onReset}
       disabled={!dirty}
-      className={`rounded-full px-3.5 py-1.5 text-[13px] ${
+      className={`landing-planner-reset rounded-full px-3.5 py-1.5 text-[13px] ${
         dirty
           ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
           : 'cursor-not-allowed text-surface-300'
@@ -147,10 +147,10 @@ export function BetaSignalPlanner() {
   return (
     <section
       aria-label="Beta planning calculator"
-      className="mx-auto mt-14 max-w-[1180px] rounded-3xl border border-surface-200/70 bg-white px-8 py-7"
+      className="landing-card landing-planner mx-auto mt-14 max-w-[1180px] rounded-3xl border border-surface-200/70 bg-white px-8 py-7"
     >
       <div className="mb-1 flex flex-wrap items-start justify-between gap-5">
-        <h3 className="m-0 font-serif text-[27px] font-normal text-surface-950">
+        <h3 className="landing-planner-title m-0 font-serif font-normal text-surface-950">
           {mode === 'developer'
             ? 'What this looks like on your machine'
             : 'Plan beta campaign reach'}
@@ -158,7 +158,7 @@ export function BetaSignalPlanner() {
         <button
           type="button"
           onClick={() => setMode((m) => (m === 'developer' ? 'advertiser' : 'developer'))}
-          className="inline-flex min-h-11 items-center rounded-full border border-surface-950 bg-transparent px-5 text-sm text-surface-950 hover:bg-surface-100/60"
+          className="landing-planner-mode-toggle inline-flex min-h-11 items-center rounded-full border border-surface-950 bg-transparent px-5 text-sm text-surface-950 hover:bg-surface-100/60"
         >
           {mode === 'developer' ? 'For advertisers' : 'For developers'}
         </button>
@@ -193,7 +193,7 @@ export function BetaSignalPlanner() {
                       setWaits(p.waits);
                       setPreset(p.id);
                     }}
-                    className={`flex min-h-11 flex-col gap-1.5 rounded-2xl p-4 text-left transition-colors ${
+                    className={`landing-planner-choice flex min-h-11 flex-col gap-1.5 rounded-2xl p-4 text-left transition-colors ${
                       active
                         ? 'border border-brand-500 bg-brand-50'
                         : 'border border-surface-200/70 bg-white hover:bg-surface-50'
@@ -258,7 +258,7 @@ export function BetaSignalPlanner() {
                 aria-checked={quiet}
                 aria-label="Quiet hours"
                 onClick={() => setQuiet((q) => !q)}
-                className={`flex min-h-11 items-center justify-between gap-4 rounded-xl p-4 text-left transition-colors ${
+                className={`landing-planner-switch flex min-h-11 items-center justify-between gap-4 rounded-xl p-4 text-left transition-colors ${
                   quiet
                     ? 'border border-brand-200 bg-brand-50'
                     : 'border border-surface-200 bg-surface-50'
@@ -288,12 +288,12 @@ export function BetaSignalPlanner() {
             <div className="flex flex-col gap-4 md:border-l md:border-surface-200 md:pl-8">
               <div aria-live="polite" className="grid grid-cols-2 gap-5">
                 <ResultPair
-                  caption="You’d contribute"
+                  caption="Verified output"
                   value={signals.toLocaleString()}
                   unit="verified signals a day"
                 />
                 <ResultPair
-                  caption="It would cost you"
+                  caption="Visibility floor"
                   value={screenTime}
                   unit="of screen time a day"
                 />
@@ -301,7 +301,7 @@ export function BetaSignalPlanner() {
 
               {/* Name the binding limit rather than leaving the visitor to infer it. */}
               <p
-                className={`m-0 rounded-[10px] border p-3.5 text-sm leading-relaxed ${
+                className={`landing-planner-message m-0 rounded-[10px] border p-3.5 text-sm leading-relaxed ${
                   capBinds
                     ? 'border-amber-200 bg-amber-50 text-amber-800'
                     : 'border-brand-200 bg-brand-50 text-brand-700'
@@ -385,7 +385,7 @@ export function BetaSignalPlanner() {
                 />
               </div>
 
-              <p className="m-0 rounded-[10px] border border-surface-200 bg-surface-50 p-3.5 text-sm leading-relaxed text-surface-700">
+              <p className="landing-planner-message m-0 rounded-[10px] border border-surface-200 bg-surface-50 p-3.5 text-sm leading-relaxed text-surface-700">
                 {costPerClick === null
                   ? 'At this click-through rate the campaign models fewer than one click — raise the budget or the rate to see a cost per click.'
                   : `That works out to $${costPerClick.toFixed(2)} per click. Impressions are counted only after the verification checks pass, so this is delivery you can audit rather than reported views.`}

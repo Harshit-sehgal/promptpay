@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ATEVA_HOOK_MARKER, HookConfigManager } from './hook-config';
+import { ATEVA_HOOK_MARKER, diffJsonLines, HookConfigManager } from './hook-config';
 
 const temporaryDirectories: string[] = [];
 
@@ -176,5 +176,97 @@ describe('HookConfigManager', () => {
     expect(result.reason).toContain('not verified');
     expect(fs.existsSync(configPath)).toBe(true);
     expect(JSON.parse(fs.readFileSync(configPath, 'utf8'))).toEqual({});
+  });
+
+  it('plans an install without writing the config, the state file, or a backup', () => {
+    const { manager, configPath, home } = makeManager({ existingKey: 'keep-me' });
+    const before = fs.readFileSync(configPath, 'utf8');
+
+    const planned = manager.plan('claude-code');
+
+    expect(planned.changed).toBe(true);
+    expect(planned.diff.some((line) => line.startsWith('+ '))).toBe(true);
+    // Nothing on disk moved: not the config, not the backup, not the state.
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(before);
+    expect(fs.existsSync(path.join(home, '.config', 'ateva'))).toBe(false);
+    expect(fs.readdirSync(path.dirname(configPath)).filter((f) => f.includes('backup'))).toEqual(
+      [],
+    );
+  });
+
+  it('plans exactly the install that install() then performs', () => {
+    // The dry-run and the real path share resolveInstall(), and this is the
+    // regression test for that: a preview that disagrees with the write is
+    // worse than no preview, because the operator approved the wrong thing.
+    const planned = makeManager({ existingKey: 'keep-me' });
+    const applied = makeManager({ existingKey: 'keep-me' });
+
+    const plan = planned.manager.plan('claude-code');
+    const install = applied.manager.install('claude-code');
+
+    expect(plan.changed).toBe(install.changed);
+    expect(plan.status).toBe(install.status);
+    expect(plan.ownedEntries).toBe(install.ownedEntries);
+    expect(plan.missingEvents).toEqual(install.missingEvents);
+
+    // Applying the plan's own config reproduces the file install() wrote.
+    const written = JSON.parse(fs.readFileSync(applied.configPath, 'utf8'));
+    expect(written.existingKey).toBe('keep-me');
+    const rendered = plan.diff.filter((line) => !line.startsWith('- ')).join('\n');
+    expect(rendered).toContain(ATEVA_HOOK_MARKER);
+  });
+
+  it('reports an empty diff when the hooks are already installed', () => {
+    const { manager, configPath } = makeManager({});
+    manager.install('claude-code');
+    const after = fs.readFileSync(configPath, 'utf8');
+
+    const planned = manager.plan('claude-code');
+
+    expect(planned.changed).toBe(false);
+    expect(planned.diff).toEqual([]);
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(after);
+  });
+
+  it('refuses to plan against a managed or locked provider config', () => {
+    const { manager, configPath } = makeManager({ managedBy: 'enterprise', hooks: {} });
+    const before = fs.readFileSync(configPath, 'utf8');
+
+    const planned = manager.plan('claude-code');
+
+    expect(planned.diff).toEqual([]);
+    expect(fs.readFileSync(configPath, 'utf8')).toBe(before);
+  });
+});
+
+describe('diffJsonLines', () => {
+  it('returns nothing for identical configs', () => {
+    expect(diffJsonLines({ a: 1 }, { a: 1 })).toEqual([]);
+  });
+
+  it('marks additions and removals', () => {
+    const diff = diffJsonLines({ a: 1 }, { a: 1, b: 2 });
+    expect(diff.some((line) => line.startsWith('+') && line.includes('"b"'))).toBe(true);
+    expect(diff.some((line) => line.startsWith('-') && line.includes('"b"'))).toBe(false);
+  });
+
+  it('reports a removed duplicate that a set-difference diff would miss entirely', () => {
+    // The concrete reason this is an LCS and not a set difference over lines.
+    // Both configs contain the line `    "x": 1,` so a set difference sees the
+    // line in both and reports no change, even though one copy was removed.
+    const before = { a: { x: 1, y: 0 }, b: { x: 1, y: 0 } };
+    const after = { a: { x: 1, y: 0 }, b: { y: 0 } };
+    const diff = diffJsonLines(before, after);
+    expect(diff.filter((line) => line.startsWith('- ') && line.includes('"x"'))).toHaveLength(1);
+  });
+
+  it('elides distant context so a large config does not bury the changes', () => {
+    const before: Record<string, number> = {};
+    for (let i = 0; i < 60; i += 1) before[`key${i}`] = i;
+    // Two changes far apart: the untouched middle must be elided, not printed.
+    const after = { ...before, key0: 999, key59: 999 };
+    const diff = diffJsonLines(before, after);
+    expect(diff).toContain('  ...');
+    expect(diff.length).toBeLessThan(30);
   });
 });

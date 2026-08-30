@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 
 import { BidType, CampaignStatus, CreativeStatus, Prisma } from '@ateva/db';
-import { MINIMUM_VISIBLE_DURATION_MS } from '@ateva/shared';
+import { MINIMUM_VISIBLE_DURATION_MS, MINIMUM_VISIBLE_SURFACE_PERCENT } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
@@ -570,13 +570,10 @@ export class ExtensionAdTrait {
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
     const maxPerHour = settings?.maxAdsPerHour ?? 6;
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentClaims = await this.prisma.adOpportunity.count({
-      where: { userId, deviceId: dto.deviceId, state: 'claimed', claimedAt: { gte: oneHourAgo } },
-    });
-    if (recentClaims >= maxPerHour) {
-      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
-    }
-    // A live, unexpired candidate opportunity for this placement type.
+    // A live, unexpired candidate opportunity for this placement type. The
+    // CANDIDATE lookup stays device-scoped — an opportunity belongs to the
+    // surface that produced it — but the exposure CAP below does not. See the
+    // account-attention invariant in claimSandboxOpportunity().
     const opportunity = await this.prisma.adOpportunity.findFirst({
       where: {
         userId,
@@ -640,18 +637,20 @@ export class ExtensionAdTrait {
       return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
     }
     const sandboxImpressionToken = crypto.randomUUID();
-    const claimed = await this.prisma.adOpportunity.updateMany({
-      where: { id: opportunity.id, state: 'candidate', claimIdempotencyKey: null },
-      data: {
-        state: 'claimed',
-        claimedAt: new Date(),
-        claimIdempotencyKey: dto.idempotencyKey,
-        selectedCampaignId: placement.campaign.id,
-        selectedCreativeId: creative.id,
-        sandboxImpressionToken,
-      },
+    const claim = await this.claimSandboxOpportunity({
+      userId,
+      opportunityId: opportunity.id,
+      idempotencyKey: dto.idempotencyKey,
+      campaignId: placement.campaign.id,
+      creativeId: creative.id,
+      sandboxImpressionToken,
+      maxPerHour,
+      oneHourAgo,
     });
-    if (claimed.count === 0) {
+    if (claim.status === 'cap_reached') {
+      return { ad: null, reason: 'account_attention_cap_reached', ...sandboxMark };
+    }
+    if (claim.status === 'lost_race') {
       // Lost a concurrent claim race; the other request serves the placement.
       return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
     }
@@ -682,6 +681,73 @@ export class ExtensionAdTrait {
       },
       ...sandboxMark,
     };
+  }
+
+  /**
+   * Claim one sandbox opportunity under the account's attention budget.
+   *
+   * The canonical invariant: **an authenticated account has one shared
+   * attention inventory across all of its devices.** A device says WHERE
+   * attention happened; it must never increase HOW MUCH attention the account
+   * has to sell. Otherwise the economic primitive silently becomes
+   * `installations x attention` instead of `human attention`, and running a
+   * second client becomes a way to earn more — a farming incentive wired
+   * directly into the supply definition.
+   *
+   * So the hourly count here is deliberately NOT scoped by `deviceId`, which
+   * matches how the production billable path has always counted (see
+   * `claimImpression`, where the cap counts every impression for the user).
+   * Switching laptop to desktop does not reset the budget.
+   *
+   * The count and the claim run inside one transaction behind a per-user
+   * advisory lock, for the same reason `claimImpression` does: a plain
+   * COUNT-then-WRITE lets two concurrent devices both observe `maxPerHour - 1`
+   * and both consume the final slot. This is issue A-061 in a second location
+   * — dropping `deviceId` from the predicate without serializing the allocation
+   * would have replaced a per-device over-serve with a concurrent one.
+   */
+  private async claimSandboxOpportunity(args: {
+    userId: string;
+    opportunityId: string;
+    idempotencyKey: string;
+    campaignId: string;
+    creativeId: string;
+    sandboxImpressionToken: string;
+    maxPerHour: number;
+    oneHourAgo: Date;
+  }): Promise<{ status: 'claimed' | 'cap_reached' | 'lost_race' }> {
+    return this.prisma.$transaction(async (tx) => {
+      // Same hashing as claimImpression: a 32-bit key derived from the userId.
+      // Collisions only make two unrelated accounts queue briefly.
+      const lockKey = BigInt(
+        '0x' + crypto.createHash('sha256').update(args.userId).digest('hex').slice(0, 8),
+      );
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+
+      // Account-wide, every device. Counted inside the lock so a concurrent
+      // claim on another device is already visible.
+      const recentClaims = await tx.adOpportunity.count({
+        where: {
+          userId: args.userId,
+          state: 'claimed',
+          claimedAt: { gte: args.oneHourAgo },
+        },
+      });
+      if (recentClaims >= args.maxPerHour) return { status: 'cap_reached' as const };
+
+      const claimed = await tx.adOpportunity.updateMany({
+        where: { id: args.opportunityId, state: 'candidate', claimIdempotencyKey: null },
+        data: {
+          state: 'claimed',
+          claimedAt: new Date(),
+          claimIdempotencyKey: args.idempotencyKey,
+          selectedCampaignId: args.campaignId,
+          selectedCreativeId: args.creativeId,
+          sandboxImpressionToken: args.sandboxImpressionToken,
+        },
+      });
+      return { status: claimed.count === 0 ? ('lost_race' as const) : ('claimed' as const) };
+    });
   }
 
   /**
@@ -1074,6 +1140,31 @@ export class ExtensionAdTrait {
         reason: 'minimum_duration_not_met',
         minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
         actual: Math.max(0, elapsedServer),
+      };
+    }
+    // Surface visibility is the other half of viewability. `visibleSurface` was
+    // already collected and stored at render time but never gated on, so an
+    // impression that was 5% on screen qualified exactly like a fully visible
+    // one. A reported value below the floor is rejected; an ABSENT value is
+    // treated as unknown and allowed through, because clients that predate the
+    // field would otherwise stop qualifying entirely.
+    if (
+      impression.visibleSurface !== null &&
+      impression.visibleSurface !== undefined &&
+      impression.visibleSurface < MINIMUM_VISIBLE_SURFACE_PERCENT
+    ) {
+      await this.invalidateImpressionAndReleaseReservation({
+        impressionId: impression.id,
+        campaignId: impression.campaignId,
+        bidType: impression.campaign.bidType,
+        bidAmountMinor: BigInt(impression.campaign.bidAmountMinor),
+        visibleDurationMs: dto.visibleDurationMs,
+        reason: 'minimum_visible_surface_not_met',
+      });
+      return {
+        qualified: false,
+        impressionId: impression.id,
+        reason: 'minimum_visible_surface_not_met',
       };
     }
     let effectiveDurationMs = dto.visibleDurationMs;

@@ -117,8 +117,30 @@ export const CANONICAL_METADATA_KEYS = [
   'changedFileCountBucket',
 ] as const;
 
+export const AGENT_EXECUTION_CONTEXTS = ['interactive', 'headless'] as const;
+export type AgentExecutionContext = (typeof AGENT_EXECUTION_CONTEXTS)[number];
+
 export const canonicalAgentMetadataSchema = z
   .object({
+    /**
+     * Whether a human could have been present for this event.
+     *
+     * Deliberately absent from `CANONICAL_METADATA_KEYS`: every other field is
+     * copied out of a provider payload, and this one must not be. A provider
+     * hook running in CI has no business declaring itself `interactive`, so the
+     * value is stamped locally by the client from its own environment after the
+     * payload has been sanitized, and any provider-supplied value is dropped.
+     *
+     * This is a correctness control, not a security control. A hostile client
+     * would simply claim `interactive`; the defense against that is independent
+     * attestation, not this field. It exists so that honest headless usage — CI
+     * jobs, remote build agents, cron-driven refactors — records its agent work
+     * without ever manufacturing human-attention inventory.
+     *
+     * Absent means "unknown" (an older client), which is treated permissively
+     * for backwards compatibility.
+     */
+    executionContext: z.enum(AGENT_EXECUTION_CONTEXTS).optional(),
     toolFamily: z
       .enum(['shell', 'editor', 'file', 'search', 'test', 'network', 'mcp', 'other'])
       .optional(),
@@ -447,12 +469,52 @@ export function normalizeFixture(fixture: ProviderFixture): SanitizedHookPayload
   return sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload);
 }
 
+export {
+  assignShadowPolicyToSession,
+  ATTENTION_PPM_SCALE,
+  type AttentionPolicyStatus,
+  attentionPolicyStatusSchema,
+  type AttentionState,
+  attentionStateSchema,
+  evaluateShadowAttention,
+  type ShadowAttentionEvaluationInput,
+  type ShadowAttentionMeasurement,
+  shadowAttentionMeasurementSchema,
+  type ShadowAttentionPolicy,
+  shadowAttentionPolicySchema,
+  type ShadowPolicyRecord,
+  shadowPolicyRecordSchema,
+  type ShadowSessionPolicyAssignment,
+} from './attention-contract';
 export type { GoldenAgentFixture } from './golden-fixtures';
 export {
   AGENT_GOLDEN_FIXTURES,
   goldenFixtureProviders,
   loadGoldenAgentFixtures,
 } from './golden-fixtures';
+export {
+  type AttentionDatasetManifest,
+  attentionDatasetManifestSchema,
+  type AttentionExperimentAssignment,
+  attentionExperimentAssignmentSchema,
+  type AttentionExperimentDefinition,
+  attentionExperimentDefinitionSchema,
+  type AttentionExperimentStatus,
+  attentionExperimentStatusSchema,
+  type AttentionExperimentVariant,
+  attentionExperimentVariantSchema,
+  type AttentionModelArtifact,
+  attentionModelArtifactSchema,
+} from './model-contract';
+export {
+  createShadowSessionFact,
+  type ShadowAttestationStatus,
+  shadowAttestationStatusSchema,
+  type ShadowFraudRiskStatus,
+  shadowFraudRiskStatusSchema,
+  type ShadowSessionFact,
+  shadowSessionFactSchema,
+} from './shadow-fact-contract';
 
 export function scanForbiddenAgentFields(value: unknown): string[] {
   const found = new Set<string>();
