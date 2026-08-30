@@ -10,6 +10,7 @@ interface SiteHeaderProps {
 }
 
 const NAV_ITEMS = [
+  { label: 'Product', href: '/#product' },
   { label: 'How it works', href: '/#how-it-works' },
   { label: 'Developers', href: '/#developers' },
   { label: 'Sponsors', href: '/#sponsors' },

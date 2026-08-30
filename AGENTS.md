@@ -23,6 +23,74 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-30 — attention-boundary defects (TTY, CI, account cap, ordering, viewability)
+
+A review pass against the implementation blueprint produced findings that were
+verified against code rather than accepted as written. Five were confirmed and
+fixed; the rest of that review's claims about this area were stale or wrong and
+are recorded at the end of this entry so they are not re-raised.
+
+- **Ads and completion UI could render into pipes, logs, and CI.** The CLI put
+  banners and the `ateva run` completion summary on stderr but never checked for
+  a reader; the only `isTTY` test in the CLI was in `hooks.ts`. New
+  `apps/cli/src/lib/presentation-context.ts` requires BOTH an attached terminal
+  and a non-CI environment (`canPresentTo`). `ateva watch` now suppresses the ad
+  **request**, not just its rendering — requesting and discarding still claims an
+  opportunity and spends the account's hourly budget. Environment _mismatch_
+  warnings stay unconditional; they are diagnostics, not decoration.
+- **Headless work could become human-attention inventory.** Added optional
+  `executionContext: 'interactive' | 'headless'` to the canonical metadata,
+  stamped by the client from its own environment. It is deliberately ABSENT from
+  `CANONICAL_METADATA_KEYS`, so a provider hook payload can never declare its own
+  interactivity; the API re-attaches it after the second-line privacy scrub
+  (which otherwise strips it, since that scrub only copies provider-derived
+  keys). `maybeGenerateOpportunity` returns early for `headless`. This is a
+  data-quality boundary, not a fraud control — a hostile client would claim
+  `interactive`, and issue #45 is the answer to that.
+- **One account with two devices had two attention budgets.** The sandbox
+  `AdOpportunity` claim counted `{userId, deviceId}`; the production billable
+  path has always counted by `userId` alone. The new
+  `claimSandboxOpportunity()` restores parity: account-wide count and CAS write
+  inside one transaction behind a per-user `pg_advisory_xact_lock`, mirroring
+  `claimImpression`. Dropping `deviceId` **without** the lock would have swapped a
+  per-device over-serve for a concurrent one (issue A-061 in a second location).
+  New rejection reason `account_attention_cap_reached`, distinct from
+  `no_sandbox_placement`.
+- **A late event could mint inventory the session had moved past.** Event
+  persistence and `maybeGenerateOpportunity` ran unordered while only the session
+  update was gated by `isEventAtOrAfterLatest`. Both derived writes now share one
+  `isLatest` gate; the event row is still always persisted.
+- **`visibleSurface` was collected but never enforced.** Duration was already a
+  server-authoritative invariant; surface percentage was stored at render and
+  ignored, so a creative 10% on screen qualified like a full one. Added
+  `MINIMUM_VISIBLE_SURFACE_PERCENT` (50) with invalidation + reservation release.
+  Absent means unknown, not zero, so clients predating the field still qualify.
+- **Two new audit claims (18 → 20), both mutation-checked to fire.** (1) Only
+  `apps/api/src/agent/` may write `agentLifecycleEvent` — the `metadata` column is
+  a Prisma `Json`, so the single-writer property is what makes the strict
+  TypeScript schema hold in practice. (2) The agent domain never references
+  ledgers, impressions, or billing — the local bridge's OS-user trust model is
+  acceptable _only_ while local telemetry cannot move money, so that isolation is
+  machine-checked rather than asserted in a comment.
+
+Verification: `pnpm run typecheck` (18/18), `pnpm run lint` (11/11),
+`node scripts/audit-claims.mjs` (20/20), API unit suite 1514 passed / 13 skipped,
+CLI 152 passed, agent-protocol 17 passed, shared 77 passed, VS Code 152 passed.
+`src/auth/auth-logout.spec.ts` and `src/auth/auth-refresh.spec.ts` fail locally
+because they `TRUNCATE` real tables and no Postgres was running; both fail
+identically on a stashed tree, so they are environmental and pre-existing.
+
+Claims from that review that did NOT survive verification, recorded so they are
+not re-filed: `metadata Json` is **not** a privacy escape hatch (`readSafeMetadata`
+copies from an allowlist and accepts only scalars, so a nested `prompt` cannot
+survive); the local bridge **does** have a threat model (installation secret,
+`0600`, exclusive create, auth timeout, size cap, stale-socket handling) — its
+real limit is that same-UID processes are inside the trust boundary, which
+`SO_PEERCRED` does not fix; out-of-order handling was **not** unspecified
+(`isEventAtOrAfterLatest` is a total order under a row lock); attestation
+sequencing is actioned by issue #45; and §20's zero-invariants **are**
+quantitative — what is missing is the distributional/performance gates.
+
 ## Resolved 2026-08-28 — staging SSH transport and remote Compose contract
 
 The OCI staging host `vnic1` is now reachable through its verified public SSH

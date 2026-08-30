@@ -117,8 +117,30 @@ export const CANONICAL_METADATA_KEYS = [
   'changedFileCountBucket',
 ] as const;
 
+export const AGENT_EXECUTION_CONTEXTS = ['interactive', 'headless'] as const;
+export type AgentExecutionContext = (typeof AGENT_EXECUTION_CONTEXTS)[number];
+
 export const canonicalAgentMetadataSchema = z
   .object({
+    /**
+     * Whether a human could have been present for this event.
+     *
+     * Deliberately absent from `CANONICAL_METADATA_KEYS`: every other field is
+     * copied out of a provider payload, and this one must not be. A provider
+     * hook running in CI has no business declaring itself `interactive`, so the
+     * value is stamped locally by the client from its own environment after the
+     * payload has been sanitized, and any provider-supplied value is dropped.
+     *
+     * This is a correctness control, not a security control. A hostile client
+     * would simply claim `interactive`; the defense against that is independent
+     * attestation, not this field. It exists so that honest headless usage — CI
+     * jobs, remote build agents, cron-driven refactors — records its agent work
+     * without ever manufacturing human-attention inventory.
+     *
+     * Absent means "unknown" (an older client), which is treated permissively
+     * for backwards compatibility.
+     */
+    executionContext: z.enum(AGENT_EXECUTION_CONTEXTS).optional(),
     toolFamily: z
       .enum(['shell', 'editor', 'file', 'search', 'test', 'network', 'mcp', 'other'])
       .optional(),

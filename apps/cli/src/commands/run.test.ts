@@ -129,6 +129,36 @@ describe('runSupervisedCommand', () => {
     stdout.mockRestore();
   });
 
+  it('keeps the completion summary out of a redirected stderr', async () => {
+    // `ateva run -- claude … 2>build.log`: stderr alone is not proof of a
+    // reader, so the summary must not land in the log.
+    process.stderr.isTTY = false;
+    const run = runSupervisedCommand(['codex', 'exec']);
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+    mocks.child.emit('spawn');
+    await vi.waitFor(() => expect(mocks.api.reportWaitState).toHaveBeenCalledOnce());
+    mocks.child.emit('close', 0, null);
+
+    await expect(run).resolves.toBe(0);
+    expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringContaining('supervised session'));
+    // The telemetry itself is still recorded — headless agent work is real
+    // work; only the human-facing surface is withheld.
+    expect(mocks.api.endWaitState).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the completion summary out of a CI run on an attached terminal', async () => {
+    vi.stubEnv('CI', 'true');
+    const run = runSupervisedCommand(['codex', 'exec']);
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());
+    mocks.child.emit('spawn');
+    await vi.waitFor(() => expect(mocks.api.reportWaitState).toHaveBeenCalledOnce());
+    mocks.child.emit('close', 0, null);
+
+    await expect(run).resolves.toBe(0);
+    expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringContaining('supervised session'));
+    vi.unstubAllEnvs();
+  });
+
   it('summarizes a non-zero child exit as failed', async () => {
     const run = runSupervisedCommand(['claude', '--version']);
     await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalledOnce());

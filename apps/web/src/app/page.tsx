@@ -1,121 +1,192 @@
 'use client';
 
 import Link from 'next/link';
-import { BackendStatus } from '@/components/backend-status';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BetaSignalPlanner } from '@/components/beta-signal-planner';
+import { LandingProductShowcase } from '@/components/landing-product-showcase';
 import { SiteHeader } from '@/components/site-header';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
-const verificationSteps = [
-  {
-    title: 'Eligible wait begins',
-    detail: 'The integration records a qualifying pause with explicit consent.',
-  },
-  {
-    title: 'Sponsored unit renders',
-    detail: 'The unit must appear in the eligible session—not merely be requested.',
-  },
-  {
-    title: 'Visibility checks pass',
-    detail: 'Session, duration, duplicate, and fraud controls are evaluated.',
-  },
-  {
-    title: 'Delivery is recorded',
-    detail: 'Only a qualified impression reaches the reporting ledger.',
-  },
-];
+import { MINIMUM_VISIBLE_DURATION_MS, MINIMUM_VISIBLE_SURFACE_PERCENT } from '@ateva/shared';
 
-const betaGuarantees = [
-  'Rewards are disabled during the private beta; nothing accrues yet.',
-  'If enabled, Ateva would record a participant obligation equal to 60% of each qualifying bid and retain 40%.',
-  'The participant share is an Ateva obligation—not a claim on the advertiser payment.',
-  'Future payouts use a separately approved fiat provider, never Dodo Payments.',
-];
+const visibleFloorSeconds = (MINIMUM_VISIBLE_DURATION_MS / 1000).toFixed(2);
 
-function VerificationTrace() {
+const verificationCards = [
+  {
+    label: 'Eligibility',
+    title: 'The app marks a real pause',
+    detail: 'An explicitly integrated app signals an eligible wait with the person’s consent.',
+  },
+  {
+    label: 'Delivery',
+    title: 'A labelled unit actually renders',
+    detail: 'The sponsored message appears inside that waiting surface, not just in a request log.',
+  },
+  {
+    label: 'Verification',
+    title: 'Evidence agrees before it counts',
+    detail: 'Duration, visible surface, duplicate, session, and fraud checks are evaluated first.',
+  },
+] as const;
+
+const privacyCards = [
+  {
+    eyebrow: 'Never collected',
+    title: 'The work stays yours',
+    detail:
+      'No source code, prompts, completions, terminal output, file contents, repository names, secrets, or environment variables.',
+    tone: 'quiet',
+  },
+  {
+    eyebrow: 'Only evidence used',
+    title: 'The signal stays narrow',
+    detail:
+      'Ateva uses consent, session and request identifiers, render and visibility events, timestamps, and abuse controls.',
+    tone: 'accent',
+  },
+] as const;
+
+function ScrollReveal({
+  children,
+  className = '',
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  const revealRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = revealRef.current;
+    if (!element) return;
+
+    const prefersReducedMotion =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (prefersReducedMotion || !('IntersectionObserver' in window)) {
+      setVisible(true);
+      return;
+    }
+
+    let hasRevealed = false;
+    const show = () => {
+      if (hasRevealed) return;
+      hasRevealed = true;
+      setVisible(true);
+      observer.disconnect();
+      window.removeEventListener('scroll', revealOnScroll);
+    };
+    const revealOnScroll = () => {
+      if (element.getBoundingClientRect().top < window.innerHeight * 0.92) show();
+    };
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        show();
+      },
+      { threshold: 0.14, rootMargin: '0px 0px -8% 0px' },
+    );
+
+    observer.observe(element);
+    window.addEventListener('scroll', revealOnScroll, { passive: true });
+    revealOnScroll();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', revealOnScroll);
+    };
+  }, []);
+
+  const revealStyle = { '--reveal-delay': `${delay}ms` } as CSSProperties;
+
   return (
-    <figure className="relative mx-auto w-full max-w-[540px] lg:mx-0 lg:ml-auto">
-      <div
-        aria-hidden="true"
-        className="absolute -bottom-5 -right-5 h-[78%] w-[82%] rounded-[32px] bg-brand-100/70 sm:-bottom-7 sm:-right-7"
-      />
-      <div className="relative overflow-hidden rounded-[28px] border border-surface-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(23,25,28,0.04),0_24px_70px_-32px_rgba(23,25,28,0.28)] sm:p-7">
-        <div className="flex items-center justify-between gap-4 border-b border-surface-200/80 pb-5">
-          <div>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-surface-400">
-              Verification trace
-            </p>
-            <p className="mt-1.5 text-sm font-medium text-surface-900">Illustrative agent wait</p>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-800">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />4 / 4 checks
-          </span>
+    <div
+      ref={revealRef}
+      className={`landing-reveal ${visible ? 'landing-reveal--visible' : ''} ${className}`}
+      style={revealStyle}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SignalPreview() {
+  return (
+    <figure className="landing-card landing-signal-card">
+      <div className="flex items-start justify-between gap-4 border-b border-surface-200/80 pb-5">
+        <div>
+          <p className="landing-eyebrow">Signal preview</p>
+          <p className="mt-2 text-sm font-semibold text-surface-950">One eligible delivery</p>
         </div>
-
-        <div className="relative mt-6 space-y-5">
-          <div
-            aria-hidden="true"
-            className="absolute bottom-3 left-[5px] top-3 w-px bg-surface-200"
-          />
-
-          <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
-            <span className="relative z-10 mt-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-surface-950 ring-1 ring-surface-300" />
-            <div>
-              <p className="text-[13px] font-medium text-surface-900">Eligible wait detected</p>
-              <p className="mt-1 text-xs leading-5 text-surface-500">Agent is running tests.</p>
-            </div>
-            <time className="font-mono text-[11px] text-surface-400">00:00.0</time>
-          </div>
-
-          <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
-            <span className="relative z-10 mt-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-brand-500 ring-1 ring-brand-300" />
-            <div className="rounded-2xl bg-brand-200 p-4 text-brand-900">
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-brand-700">
-                Sponsored · example
-              </p>
-              <p className="mt-2 text-[14px] font-medium leading-5">
-                Developer infrastructure for AI-native teams
-              </p>
-              <p className="mt-2 text-[11px] leading-4 text-brand-700">
-                Clearly labelled inside the eligible waiting surface.
-              </p>
-            </div>
-            <time className="font-mono text-[11px] text-surface-400">00:05.2</time>
-          </div>
-
-          <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
-            <span className="relative z-10 mt-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-emerald-500 ring-1 ring-emerald-300" />
-            <div>
-              <p className="text-[13px] font-medium text-surface-900">Visibility verified</p>
-              <p className="mt-1 text-xs leading-5 text-surface-500">
-                Duration, session, and duplicate controls passed.
-              </p>
-            </div>
-            <time className="font-mono text-[11px] text-surface-400">00:10.8</time>
-          </div>
-
-          <div className="relative grid grid-cols-[12px_1fr_auto] items-start gap-x-4">
-            <span className="relative z-10 mt-1.5 h-3 w-3 rounded-full border-[3px] border-white bg-surface-950 ring-1 ring-surface-300" />
-            <div>
-              <p className="text-[13px] font-medium text-surface-900">
-                Qualified impression recorded
-              </p>
-              <p className="mt-1 text-xs leading-5 text-surface-500">
-                Reporting only; reward settlement remains disabled.
-              </p>
-            </div>
-            <time className="font-mono text-[11px] text-surface-400">00:11.0</time>
-          </div>
-        </div>
-
-        <figcaption className="mt-6 flex flex-wrap gap-x-4 gap-y-1 border-t border-surface-200/80 pt-4 font-mono text-[11px] uppercase tracking-[0.12em] text-surface-400">
-          <span>No source code</span>
-          <span>No prompts</span>
-          <span>No terminal output</span>
-        </figcaption>
+        <span className="landing-chip landing-chip--quiet">Illustrative</span>
       </div>
+
+      <div className="landing-signal-canvas">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="landing-signal-dot" />
+            <div>
+              <p className="text-sm font-semibold text-surface-950">Eligible surface</p>
+              <p className="mt-1 text-xs text-surface-500">Consent recorded by the app</p>
+            </div>
+          </div>
+          <span className="landing-status-tag">Ready</span>
+        </div>
+
+        <div className="landing-sponsored-unit">
+          <div className="flex items-center justify-between gap-3">
+            <span className="landing-eyebrow text-brand-700">Sponsored message</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-brand-700/70">
+              Example
+            </span>
+          </div>
+          <p className="mt-5 max-w-[280px] font-serif text-[30px] leading-[1.02] tracking-[-0.03em] text-brand-900">
+            Make the next build feel lighter.
+          </p>
+          <p className="mt-3 max-w-[300px] text-xs leading-5 text-brand-800/75">
+            A clearly labelled message while an eligible agent wait is visible.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 divide-x divide-surface-200/80 border-t border-surface-200/80 pt-5">
+          <div className="pr-4">
+            <p className="landing-eyebrow text-surface-500">Visibility floor</p>
+            <p className="mt-2 text-sm font-semibold text-surface-950">{visibleFloorSeconds}s</p>
+          </div>
+          <div className="pl-4">
+            <p className="landing-eyebrow text-surface-500">Surface check</p>
+            <p className="mt-2 text-sm font-semibold text-surface-950">
+              {MINIMUM_VISIBLE_SURFACE_PERCENT}% when reported
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <figcaption className="mt-5 border-t border-surface-200/80 pt-4 text-xs leading-5 text-surface-500">
+        Delivery evidence only. No source code, prompts, or terminal output.
+      </figcaption>
     </figure>
+  );
+}
+
+function PrimaryButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="landing-button landing-button--primary">
+      {children}
+      <span aria-hidden="true">→</span>
+    </Link>
+  );
+}
+
+function SecondaryButton({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="landing-button landing-button--secondary">
+      {children}
+    </Link>
   );
 }
 
@@ -123,291 +194,306 @@ export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
   const dashboardPath = user ? getDashboardPath(user.role) : '/developer';
   const primaryHref = isAuthenticated ? dashboardPath : '/auth/signup?role=developer';
-  const primaryLabel = isAuthenticated ? 'Dashboard' : 'Join beta';
+  const primaryLabel = isAuthenticated ? 'Open dashboard' : 'Join developer beta';
 
   return (
-    <div className="min-h-screen bg-white text-surface-950 antialiased">
+    <div className="landing-page min-h-screen text-surface-950 antialiased">
       <SiteHeader
         primaryHref={primaryHref}
-        primaryLabel={primaryLabel}
+        primaryLabel={isAuthenticated ? 'Dashboard' : 'Join beta'}
         showLogin={!isAuthenticated}
       />
 
       <main id="main-content" tabIndex={-1}>
-        <section className="relative overflow-hidden border-b border-surface-200/75 px-5 py-16 sm:px-6 sm:py-20 lg:px-8 lg:py-24">
-          <div
-            aria-hidden="true"
-            className="absolute right-[4%] top-[8%] h-80 w-80 rounded-full bg-brand-50 blur-3xl"
-          />
-          <div className="relative mx-auto grid max-w-[1240px] gap-16 lg:grid-cols-[minmax(0,1.08fr)_minmax(420px,.92fr)] lg:items-center xl:gap-20">
-            <div>
-              <div className="mb-7 flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-2 rounded-full border border-brand-300/80 bg-brand-100 px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.13em] text-brand-800">
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                  Private beta · rewards disabled
+        <section className="landing-hero landing-anchor overflow-hidden px-5 sm:px-6 lg:px-8">
+          <div aria-hidden="true" className="landing-hero-orb" />
+          <div className="landing-container relative grid gap-14 lg:grid-cols-[minmax(0,0.96fr)_minmax(420px,0.84fr)] lg:items-center lg:gap-20">
+            <ScrollReveal>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="landing-chip landing-chip--accent">
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+                  Private beta
                 </span>
-                <BackendStatus />
+                <span className="landing-chip landing-chip--quiet">Rewards off</span>
               </div>
 
-              <h1 className="max-w-[780px] text-balance font-serif text-[clamp(3.35rem,7vw,5.8rem)] font-normal leading-[0.95] tracking-[-0.04em] text-surface-950">
+              <p className="landing-kicker mt-8">
+                A privacy-first delivery layer for AI-agent apps
+              </p>
+              <h1 className="landing-display landing-hero-title mt-4 max-w-[720px] text-balance text-surface-950">
                 Verify AI-agent wait time{' '}
-                <em className="font-normal italic text-brand-600">without reading</em> the work.
+                <em className="font-normal italic text-brand-600">without reading the work.</em>
               </h1>
-              <p className="mt-7 max-w-[650px] text-[17px] leading-7 text-surface-600 sm:text-lg sm:leading-8">
-                Ateva lets explicitly integrated AI-agent applications show a small, clearly
-                labelled sponsored unit during eligible waiting periods. The beta validates
-                measurement and fraud controls before rewards or live campaign billing are enabled.
+              <p className="mt-7 max-w-[630px] text-[17px] leading-7 text-surface-600 sm:text-lg sm:leading-8">
+                Ateva gives explicitly integrated AI-agent apps a small, clearly labelled sponsor
+                surface during eligible waits. Delivery is verified without inspecting the task
+                itself. Rewards and campaign billing stay off while the beta proves the signal.
               </p>
 
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <Link
-                  href={primaryHref}
-                  className="inline-flex h-12 items-center justify-center rounded-full bg-surface-950 px-7 text-sm font-medium text-white transition-transform duration-200 hover:-translate-y-0.5 hover:bg-surface-800 motion-reduce:transform-none motion-reduce:transition-none"
-                >
-                  {isAuthenticated ? 'Open dashboard' : 'Join developer beta'}
-                  <span aria-hidden="true" className="ml-2">
-                    →
-                  </span>
-                </Link>
-                <Link
-                  href={
-                    isAuthenticated && user?.role === 'advertiser' ? '/advertiser' : '/advertisers'
-                  }
-                  className="inline-flex h-12 items-center justify-center rounded-full border border-surface-900 px-7 text-sm font-medium text-surface-950 transition-colors hover:bg-surface-100/70"
-                >
-                  Review advertiser tooling
-                </Link>
+                <PrimaryButton href={primaryHref}>{primaryLabel}</PrimaryButton>
+                <SecondaryButton href="/advertisers">For sponsors</SecondaryButton>
               </div>
 
-              <div className="mt-10 grid max-w-[690px] gap-y-3 border-t border-surface-200/80 pt-5 font-mono text-[11px] uppercase tracking-[0.09em] text-surface-500 sm:grid-cols-3 sm:gap-x-5">
-                <span>Integrated apps only</span>
-                <span>Explicit consent</span>
-                <span>Separate payment rails</span>
+              <div className="landing-proof-strip mt-10 max-w-[680px]">
+                <span>Opt-in integrations</span>
+                <span>No code or prompts</span>
+                <span>Measurement before money</span>
               </div>
-            </div>
+            </ScrollReveal>
 
-            <VerificationTrace />
+            <ScrollReveal delay={120} className="lg:justify-self-end">
+              <SignalPreview />
+            </ScrollReveal>
+          </div>
+        </section>
+
+        <section
+          id="product"
+          className="landing-section landing-product-section landing-anchor px-5 sm:px-6 lg:px-8"
+        >
+          <div className="landing-container">
+            <ScrollReveal>
+              <LandingProductShowcase />
+            </ScrollReveal>
           </div>
         </section>
 
         <section
           id="how-it-works"
-          className="border-b border-surface-200/75 bg-surface-50 px-5 py-20 sm:px-6 lg:px-8 lg:py-28"
+          className="landing-section landing-section--soft landing-anchor px-5 sm:px-6 lg:px-8"
         >
-          <div className="mx-auto max-w-[1240px]">
-            <div className="grid gap-8 lg:grid-cols-[.72fr_1.28fr] lg:gap-16">
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
-                Verification, not self-reporting
-              </p>
-              <div>
-                <h2 className="max-w-4xl text-balance font-serif text-[clamp(2.7rem,5vw,4.4rem)] font-normal leading-[1.02] tracking-[-0.03em] text-surface-950">
-                  A view counts only after it passes every check.
-                </h2>
-                <p className="mt-6 max-w-2xl text-base leading-7 text-surface-600">
-                  The integration records the sponsored unit only when it is actually rendered in an
-                  eligible session. A participant cannot declare a view on their own.
-                </p>
-              </div>
-            </div>
-
-            <ol className="mt-14 grid border-y border-surface-300/70 md:grid-cols-4 md:divide-x md:divide-surface-300/70">
-              {verificationSteps.map((step, index) => (
-                <li
-                  key={step.title}
-                  className="border-b border-surface-300/70 py-6 last:border-b-0 md:border-b-0 md:px-6 md:first:pl-0 md:last:pr-0"
-                >
-                  <p className="font-mono text-[11px] text-brand-600">
-                    {String(index + 1).padStart(2, '0')} / 04
-                  </p>
-                  <h3 className="mt-5 text-sm font-semibold text-surface-900">{step.title}</h3>
-                  <p className="mt-2 text-[13px] leading-5 text-surface-500">{step.detail}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        <section
-          id="developers"
-          className="border-b border-surface-200/75 px-5 py-20 sm:px-6 lg:px-8 lg:py-28"
-        >
-          <div className="mx-auto max-w-[1240px]">
-            <div className="grid gap-10 lg:grid-cols-[.9fr_1.1fr] lg:items-start lg:gap-20">
-              <div>
-                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
-                  For developers
-                </p>
-                <h2 className="mt-4 max-w-xl text-balance font-serif text-[clamp(2.7rem,5vw,4.25rem)] font-normal leading-[1.02] tracking-[-0.03em] text-surface-950">
-                  Validate the signal before money enters the picture.
-                </h2>
-                <p className="mt-6 max-w-xl text-base leading-7 text-surface-600">
-                  The beta measures eligible wait states with explicit consent. Nothing accrues
-                  while rewards are off. If enabled, Ateva would record a participant obligation
-                  equal to 60% of each qualifying bid and retain 40%.
-                </p>
-              </div>
-
-              <div className="rounded-[28px] border border-surface-200/80 bg-surface-50 p-6 sm:p-8">
-                <div className="flex items-end justify-between gap-5 border-b border-surface-200 pb-6">
-                  <div>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-surface-500">
-                      Future qualifying split
-                    </p>
-                    <p className="mt-2 font-serif text-4xl tracking-[-0.03em] text-surface-950">
-                      60 <span className="text-surface-300">/</span> 40
-                    </p>
-                  </div>
-                  <p className="max-w-[180px] text-right text-xs leading-5 text-surface-500">
-                    Participant obligation / Ateva
+          <div className="landing-container">
+            <ScrollReveal>
+              <div className="landing-section-heading grid gap-7 lg:grid-cols-[0.72fr_1.28fr] lg:gap-16">
+                <p className="landing-eyebrow text-brand-600">How it works</p>
+                <div>
+                  <h2 className="landing-display landing-section-title max-w-3xl text-balance text-surface-950">
+                    One signal. Three checks. No access to the work.
+                  </h2>
+                  <p className="mt-6 max-w-2xl text-base leading-7 text-surface-600">
+                    Ateva only needs to know that a consented, labelled unit appeared and stayed
+                    visible long enough to be meaningful.
                   </p>
                 </div>
-                <ul className="mt-6 space-y-4">
-                  {betaGuarantees.map((guarantee) => (
-                    <li
-                      key={guarantee}
-                      className="grid grid-cols-[18px_1fr] gap-3 text-[13px] leading-5 text-surface-600"
-                    >
-                      <span aria-hidden="true" className="mt-1 h-2 w-2 rounded-full bg-brand-500" />
-                      <span>{guarantee}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
+            </ScrollReveal>
+
+            <div className="mt-12 grid gap-4 md:grid-cols-3">
+              {verificationCards.map((card, index) => (
+                <ScrollReveal key={card.label} delay={index * 90} className="h-full">
+                  <article className="landing-card landing-process-card h-full">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="landing-step-number">0{index + 1}</span>
+                      <span className="landing-eyebrow text-surface-500">{card.label}</span>
+                    </div>
+                    <h3 className="mt-14 max-w-[250px] text-lg font-semibold leading-6 text-surface-950">
+                      {card.title}
+                    </h3>
+                    <p className="mt-3 text-[13px] leading-6 text-surface-600">{card.detail}</p>
+                  </article>
+                </ScrollReveal>
+              ))}
             </div>
 
-            <BetaSignalPlanner />
+            <ScrollReveal delay={280} className="mt-6">
+              <div className="landing-note-strip">
+                <span className="landing-note-label">What reaches reporting</span>
+                <span>
+                  Qualified delivery evidence — not a self-reported view and not a balance.
+                </span>
+              </div>
+            </ScrollReveal>
           </div>
         </section>
 
-        <section id="sponsors" className="px-5 py-20 sm:px-6 lg:px-8 lg:py-28">
-          <div className="mx-auto max-w-[1240px] overflow-hidden rounded-[32px] bg-surface-950 px-6 py-10 text-white sm:px-10 sm:py-14 lg:px-14 lg:py-16">
-            <div className="grid gap-12 lg:grid-cols-[1.02fr_.98fr] lg:items-end lg:gap-20">
-              <div>
-                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-300">
-                  For advertisers
-                </p>
-                <h2 className="mt-4 max-w-2xl text-balance font-serif text-[clamp(2.7rem,5vw,4.35rem)] font-normal leading-[1.02] tracking-[-0.03em]">
-                  Buy verified delivery, with the money rails kept separate.
-                </h2>
-              </div>
-              <p className="max-w-xl text-sm leading-6 text-white/58 lg:pb-1">
-                Dodo Payments processes the advertiser transaction and settles it to Ateva in full.
-                Any future participant compensation is a separate Ateva expense, calculated only
-                after verification and paid through a different provider.
-              </p>
+        <section id="developers" className="landing-section landing-anchor px-5 sm:px-6 lg:px-8">
+          <div className="landing-container">
+            <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)] lg:items-start lg:gap-20">
+              <ScrollReveal>
+                <div>
+                  <p className="landing-eyebrow text-brand-600">For the beta</p>
+                  <h2 className="landing-display landing-section-title mt-4 max-w-3xl text-balance text-surface-950">
+                    Validate the signal before money enters the picture.
+                  </h2>
+                  <p className="mt-6 max-w-2xl text-base leading-7 text-surface-600">
+                    The first job is measurement: can an integrated app create a useful,
+                    privacy-safe wait surface, and can Ateva verify that it was delivered? The beta
+                    answers that before rewards or live campaign billing exist.
+                  </p>
+                </div>
+              </ScrollReveal>
+
+              <ScrollReveal delay={110}>
+                <aside className="landing-card landing-beta-card" aria-label="Current beta status">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="landing-eyebrow">Current mode</p>
+                      <p className="mt-2 text-lg font-semibold text-surface-950">
+                        Measurement only
+                      </p>
+                    </div>
+                    <span className="landing-chip landing-chip--accent">Live beta</span>
+                  </div>
+                  <div className="mt-7 grid grid-cols-2 gap-3">
+                    <div className="landing-status-cell">
+                      <strong>Off</strong>
+                      <span>Rewards</span>
+                    </div>
+                    <div className="landing-status-cell">
+                      <strong>Off</strong>
+                      <span>Campaign billing</span>
+                    </div>
+                    <div className="landing-status-cell">
+                      <strong>Opt in</strong>
+                      <span>App participation</span>
+                    </div>
+                    <div className="landing-status-cell">
+                      <strong>Narrow</strong>
+                      <span>Data collected</span>
+                    </div>
+                  </div>
+                  <p className="mt-5 border-t border-surface-200/80 pt-4 text-xs leading-5 text-surface-500">
+                    No payout promise is being made during this phase.
+                  </p>
+                </aside>
+              </ScrollReveal>
             </div>
 
-            <div className="mt-12 grid gap-px overflow-hidden rounded-3xl border border-white/12 bg-white/12 md:grid-cols-2">
-              <div className="bg-surface-950 p-6 sm:p-8">
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
-                  Customer payment
-                </p>
-                <p className="mt-5 text-lg font-medium text-white">
-                  Advertiser <span className="px-1 text-brand-300">→</span> Dodo Payments{' '}
-                  <span className="px-1 text-brand-300">→</span> Ateva
-                </p>
-                <p className="mt-3 text-[13px] leading-5 text-white/50">
-                  The complete customer transaction settles to Ateva.
-                </p>
-              </div>
-              <div className="bg-surface-950 p-6 sm:p-8">
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white/55">
-                  Future participant payout
-                </p>
-                <p className="mt-5 text-lg font-medium text-white">
-                  Ateva <span className="px-1 text-brand-300">→</span> approved provider{' '}
-                  <span className="px-1 text-brand-300">→</span> participant
-                </p>
-                <p className="mt-3 text-[13px] leading-5 text-white/50">
-                  A separate fiat obligation after verification and approval.
-                </p>
-              </div>
+            <div className="mt-10 grid gap-4 md:grid-cols-2">
+              <ScrollReveal className="h-full">
+                <article className="landing-card landing-audience-card h-full">
+                  <p className="landing-eyebrow text-brand-600">Developers</p>
+                  <h3 className="mt-5 max-w-md text-2xl font-semibold leading-tight tracking-[-0.025em] text-surface-950">
+                    Give an app a privacy-safe surface for waiting.
+                  </h3>
+                  <p className="mt-4 max-w-md text-sm leading-6 text-surface-600">
+                    Join with an explicitly integrated client. Ateva sees consent and delivery
+                    evidence, never what the agent is working on.
+                  </p>
+                  <Link href={primaryHref} className="landing-inline-link mt-7">
+                    {isAuthenticated ? 'Open dashboard' : 'Join developer beta'} <span>→</span>
+                  </Link>
+                </article>
+              </ScrollReveal>
+
+              <ScrollReveal delay={100} className="h-full">
+                <article id="sponsors" className="landing-card landing-audience-card h-full">
+                  <p className="landing-eyebrow text-brand-600">Sponsors</p>
+                  <h3 className="mt-5 max-w-md text-2xl font-semibold leading-tight tracking-[-0.025em] text-surface-950">
+                    Reach builders in a moment they can actually see.
+                  </h3>
+                  <p className="mt-4 max-w-md text-sm leading-6 text-surface-600">
+                    Founding sponsors can prepare clearly labelled campaigns for an inventory that
+                    is measured at delivery. Billing remains closed in the beta.
+                  </p>
+                  <Link href="/advertisers" className="landing-inline-link mt-7">
+                    Join the sponsor waitlist <span>→</span>
+                  </Link>
+                </article>
+              </ScrollReveal>
             </div>
           </div>
         </section>
 
         <section
           id="trust"
-          className="border-y border-surface-200/75 bg-surface-50 px-5 py-20 sm:px-6 lg:px-8 lg:py-28"
+          className="landing-section landing-section--soft landing-anchor px-5 sm:px-6 lg:px-8"
         >
-          <div className="mx-auto grid max-w-[1240px] gap-12 lg:grid-cols-[.88fr_1.12fr] lg:gap-20">
-            <div>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
-                Trust boundary
-              </p>
-              <h2 className="mt-4 max-w-lg text-balance font-serif text-[clamp(2.8rem,5vw,4.4rem)] font-normal leading-[1] tracking-[-0.03em] text-surface-950">
-                Measure the wait. Leave the work alone.
-              </h2>
-              <p className="mt-6 max-w-lg text-base leading-7 text-surface-600">
-                Ateva needs evidence that a sponsored unit was visible—not access to what the agent
-                or developer was doing.
-              </p>
-            </div>
+          <div className="landing-container">
+            <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:gap-20">
+              <ScrollReveal>
+                <div>
+                  <p className="landing-eyebrow text-brand-600">Trust boundary</p>
+                  <h2 className="landing-display landing-section-title mt-4 max-w-xl text-balance text-surface-950">
+                    Privacy is the product boundary.
+                  </h2>
+                  <p className="mt-6 max-w-lg text-base leading-7 text-surface-600">
+                    The useful thing Ateva can measure is the delivery event. Everything about the
+                    task behind it stays outside the product.
+                  </p>
+                </div>
+              </ScrollReveal>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[26px] border border-surface-200/80 bg-white p-6 sm:p-7">
-                <span className="inline-flex rounded-full border border-surface-200 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.13em] text-surface-500">
-                  Never required
-                </span>
-                <p className="mt-6 text-sm font-semibold text-surface-950">The work itself</p>
-                <p className="mt-3 text-[13px] leading-6 text-surface-500">
-                  Source code · prompts · completions · terminal output · file contents · repository
-                  names · secrets · environment variables
-                </p>
-              </div>
-              <div className="rounded-[26px] border border-brand-300/80 bg-white p-6 sm:p-7">
-                <span className="inline-flex rounded-full bg-brand-100 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.13em] text-brand-700">
-                  Narrow evidence
-                </span>
-                <p className="mt-6 text-sm font-semibold text-surface-950">The delivery trace</p>
-                <p className="mt-3 text-[13px] leading-6 text-surface-500">
-                  Session and request identifiers · eligible duration · render and visibility events
-                  · timestamps · duplicate controls · fraud signals
-                </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {privacyCards.map((card, index) => (
+                  <ScrollReveal key={card.eyebrow} delay={index * 100} className="h-full">
+                    <article
+                      className={`landing-card landing-privacy-card landing-privacy-card--${card.tone} h-full`}
+                    >
+                      <span className="landing-chip landing-chip--quiet">{card.eyebrow}</span>
+                      <h3 className="mt-7 text-lg font-semibold text-surface-950">{card.title}</h3>
+                      <p className="mt-3 text-[13px] leading-6 text-surface-600">{card.detail}</p>
+                    </article>
+                  </ScrollReveal>
+                ))}
               </div>
             </div>
-          </div>
 
-          <div className="mx-auto mt-10 flex max-w-[1240px] flex-wrap gap-x-6 gap-y-3 border-t border-surface-200/80 pt-6">
-            <Link href="/privacy" className="wl-link-u text-sm font-medium text-brand-700">
-              Privacy policy →
-            </Link>
-            <Link
-              href="/advertiser-policy"
-              className="wl-link-u text-sm font-medium text-brand-700"
-            >
-              Advertiser policy →
-            </Link>
-            <Link href="/payout-policy" className="wl-link-u text-sm font-medium text-brand-700">
-              Payout policy →
-            </Link>
+            <ScrollReveal delay={220} className="mt-10">
+              <div className="flex flex-wrap gap-x-6 gap-y-3 border-t border-surface-200/80 pt-6">
+                <Link href="/privacy" className="landing-inline-link">
+                  Privacy policy <span>→</span>
+                </Link>
+                <Link href="/advertiser-policy" className="landing-inline-link">
+                  Advertiser policy <span>→</span>
+                </Link>
+                <Link href="/payout-policy" className="landing-inline-link">
+                  Payout policy <span>→</span>
+                </Link>
+              </div>
+            </ScrollReveal>
           </div>
         </section>
 
-        <section className="px-5 py-20 sm:px-6 lg:px-8 lg:py-24">
-          <div className="mx-auto flex max-w-[1240px] flex-col justify-between gap-8 border-b border-surface-200 pb-16 md:flex-row md:items-end">
-            <div>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
-                Private beta
-              </p>
-              <h2 className="mt-4 max-w-3xl text-balance font-serif text-[clamp(2.7rem,5vw,4.2rem)] font-normal leading-[1.02] tracking-[-0.03em] text-surface-950">
-                Help prove the signal before the incentives switch on.
-              </h2>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row md:justify-end">
-              <Link
-                href={primaryHref}
-                className="inline-flex h-12 items-center justify-center rounded-full bg-surface-950 px-7 text-sm font-medium text-white hover:bg-surface-800"
-              >
-                {isAuthenticated ? 'Open dashboard' : 'Join developer beta'}
-              </Link>
-              <Link
-                href="/advertisers"
-                className="inline-flex h-12 items-center justify-center rounded-full border border-surface-900 px-7 text-sm font-medium text-surface-950 hover:bg-surface-100/70"
-              >
-                Join advertiser waitlist
-              </Link>
-            </div>
+        <section className="landing-section landing-anchor px-5 sm:px-6 lg:px-8">
+          <div className="landing-container">
+            <ScrollReveal>
+              <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+                <div>
+                  <p className="landing-eyebrow text-brand-600">Optional sandbox</p>
+                  <h2 className="landing-display landing-section-title landing-section-title--compact mt-4 max-w-2xl text-balance text-surface-950">
+                    See the signal in context.
+                  </h2>
+                  <p className="mt-5 max-w-xl text-sm leading-6 text-surface-600">
+                    Explore an illustrative day or campaign. It is a planning aid, not a payout
+                    forecast, and nothing is billed during the beta.
+                  </p>
+                </div>
+                <span className="landing-chip landing-chip--quiet">Illustrative only</span>
+              </div>
+            </ScrollReveal>
+
+            <ScrollReveal delay={100} className="mt-10">
+              <BetaSignalPlanner />
+            </ScrollReveal>
+          </div>
+        </section>
+
+        <section className="landing-section landing-section--cta px-5 sm:px-6 lg:px-8">
+          <div className="landing-container">
+            <ScrollReveal>
+              <div className="landing-cta-card">
+                <div>
+                  <p className="landing-eyebrow text-brand-300">Private beta</p>
+                  <h2 className="landing-display landing-section-title landing-section-title--light mt-4 max-w-2xl text-balance text-white">
+                    Help prove the signal before the incentives switch on.
+                  </h2>
+                  <p className="mt-5 max-w-xl text-sm leading-6 text-white/65">
+                    Join as a developer or register interest as a founding sponsor. The current
+                    phase is about evidence, consent, and trust.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Link href={primaryHref} className="landing-button landing-button--light">
+                    {primaryLabel} <span aria-hidden="true">→</span>
+                  </Link>
+                  <Link href="/advertisers" className="landing-button landing-button--dark-outline">
+                    Sponsor waitlist
+                  </Link>
+                </div>
+              </div>
+            </ScrollReveal>
           </div>
         </section>
       </main>

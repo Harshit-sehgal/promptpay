@@ -221,6 +221,86 @@ describe('AgentService', () => {
     expect(tx.agentLifecycleEvent.create).not.toHaveBeenCalled();
   });
 
+  /**
+   * Wire the reads `maybeGenerateOpportunity` performs for a `user.returned`
+   * completion-return projection: the session's latest event (ordering gate),
+   * then the prior `user.backgrounded`, then the work completed while away.
+   */
+  function attentionReads(tx: ReturnType<typeof makePrisma>['tx'], latest: unknown = null): void {
+    tx.agentLifecycleEvent.findFirst
+      .mockResolvedValueOnce(null) // duplicate/idempotency lookup
+      .mockResolvedValueOnce(latest) // latest event on the session
+      .mockResolvedValueOnce({ occurredAt: new Date(Date.now() - 120_000) }) // user.backgrounded
+      .mockResolvedValueOnce({ workUnitId: 'work-unit-row' }); // work finished while away
+    tx.agentSession.findUnique.mockResolvedValue({
+      id: 'session-row',
+      userId: USER_ID,
+      deviceId: DEVICE_ID,
+      provider: 'claude_code',
+      status: 'active',
+    });
+    tx.agentWorkUnit.findFirst.mockResolvedValue(null);
+    tx.agentLifecycleEvent.create.mockResolvedValue({});
+    tx.adOpportunity.upsert.mockResolvedValue({});
+  }
+
+  const returnedEvent = (overrides: Record<string, unknown> = {}) =>
+    event({
+      eventId: '44444444-4444-4444-8444-444444444444',
+      idempotencyKey: 'event-returned',
+      eventType: 'user.returned',
+      ...overrides,
+    });
+
+  it('projects a completion-return opportunity for an interactive session', async () => {
+    // Control for the two suppression tests below: without it they could pass
+    // because the fixture never generates an opportunity at all.
+    const { service, tx } = makeService();
+    attentionReads(tx);
+
+    await service.ingestBatch(USER_ID, signedBatch([returnedEvent()]));
+
+    expect(tx.adOpportunity.upsert).toHaveBeenCalledOnce();
+  });
+
+  it('never mints attention inventory from a headless (CI) session', async () => {
+    const { service, tx } = makeService();
+    attentionReads(tx);
+
+    const result = await service.ingestBatch(
+      USER_ID,
+      signedBatch([
+        returnedEvent({ metadata: { toolFamily: 'test', executionContext: 'headless' } }),
+      ]),
+    );
+
+    // The agent work is still recorded — headless coding is legitimate work.
+    expect(tx.agentLifecycleEvent.create).toHaveBeenCalledOnce();
+    expect(result.accepted).toHaveLength(1);
+    // It simply cannot become an advertising opportunity.
+    expect(tx.adOpportunity.upsert).not.toHaveBeenCalled();
+  });
+
+  it('does not let a late event mint an opportunity the session has moved past', async () => {
+    // t0 processing_started, t2 completed (already applied), then t1 arrives.
+    // Ordering already protected the session row; the opportunity projection
+    // used to run unconditionally and could still create inventory here.
+    const { service, tx } = makeService();
+    attentionReads(tx, {
+      occurredAt: new Date(Date.now() + 60_000),
+      sequence: 99,
+      eventId: '99999999-9999-4999-8999-999999999999',
+    });
+
+    const result = await service.ingestBatch(USER_ID, signedBatch([returnedEvent()]));
+
+    expect(tx.agentLifecycleEvent.create).toHaveBeenCalledOnce();
+    expect(result.accepted).toHaveLength(1);
+    expect(tx.adOpportunity.upsert).not.toHaveBeenCalled();
+    // A superseded event must not roll the session state back either.
+    expect(tx.agentSession.update).not.toHaveBeenCalled();
+  });
+
   it('rejects a batch with no valid events before database persistence', async () => {
     const { service, prisma } = makeService();
     await expect(

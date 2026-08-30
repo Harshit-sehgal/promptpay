@@ -189,7 +189,24 @@ export class AgentService {
       try {
         sanitizedEvent = {
           ...event,
-          metadata: sanitizeHookPayload(event.provider, event.eventType, event.metadata).metadata,
+          metadata: {
+            // Second-line privacy scrub over the PROVIDER-DERIVED metadata:
+            // re-runs the client's allowlist so a compromised or buggy client
+            // cannot widen it.
+            ...sanitizeHookPayload(event.provider, event.eventType, event.metadata).metadata,
+            // `executionContext` is client envelope context, not provider data,
+            // so it is deliberately absent from the provider allowlist that the
+            // scrub above copies — that is what stops a hook payload declaring
+            // its own interactivity. It therefore has to be re-attached here,
+            // or the scrub would erase the client's own stamp and every CI
+            // event would read as unknown. Carrying it across is safe because
+            // `agentLifecycleEventSchema` has already constrained it to the
+            // two-value enum; it is the same trust level as `provider` and
+            // `integrationMode`, which pass through untouched.
+            ...(event.metadata.executionContext
+              ? { executionContext: event.metadata.executionContext }
+              : {}),
+          },
         };
       } catch {
         rejected.push({ eventId: event.eventId, reason: 'forbidden_privacy_field' });
@@ -407,15 +424,29 @@ export class AgentService {
         },
       });
 
+      // Whether this event is the newest the session has seen, under the total
+      // order (occurredAt, sequence, eventId). Everything derived from the
+      // event is gated on it; the event row itself is always persisted, so a
+      // late arrival is never lost, only prevented from rewriting conclusions
+      // the session has already moved past.
+      const isLatest = !latestEvent || isEventAtOrAfterLatest(event, latestEvent);
+
       // WL-061 is deliberately an agent-domain projection only. It inserts
       // candidate opportunities and never calls legacy ad selection, billing,
       // impressions, clicks, or ledger services.
-      await this.maybeGenerateOpportunity(tx, userId, deviceId, session.id, event);
+      //
+      // This shares the ordering gate with the session update below. It used to
+      // run unconditionally, which let a reordered batch mint inventory out of
+      // an event the session had already superseded: given
+      // `processing_started(t0), completed(t2)` applied first, a late
+      // `input.required(t1)` would still project an opportunity against a work
+      // unit that had finished. Derived state and session state must agree
+      // about which event is current.
+      if (isLatest) {
+        await this.maybeGenerateOpportunity(tx, userId, deviceId, session.id, event);
+      }
 
-      const sessionUpdate =
-        !latestEvent || isEventAtOrAfterLatest(event, latestEvent)
-          ? sessionUpdateFor(event, occurredAt)
-          : null;
+      const sessionUpdate = isLatest ? sessionUpdateFor(event, occurredAt) : null;
       if (sessionUpdate) {
         await tx.agentSession.update({ where: { id: session.id }, data: sessionUpdate });
       }
@@ -437,6 +468,16 @@ export class AgentService {
           ? 'completion_return'
           : null;
     if (!placementType) return;
+
+    // Headless execution produces real agent work and no human attention. A CI
+    // job, a remote build agent, or a cron-driven refactor must never mint an
+    // ad opportunity, so the event is still persisted above and simply stops
+    // here. An absent value means an older client and stays permissive.
+    //
+    // This is a data-quality boundary, not a fraud control: a hostile client
+    // would claim `interactive`. Independent attestation is the answer to that
+    // (issue #45), and until it exists nothing on this path is billable anyway.
+    if (event.metadata.executionContext === 'headless') return;
 
     const occurredAt = new Date(event.occurredAt);
     const now = Date.now();

@@ -5,6 +5,7 @@ import {
   agentLifecycleEventSchema,
   canonicalAgentBatchPayload,
   canonicalAgentBatchPayloadFromUnknown,
+  canonicalAgentMetadataSchema,
   getAgentProtocolCompatibility,
   isAgentEventTimestampBounded,
   normalizeFixture,
@@ -171,5 +172,28 @@ describe('@ateva/agent-protocol', () => {
       sanitizeHookPayload('codex_cli', 'Stop', { note: 'Bearer token_123456789' }),
     ).toThrow();
     expect(() => sanitizeHookPayload('codex_cli', 'Stop', { note: 'user@example.com' })).toThrow();
+  });
+
+  it('never lets a provider payload declare its own executionContext', () => {
+    // executionContext decides whether an event may become human-attention
+    // inventory. It is stamped by the client from its own environment, so a
+    // hook payload claiming `interactive` inside CI must not survive
+    // sanitization — the field is absent from CANONICAL_METADATA_KEYS and is
+    // therefore never copied out of provider input.
+    const sanitized = sanitizeHookPayload('claude_code', 'Stop', {
+      executionContext: 'interactive',
+      execution_context: 'interactive',
+      toolFamily: 'shell',
+    });
+
+    expect(sanitized.metadata.executionContext).toBeUndefined();
+    expect(sanitized.metadata.toolFamily).toBe('shell');
+  });
+
+  it('accepts a locally stamped executionContext on the canonical schema', () => {
+    expect(
+      canonicalAgentMetadataSchema.parse({ executionContext: 'headless' }).executionContext,
+    ).toBe('headless');
+    expect(() => canonicalAgentMetadataSchema.parse({ executionContext: 'maybe' })).toThrow();
   });
 });
