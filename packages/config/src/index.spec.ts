@@ -185,6 +185,19 @@ describe('@ateva/config env schema', () => {
     ).not.toThrow();
   });
 
+  it('validates the optional shadow-fact pseudonym key without enabling it by default', () => {
+    expect(loadEnv(BASE_ENV).ATTENTION_SHADOW_PSEUDONYM_KEY).toBeUndefined();
+    expect(
+      loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: validKey() })
+        .ATTENTION_SHADOW_PSEUDONYM_KEY,
+    ).toBe(validKey());
+    expect(() => loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: 'too-short' })).toThrow();
+    expect(
+      envSchema.parse({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: '' })
+        .ATTENTION_SHADOW_PSEUDONYM_KEY,
+    ).toBeUndefined();
+  });
+
   it('rejects mismatched environment identity and unsafe faucet settings', () => {
     expect(() =>
       loadEnv({ ...BASE_ENV, NODE_ENV: 'production', ATEVA_ENVIRONMENT_KIND: 'sandbox' }),

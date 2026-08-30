@@ -202,10 +202,11 @@ Payments are fail-closed stubs and cannot be enabled by configuration alone.
 
 ## Privacy and OAuth verification
 
-| Variable                 | Req  | Default | Purpose                                                      |
-| ------------------------ | ---- | ------- | ------------------------------------------------------------ |
-| `PRIVACY_HASH_KEY`       | opt* | —       | 32+ character keyed pseudonymization secret; prod required.  |
-| `GOOGLE_AUTH_TIMEOUT_MS` | opt  | `5000`  | Google ID-token verification transport timeout (1000-30000). |
+| Variable                         | Req  | Default | Purpose                                                                                                    |
+| -------------------------------- | ---- | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `PRIVACY_HASH_KEY`               | opt* | —       | 32+ character keyed pseudonymization secret; prod required.                                                |
+| `ATTENTION_SHADOW_PSEUDONYM_KEY` | opt  | —       | 32-256 character key for opt-in privacy-safe adaptive-attention shadow facts; never a client/build secret. |
+| `GOOGLE_AUTH_TIMEOUT_MS`         | opt  | `5000`  | Google ID-token verification transport timeout (1000-30000).                                               |
 
 ## Notes
 

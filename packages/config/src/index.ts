@@ -195,6 +195,12 @@ const optionalAllowlist = (validate: (value: string) => boolean, message: string
     z.string().refine(validate, message).optional(),
   );
 
+const optionalSecret = (minimumLength: number, maximumLength: number) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().min(minimumLength).max(maximumLength).optional(),
+  );
+
 const envSchema = z
   .object({
     // General
@@ -386,6 +392,10 @@ const envSchema = z
     // Keyed pseudonymization for IP addresses and other low-entropy values.
     // A plain SHA-256 hash is reversible by enumerating the IPv4 space.
     PRIVACY_HASH_KEY: z.string().min(32).optional(),
+    // Keyed pseudonymization for privacy-safe adaptive-attention shadow facts.
+    // Optional because the materializer is opt-in; an empty value means the
+    // job remains disabled. The key never belongs in a client or build arg.
+    ATTENTION_SHADOW_PSEUDONYM_KEY: optionalSecret(32, 256),
 
     // Sentry (error monitoring)
     SENTRY_DSN: z.string().optional(),
