@@ -489,6 +489,12 @@ const envSchema = z
       .min(60_000)
       .max(86_400_000)
       .default(600_000),
+    ATTENTION_SHADOW_FACT_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(900_000),
     LEDGER_MATURATION_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(500),
     LEDGER_MATURATION_RUN_CAP: z.coerce.number().int().min(1).max(20_000).default(5_000),
     WEBHOOK_RECLAIM_CRON: z.enum(['true', 'false']).optional(),
