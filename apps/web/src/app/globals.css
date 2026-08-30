@@ -215,7 +215,19 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-eyebrow {
-  color: #737373;
+  color: #5d2a1a;
+}
+
+/* Keep small labels readable on the light landing surfaces. The same class is
+   used inside the dark product chapter and CTA, where the light accent is the
+   accessible counterpart. */
+.landing-page .text-surface-500 {
+  color: #5f5f5f;
+}
+
+.landing-product-section .landing-eyebrow,
+.landing-cta-card .landing-eyebrow {
+  color: #f0b592;
 }
 
 .landing-chip {
@@ -288,6 +300,14 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .landing-card:focus-within::before {
   opacity: 1;
   transform: scaleX(1);
+}
+
+/* Focus must not move a card underneath the pointer or keyboard target. The
+   planner also contains controls, so suppress its hover lift for the same
+   reason; border and shadow feedback remain intact. */
+.landing-card:focus-within,
+.landing-planner:hover {
+  transform: none;
 }
 
 .landing-reveal {
@@ -471,7 +491,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-status-cell span {
-  color: #737373;
+  color: #5f5f5f;
   font-size: 0.75rem;
   line-height: 1.3;
 }
@@ -758,14 +778,14 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-window-status {
-  color: #737373;
+  color: #5f5f5f;
   font-weight: 500;
   text-align: right;
 }
 
 .landing-product-overline {
   display: block;
-  color: #737373;
+  color: #5f5f5f;
   font-weight: 500;
 }
 
@@ -789,14 +809,14 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 .landing-app-rail__label {
   margin-bottom: 0.6rem;
-  color: #a3a3a3;
+  color: #5f5f5f;
 }
 
 .landing-app-rail__item,
 .landing-fake-navigation span {
   border-radius: 0.5rem;
   padding: 0.55rem 0.6rem;
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-weight: 500;
 }
 
@@ -917,7 +937,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 .landing-private-work p {
   margin-top: 2rem;
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-size: 0.54rem;
   line-height: 1.6;
   text-transform: none;
@@ -951,7 +971,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 .landing-wait-center > span:last-child {
   max-width: 14rem;
-  color: #737373;
+  color: #5f5f5f;
   font-size: 0.7rem;
   line-height: 1.45;
 }
@@ -987,7 +1007,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-ad-example {
-  color: rgb(93 42 26 / 0.58);
+  color: #6b4434;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.54rem;
   letter-spacing: 0.1em;
@@ -1011,14 +1031,14 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  color: rgb(93 42 26 / 0.68);
+  color: #6b4434;
   font-size: 0.64rem;
   line-height: 1.3;
 }
 
 .landing-ad-dismiss {
   flex: 0 0 auto;
-  border: 1px solid rgb(93 42 26 / 0.25);
+  border: 1px solid rgb(93 42 26 / 0.45);
   border-radius: 999px;
   padding: 0.35rem 0.5rem;
   font-family: var(--font-mono), ui-monospace, monospace;
@@ -1034,7 +1054,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   gap: 0.75rem 1rem;
   border-top: 1px solid rgb(23 25 28 / 0.09);
   padding: 0.75rem 1rem;
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-size: 0.54rem;
   letter-spacing: 0.08em;
 }
@@ -1066,7 +1086,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 
 .landing-dashboard-stats span,
 .landing-dashboard-stats small {
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-size: 0.53rem;
 }
 
@@ -1124,7 +1144,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-evidence-number {
-  color: #a3a3a3;
+  color: #5f5f5f;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.6rem;
 }
@@ -1146,7 +1166,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   margin: 1rem 1.25rem 0;
   border-top: 1px solid rgb(23 25 28 / 0.09);
   padding-top: 0.75rem;
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.54rem;
   letter-spacing: 0.07em;
@@ -1185,7 +1205,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-campaign-fields span {
-  color: #8a8d8c;
+  color: #5f5f5f;
   font-size: 0.52rem;
 }
 
@@ -1228,7 +1248,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 .landing-sponsor-requirements > span {
   display: block;
   margin-bottom: 0.55rem;
-  color: #737373;
+  color: #5f5f5f;
 }
 
 .landing-sponsor-requirements div {
