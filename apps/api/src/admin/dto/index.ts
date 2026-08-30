@@ -8,6 +8,7 @@ export {
   AuditLogQueryDto,
   EscalateFraudFlagDto,
   FraudFlagsQueryDto,
+  FreezeAttentionArtifactDto,
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,

@@ -396,6 +396,15 @@ export class AgentService {
           },
         }));
 
+      // Bind a shadow/experiment policy at session creation when an operator
+      // has provisioned one. The optional guard keeps older test doubles and
+      // databases that predate the additive metadata migration telemetry-safe;
+      // it never falls back to an invented policy or changes a session's
+      // assignment after creation.
+      if (!existingSession) {
+        await this.assignShadowPolicyIfAvailable(tx, session.id, occurredAt);
+      }
+
       const workUnit = await this.projectWorkUnit(tx, session.id, event, occurredAt);
       await tx.agentLifecycleEvent.create({
         data: {
@@ -451,6 +460,43 @@ export class AgentService {
         await tx.agentSession.update({ where: { id: session.id }, data: sessionUpdate });
       }
       return { eventId: event.eventId, duplicate: false };
+    });
+  }
+
+  private async assignShadowPolicyIfAvailable(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    assignedAt: Date,
+  ): Promise<void> {
+    const metadataClient = tx as Prisma.TransactionClient & {
+      attentionPricingPolicy?: {
+        findFirst(args: unknown): Promise<{ id: string } | null>;
+      };
+      attentionSessionPolicyAssignment?: {
+        upsert(args: unknown): Promise<unknown>;
+      };
+    };
+    if (
+      !metadataClient.attentionPricingPolicy ||
+      !metadataClient.attentionSessionPolicyAssignment
+    ) {
+      return;
+    }
+
+    const policy = await metadataClient.attentionPricingPolicy.findFirst({
+      where: {
+        status: { in: ['shadow', 'experiment'] },
+        effectiveAt: { lte: assignedAt },
+      },
+      orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
+      select: { id: true },
+    });
+    if (!policy) return;
+
+    await metadataClient.attentionSessionPolicyAssignment.upsert({
+      where: { sessionId },
+      create: { id: randomUUID(), sessionId, policyId: policy.id, assignedAt },
+      update: {},
     });
   }
 

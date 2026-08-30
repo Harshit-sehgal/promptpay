@@ -58,9 +58,18 @@ function placement(category = 'general', overrides = {}) {
   };
 }
 
-function makeTrait({ settings = {}, countryAllowed = true, exposureCount = 0, platformAdsEnabled = true } = {}) {
+function makeTrait({
+  settings = {},
+  countryAllowed = true,
+  exposureCount = 0,
+  platformAdsEnabled = true,
+} = {}) {
   const opportunity = {
-    findFirst: async () => ({ id: 'scenario-opportunity', attentionConfidence: 0.9, integrationConfidence: 0.9 }),
+    findFirst: async () => ({
+      id: 'scenario-opportunity',
+      attentionConfidence: 0.9,
+      integrationConfidence: 0.9,
+    }),
     findMany: async () => [],
     count: async () => exposureCount,
     updateMany: async () => ({ count: 1 }),
@@ -72,13 +81,22 @@ function makeTrait({ settings = {}, countryAllowed = true, exposureCount = 0, pl
     },
   };
   const adCreative = { findUnique: async () => creative };
-  const tx = { adOpportunity: opportunity, adCreative, campaignPlacement };
+  const tx = {
+    adOpportunity: opportunity,
+    adCreative,
+    campaignPlacement,
+    $executeRaw: async () => 1,
+  };
   const trait = new ExtensionAdTrait();
   Object.assign(trait, {
     prisma: {
-      userSettings: { findUnique: async () => ({ waitTelemetryEnabled: true, adsEnabled: true, ...settings }) },
+      userSettings: {
+        findUnique: async () => ({ waitTelemetryEnabled: true, adsEnabled: true, ...settings }),
+      },
       device: { findUnique: async () => ({ id: deviceId, userId, user: { status: 'active' } }) },
-      waitStateEvent: { findFirst: async ({ where }) => (where?.eventType === 'wait_state_end' ? null : waitStart) },
+      waitStateEvent: {
+        findFirst: async ({ where }) => (where?.eventType === 'wait_state_end' ? null : waitStart),
+      },
       user: { findUnique: async () => ({ country: 'US' }) },
       agentSession: { findUnique: async () => ({ id: 'scenario-db-session', userId, deviceId }) },
       adImpression: { findFirst: async () => null },
@@ -111,7 +129,9 @@ async function run() {
     const result = await trait.requestAd(userId, request);
     if (!result.ad || result.mode !== 'sandbox' || result.hasCashValue !== false)
       throw new Error('foreground sandbox opportunity was not served safely');
-    process.stdout.write(`${JSON.stringify([event('opportunity.foreground', { served: true })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.foreground', { served: true })])}\n`,
+    );
     return;
   }
   if (mode === 'completion-return') {
@@ -125,7 +145,9 @@ async function run() {
     });
     if (!result.ad || result.mode !== 'sandbox' || result.hasCashValue !== false)
       throw new Error('completion-return opportunity was not served safely');
-    process.stdout.write(`${JSON.stringify([event('opportunity.completion_return', { served: true })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.completion_return', { served: true })])}\n`,
+    );
     return;
   }
   if (mode === 'repeated-return') {
@@ -134,8 +156,18 @@ async function run() {
     let token;
     opportunity.findFirst = async (args) => {
       if (args.where?.claimIdempotencyKey && !claimed) return null;
-      if (args.where?.state === 'candidate') return claimed ? null : { id: 'scenario-opportunity', attentionConfidence: 0.9, integrationConfidence: 0.9 };
-      return claimed ? { id: 'scenario-opportunity', selectedCampaignId: 'scenario-campaign', selectedCreativeId: creative.id, sandboxImpressionToken: token } : null;
+      if (args.where?.state === 'candidate')
+        return claimed
+          ? null
+          : { id: 'scenario-opportunity', attentionConfidence: 0.9, integrationConfidence: 0.9 };
+      return claimed
+        ? {
+            id: 'scenario-opportunity',
+            selectedCampaignId: 'scenario-campaign',
+            selectedCreativeId: creative.id,
+            sandboxImpressionToken: token,
+          }
+        : null;
     };
     opportunity.updateMany = async (args) => {
       claimed = true;
@@ -146,8 +178,11 @@ async function run() {
     const replay = await trait.requestAd(userId, request);
     if (!first.ad?.impressionToken || replay.ad?.impressionToken !== first.ad.impressionToken)
       throw new Error('repeated return did not replay the same opportunity');
-    if (campaignPlacement.findMany !== undefined && !claimed) throw new Error('opportunity was not claimed');
-    process.stdout.write(`${JSON.stringify([event('opportunity.replayed', { sameToken: true })])}\n`);
+    if (campaignPlacement.findMany !== undefined && !claimed)
+      throw new Error('opportunity was not claimed');
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.replayed', { sameToken: true })])}\n`,
+    );
     return;
   }
   if (mode === 'expiry') {
@@ -160,13 +195,17 @@ async function run() {
     return;
   }
   if (mode === 'category-block') {
-    const { trait, campaignPlacement } = makeTrait({ settings: { blockedCategories: ['finance'] } });
+    const { trait, campaignPlacement } = makeTrait({
+      settings: { blockedCategories: ['finance'] },
+    });
     campaignPlacement.findMany = async (args = {}) =>
       args.where?.campaign?.category?.notIn?.includes('finance') ? [] : [placement('finance')];
     const result = await trait.requestAd(userId, request);
     if (result.reason !== 'no_sandbox_placement' || result.ad)
       throw new Error('blocked category was served');
-    process.stdout.write(`${JSON.stringify([event('opportunity.category_blocked', { served: false })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.category_blocked', { served: false })])}\n`,
+    );
     return;
   }
   if (mode === 'country-block') {
@@ -174,15 +213,19 @@ async function run() {
     const result = await trait.requestAd(userId, request);
     if (result.reason !== 'country_blocked' || result.ad)
       throw new Error('blocked country was served');
-    process.stdout.write(`${JSON.stringify([event('opportunity.country_blocked', { served: false })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.country_blocked', { served: false })])}\n`,
+    );
     return;
   }
   if (mode === 'frequency-cap') {
     const { trait } = makeTrait({ settings: { maxAdsPerHour: 6 }, exposureCount: 6 });
     const result = await trait.requestAd(userId, request);
-    if (result.reason !== 'no_sandbox_placement' || result.ad)
+    if (result.reason !== 'account_attention_cap_reached' || result.ad)
       throw new Error('frequency cap did not suppress placement');
-    process.stdout.write(`${JSON.stringify([event('opportunity.frequency_capped', { served: false })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.frequency_capped', { served: false })])}\n`,
+    );
     return;
   }
   if (mode === 'kill-switch') {
@@ -190,16 +233,25 @@ async function run() {
     const result = await trait.requestAd(userId, request);
     if (result.reason !== 'platform_ads_paused' || result.ad)
       throw new Error('active opportunity bypassed the platform ad kill switch');
-    process.stdout.write(`${JSON.stringify([event('opportunity.kill_switch', { served: false })])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([event('opportunity.kill_switch', { served: false })])}\n`,
+    );
     return;
   }
   if (mode === 'consent-before-render') {
     try {
-      await makeTrait({ settings: { waitTelemetryEnabled: false, adsEnabled: true } }).trait.requestAd(userId, request);
+      await makeTrait({
+        settings: { waitTelemetryEnabled: false, adsEnabled: true },
+      }).trait.requestAd(userId, request);
     } catch (error) {
       const response = error?.getResponse?.();
-      if (response === 'wait_telemetry_consent_required' || response?.message === 'wait_telemetry_consent_required') {
-        process.stdout.write(`${JSON.stringify([event('opportunity.consent_revoked_before_render', { served: false })])}\n`);
+      if (
+        response === 'wait_telemetry_consent_required' ||
+        response?.message === 'wait_telemetry_consent_required'
+      ) {
+        process.stdout.write(
+          `${JSON.stringify([event('opportunity.consent_revoked_before_render', { served: false })])}\n`,
+        );
         return;
       }
       throw error;

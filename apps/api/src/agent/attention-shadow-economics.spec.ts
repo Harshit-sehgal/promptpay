@@ -9,6 +9,7 @@ describe('shadow attention economics', () => {
     alphaPpm: 500_000n,
     passiveCapRatioPpm: 1_000_000n,
     passiveSessionCapMs: 60_000,
+    minimumQualifiedMs: 1_000,
   };
 
   it('evaluates economics without producing financial amounts', () => {

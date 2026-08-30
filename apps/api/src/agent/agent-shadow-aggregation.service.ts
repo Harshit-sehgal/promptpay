@@ -10,6 +10,8 @@ import {
 } from './attention-interval-aggregator';
 
 export type ViewabilityIntervalEvent = Omit<AttentionIntervalEvent, 'state'> & {
+  /** Preserves canonical sequence for equal-timestamp observations. */
+  order?: number;
   state:
     | 'foreground_visible'
     | 'foreground_not_visible'
@@ -87,15 +89,59 @@ export class AgentShadowAggregationService {
     viewabilityEvents: readonly ViewabilityIntervalEvent[],
     endMs: number,
   ): ShadowAggregationResult {
-    const providerEvents: AttentionIntervalEvent[] = events.map((event) => ({
+    const orderedEvents = [...events].sort(compareCanonicalEvents);
+    const providerEvents: AttentionIntervalEvent[] = orderedEvents.map((event) => ({
       atMs: Date.parse(event.occurredAt),
       state: stateForEvent(event),
     }));
-    return this.aggregate(providerEvents, viewabilityEvents, endMs);
+    return this.aggregate(
+      providerEvents,
+      [...viewabilityEvents].sort(compareViewabilityEvents),
+      endMs,
+    );
   }
 }
 
+/**
+ * Project only explicit surface/lifecycle observations into viewability
+ * observations. Focus or a resumed agent alone is not treated as a visible
+ * ad surface; a `surface.visible` event is required to start viewable time.
+ */
+export function viewabilityEventsForCanonicalEvents(
+  events: readonly AgentLifecycleEventV1[],
+): ViewabilityIntervalEvent[] {
+  return [...events].sort(compareCanonicalEvents).flatMap((event, order) => {
+    const atMs = Date.parse(event.occurredAt);
+    if (!Number.isFinite(atMs)) return [];
+    const state: ViewabilityIntervalEvent['state'] | null = (() => {
+      switch (event.eventType) {
+        case 'surface.visible':
+          return 'foreground_visible';
+        case 'surface.hidden':
+        case 'user.foregrounded':
+        case 'device.unlocked':
+        case 'integration.connected':
+          return 'foreground_not_visible';
+        case 'user.backgrounded':
+          return 'background';
+        case 'device.locked':
+          return 'device_locked';
+        case 'integration.disconnected':
+          return 'disconnected';
+        default:
+          return null;
+      }
+    })();
+    return state ? [{ atMs, state, order }] : [];
+  });
+}
+
 function stateForEvent(event: AgentLifecycleEventV1): AttentionIntervalEvent['state'] {
+  // Headless agent work is still useful telemetry, but it is never human
+  // attention. The client stamps this context after provider sanitization; an
+  // honest CI/cron session therefore cannot create Q even if surface events
+  // happen to be present in the same event stream.
+  if (event.metadata.executionContext === 'headless') return 'idle';
   switch (event.eventType) {
     case 'turn.submitted':
     case 'user.interacted':
@@ -126,4 +172,24 @@ function stateForEvent(event: AgentLifecycleEventV1): AttentionIntervalEvent['st
 
 function sumDuration(intervals: readonly AttentionInterval[]): number {
   return intervals.reduce((total, interval) => total + interval.endMs - interval.startMs, 0);
+}
+
+function compareCanonicalEvents(left: AgentLifecycleEventV1, right: AgentLifecycleEventV1): number {
+  const occurredAt = Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
+  if (occurredAt !== 0) return occurredAt;
+  const leftSequence = left.sequence ?? Number.MAX_SAFE_INTEGER;
+  const rightSequence = right.sequence ?? Number.MAX_SAFE_INTEGER;
+  if (leftSequence !== rightSequence) return leftSequence - rightSequence;
+  return left.eventId.localeCompare(right.eventId);
+}
+
+function compareViewabilityEvents(
+  left: ViewabilityIntervalEvent,
+  right: ViewabilityIntervalEvent,
+): number {
+  return (
+    left.atMs - right.atMs ||
+    (left.order ?? Number.MAX_SAFE_INTEGER) - (right.order ?? Number.MAX_SAFE_INTEGER) ||
+    left.state.localeCompare(right.state)
+  );
 }

@@ -1,5 +1,6 @@
 import {
   evaluateShadowAttention,
+  ShadowAttentionEvaluationInput,
   ShadowAttentionMeasurement,
   ShadowAttentionPolicy,
 } from '@ateva/agent-protocol';
@@ -15,7 +16,7 @@ export type ShadowPolicyComparison = {
 };
 
 export function evaluateShadowEconomics(
-  measurement: Pick<ShadowAttentionMeasurement, 'renderedMs' | 'viewableMs' | 'aiEligibleMs'>,
+  measurement: ShadowAttentionEvaluationInput,
   policy: ShadowAttentionPolicy,
 ): ShadowEconomics {
   return {
@@ -25,7 +26,7 @@ export function evaluateShadowEconomics(
 }
 
 export function compareShadowPolicies(
-  measurement: Pick<ShadowAttentionMeasurement, 'renderedMs' | 'viewableMs' | 'aiEligibleMs'>,
+  measurement: ShadowAttentionEvaluationInput,
   currentPolicy: ShadowAttentionPolicy,
   candidates: readonly ShadowAttentionPolicy[],
 ): ShadowPolicyComparison {

@@ -477,6 +477,7 @@ export {
   type AttentionState,
   attentionStateSchema,
   evaluateShadowAttention,
+  type ShadowAttentionEvaluationInput,
   type ShadowAttentionMeasurement,
   shadowAttentionMeasurementSchema,
   type ShadowAttentionPolicy,
@@ -492,13 +493,28 @@ export {
   loadGoldenAgentFixtures,
 } from './golden-fixtures';
 export {
+  type AttentionDatasetManifest,
+  attentionDatasetManifestSchema,
   type AttentionExperimentAssignment,
   attentionExperimentAssignmentSchema,
+  type AttentionExperimentDefinition,
+  attentionExperimentDefinitionSchema,
   type AttentionExperimentStatus,
   attentionExperimentStatusSchema,
+  type AttentionExperimentVariant,
+  attentionExperimentVariantSchema,
   type AttentionModelArtifact,
   attentionModelArtifactSchema,
 } from './model-contract';
+export {
+  createShadowSessionFact,
+  type ShadowAttestationStatus,
+  shadowAttestationStatusSchema,
+  type ShadowFraudRiskStatus,
+  shadowFraudRiskStatusSchema,
+  type ShadowSessionFact,
+  shadowSessionFactSchema,
+} from './shadow-fact-contract';
 
 export function scanForbiddenAgentFields(value: unknown): string[] {
   const found = new Set<string>();

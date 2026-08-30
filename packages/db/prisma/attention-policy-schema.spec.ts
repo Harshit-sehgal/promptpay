@@ -11,6 +11,10 @@ const metadataMigration = readFileSync(
   resolve(__dirname, 'migrations/20260830010000_attention_experiment_model_metadata/migration.sql'),
   'utf8',
 );
+const telemetryMigration = readFileSync(
+  resolve(__dirname, 'migrations/20260831000000_attention_telemetry_facts/migration.sql'),
+  'utf8',
+);
 
 describe('attention policy persistence contract', () => {
   it('defines only additive policy statuses and fixed-point fields', () => {
@@ -29,6 +33,17 @@ describe('attention policy persistence contract', () => {
     expect(schema).toContain('enum AttentionModelFamily');
     expect(metadataMigration).toContain('CREATE TABLE "attention_experiments"');
     expect(metadataMigration).toContain('CREATE TABLE "attention_model_artifacts"');
+    expect(schema).toContain('model AttentionExperimentOutcome');
+    expect(schema).toContain('modelParameters   Json?');
+    expect(telemetryMigration).toContain('CREATE TABLE "attention_experiment_outcomes"');
+    expect(telemetryMigration).toContain('prevent_attention_policy_parameter_update');
+    expect(telemetryMigration).toContain('attention_session_policy_assignment_immutable_fields');
+    expect(telemetryMigration).toContain('attention_session_fact_immutable_fields');
+    expect(telemetryMigration).toContain(
+      'attention_experiment_assignments_subject_key_digest_check',
+    );
+    expect(telemetryMigration).toContain('attention_experiment_outcomes_digest_check');
+    expect(telemetryMigration).toContain('attention_session_facts_key_digest_check');
   });
 
   it('does not couple the new models to financial domains', () => {
@@ -38,6 +53,7 @@ describe('attention policy persistence contract', () => {
       schema.match(/model AttentionExperiment \{[\s\S]*?\n\}/)?.[0] ?? '',
       schema.match(/model AttentionExperimentAssignment \{[\s\S]*?\n\}/)?.[0] ?? '',
       schema.match(/model AttentionModelArtifact \{[\s\S]*?\n\}/)?.[0] ?? '',
+      schema.match(/model AttentionExperimentOutcome \{[\s\S]*?\n\}/)?.[0] ?? '',
     ];
     const combined = blocks.join('\n');
     expect(combined).not.toMatch(/Ledger|Payout|Campaign|Advertiser|Earnings|Impression/);
@@ -53,5 +69,9 @@ describe('attention policy persistence contract', () => {
     expect(migration).not.toMatch(
       /(UPDATE|DELETE|DROP TABLE|INSERT INTO)\s+"?(advertiser_ledger|earnings_ledger|platform_ledger|ad_impressions)/i,
     );
+    expect(telemetryMigration).not.toMatch(
+      /(UPDATE|DELETE|DROP TABLE|INSERT INTO)\s+"?(advertiser_ledger|earnings_ledger|platform_ledger|ad_impressions)/i,
+    );
+    expect(telemetryMigration).toContain('attention_pricing_policies_alpha_ppm_check');
   });
 });

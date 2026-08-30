@@ -44,6 +44,7 @@ export const shadowAttentionPolicySchema = z
     alphaPpm: z.bigint().min(0n).max(ATTENTION_PPM_SCALE),
     passiveCapRatioPpm: z.bigint().min(0n),
     passiveSessionCapMs: z.number().int().min(0),
+    minimumQualifiedMs: z.number().int().min(0),
   })
   .strict()
   .superRefine((policy, context) => {
@@ -60,6 +61,14 @@ export const shadowAttentionPolicySchema = z
   });
 export type ShadowAttentionPolicy = z.infer<typeof shadowAttentionPolicySchema>;
 
+export type ShadowAttentionEvaluationInput = Pick<
+  ShadowAttentionMeasurement,
+  'renderedMs' | 'viewableMs' | 'aiEligibleMs'
+> & {
+  /** Exact interval intersection when the caller has reconstructed it. */
+  qualifiedMs?: number;
+};
+
 export type ShadowSessionPolicyAssignment = {
   sessionId: string;
   policyVersion: number;
@@ -75,6 +84,7 @@ export const shadowPolicyRecordSchema = z
     alphaPpm: z.bigint().min(0n).max(ATTENTION_PPM_SCALE),
     passiveCapRatioPpm: z.bigint().min(0n).max(ATTENTION_PPM_SCALE),
     passiveSessionCapMs: z.number().int().min(0),
+    minimumQualifiedMs: z.number().int().min(0),
     effectiveAt: z.string().datetime({ offset: true }),
     retiredAt: z.string().datetime({ offset: true }).nullable().optional(),
     parentPolicyId: z.string().min(1).max(128).nullable().optional(),
@@ -100,11 +110,20 @@ export function assignShadowPolicyToSession(
 }
 
 export function evaluateShadowAttention(
-  input: Pick<ShadowAttentionMeasurement, 'renderedMs' | 'viewableMs' | 'aiEligibleMs'>,
+  input: ShadowAttentionEvaluationInput,
   policy: ShadowAttentionPolicy,
 ): ShadowAttentionMeasurement {
   assertDurationOrder(input);
-  const qualifiedMs = Math.min(input.viewableMs, input.aiEligibleMs);
+  const rawQualifiedMs = input.qualifiedMs ?? Math.min(input.viewableMs, input.aiEligibleMs);
+  if (
+    !Number.isInteger(rawQualifiedMs) ||
+    rawQualifiedMs < 0 ||
+    rawQualifiedMs > input.viewableMs ||
+    rawQualifiedMs > input.aiEligibleMs
+  ) {
+    throw new Error('qualifiedMs must be within both viewable and AI-eligible time');
+  }
+  const qualifiedMs = rawQualifiedMs >= policy.minimumQualifiedMs ? rawQualifiedMs : 0;
   const passiveMs = input.viewableMs - qualifiedMs;
   const ratioCapMs = multiplyPpmFloor(qualifiedMs, policy.passiveCapRatioPpm);
   const passiveBillableMs = Math.min(passiveMs, ratioCapMs, policy.passiveSessionCapMs);

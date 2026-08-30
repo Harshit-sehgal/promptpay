@@ -31,4 +31,22 @@ describe('viewability state', () => {
       'background',
     );
   });
+
+  it('fails closed for minimized, covered, unloaded, and partially visible surfaces', () => {
+    for (const observation of [
+      { ...visible, windowMinimized: true },
+      { ...visible, surfaceCovered: true },
+      { ...visible, adLoaded: false },
+      { ...visible, adVisible: false },
+      { ...visible, visibleSurfacePercent: 49 },
+      { ...visible, visibleSurfacePercent: Number.NaN },
+    ]) {
+      expect(isViewableObservation(observation)).toBe(false);
+    }
+    expect(isViewableObservation({ ...visible, visibleSurfacePercent: 50 })).toBe(true);
+  });
+
+  it('treats application backgrounding as background, not an unknown visible state', () => {
+    expect(resolveViewabilityState({ ...visible, appBackgrounded: true })).toBe('background');
+  });
 });

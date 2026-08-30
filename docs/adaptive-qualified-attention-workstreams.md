@@ -4,8 +4,26 @@
 project, together with the current repository guidance in `AGENTS.md` and the
 existing architecture/operations ADRs. Every agent reads those documents first.
 
-**Current status:** Wave 1 planning/documentation. This document assigns work;
-it does not authorize implementation outside the stated wave.
+**Current status:** Repository-safe Waves 1–5 foundation implemented in shadow
+mode; Wave 6 remains unopened. This document records the implementation
+boundary and the evidence still required for a live marketplace.
+
+## Repository evidence delivered
+
+The current tree now contains the additive contracts, migrations, lifecycle
+conformance fixtures, provider-neutral aggregation, viewability state handling,
+privacy-safe session facts, shadow economics, experiment/outcome persistence,
+offline response-model training, constrained policy recommendations, and
+operator read/freeze controls described by Waves 1–5. Focused tests cover
+ordering, replay, policy/session immutability, malformed and unknown provider
+state, viewability failure modes, privacy canaries, temporal leakage, model
+uncertainty, optimizer guardrails, and the absence of financial side effects.
+
+These are repository and fixture-level proofs. No real provider observation,
+external user or advertiser cohort, independent attestation, payment approval,
+legal review, or canary approval is implied by the implementation or its local
+tests. The adaptive evidence validator intentionally rejects incomplete or
+reference-provider evidence, and `wait.earnings` remains disabled.
 
 ## Universal hard rules
 

@@ -15,6 +15,7 @@ describe('shadow attention contract', () => {
     alphaPpm: 500_000n,
     passiveCapRatioPpm: 1_000_000n,
     passiveSessionCapMs: 60_000,
+    minimumQualifiedMs: 1_000,
   };
 
   it('validates an additive shadow policy record without financial fields', () => {
@@ -25,6 +26,7 @@ describe('shadow attention contract', () => {
       alphaPpm: 500_000n,
       passiveCapRatioPpm: 1_000_000n,
       passiveSessionCapMs: 60_000,
+      minimumQualifiedMs: 1_000,
       effectiveAt: '2026-08-30T00:00:00.000Z',
       retiredAt: null,
       parentPolicyId: null,

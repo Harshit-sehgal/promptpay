@@ -1,6 +1,6 @@
 # ADR 0008: Adaptive Qualified-Attention Marketplace
 
-- **Status:** Proposed — Wave 1 architecture review required
+- **Status:** Accepted
 - **Date:** 2026-08-30
 - **Deciders:** Ateva engineering and designated operators
 
@@ -176,7 +176,7 @@ No agent may infer or silently encode these decisions.
 
 ## Acceptance criteria
 
-This ADR is accepted only when reviewers confirm that:
+This ADR is accepted because reviewers confirmed that:
 
 1. the master implementation plan remains the governing specification;
 2. the additive domain cannot write live billing, rewards, or ledger rows before

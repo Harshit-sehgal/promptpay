@@ -9,6 +9,7 @@ describe('shadow attention dataset builder', () => {
     alphaPpm: 500_000n,
     passiveCapRatioPpm: 1_000_000n,
     passiveSessionCapMs: 60_000,
+    minimumQualifiedMs: 1_000,
   };
 
   it('composes telemetry into a pseudonymized row and candidate comparisons', () => {

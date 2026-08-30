@@ -91,6 +91,53 @@ real limit is that same-UID processes are inside the trust boundary, which
 sequencing is actioned by issue #45; and §20's zero-invariants **are**
 quantitative — what is missing is the distributional/performance gates.
 
+## Resolved 2026-08-31 — adaptive qualified-attention repository foundation
+
+The repository-safe Waves 1–5 foundation from ADR-0008 is now implemented in
+shadow mode. The work is additive and does not change existing wait,
+impression, billing, reward, payout, attestation, or ledger authorization.
+
+- **100 migrations.** This is the current on-disk migration count after the
+  additive adaptive-attention migration; older dated snapshots below retain
+  the counts that were true when they were written.
+
+- Versioned protocol and Prisma contracts cover policy versions, immutable
+  session assignments, privacy-safe canonical facts, experiments/outcomes,
+  model metadata, and fixed-point shadow economics. Database triggers reject
+  changes to historical policy, assignment, and session-fact records.
+- CLI lifecycle fixtures and conformance checks represent supported provider
+  states plus explicit unknown/unsupported states without persisting provider
+  payloads. Server aggregation is deterministic across ordering, reconnect,
+  headless execution, viewability, and the qualified-attention invariants.
+- Offline response models use an allowlisted aggregate feature set, temporal
+  train/validation/test windows, leakage checks, calibration/uncertainty and
+  rollback metadata. The constrained optimizer evaluates counterfactual
+  policy vectors and emits advisory recommendations only; it has no activation
+  path and no reward-rate dimension.
+- Admin endpoints expose redacted shadow counts and allow operators to freeze
+  shadow/candidate policies or models. The adaptive release-evidence validator
+  fails closed unless independent attestation, external beta, model, legal,
+  payment, canary, rollback, and second-operator evidence is supplied.
+
+This is not live-market or launch evidence. Real provider observation, external
+user/advertiser cohorts, independent attestation with external key custody,
+operator approvals, and payment/legal/fraud/canary evidence remain outside the
+repository and must be completed before Wave 6. `wait.earnings` remains off.
+
+Verification: `pnpm --filter @ateva/db generate`, Prisma validation, `pnpm run
+typecheck` (18/18), `pnpm run lint` (11/11), `pnpm build` (11/11), `pnpm run
+test:release-gates` (153/153 plus scenario checks), API unit tests (159 files /
+1579 tests), CLI (25 files / 166 tests), agent-protocol (4 files / 26 tests),
+VS Code (17 files / 157 tests with one skip), web (71 files / 328 tests), the
+attestation bridge (4 files / 30 tests), shared (5 files / 77 tests), config (1
+file / 22 tests), adaptive gates (3/3), the database schema contract (4/4), a
+fresh 100-migration deploy plus migration validation, and production boot smoke
+(21/21) pass. `node scripts/audit-claims.mjs` (20/20) and `git diff --check`
+also pass. Root `pnpm test` reaches the package/unit suites but stops at the
+intentional consent-gated destructive integration reset; the local Compose image
+build was attempted but the npm registry timed out during dependency install,
+so the remote `docker-build` job remains authoritative.
+
 ## Resolved 2026-08-28 — staging SSH transport and remote Compose contract
 
 The OCI staging host `vnic1` is now reachable through its verified public SSH

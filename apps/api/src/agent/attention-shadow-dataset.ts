@@ -7,7 +7,7 @@ import {
   ViewabilityIntervalEvent,
 } from './agent-shadow-aggregation.service';
 import { AttentionIntervalEvent } from './attention-interval-aggregator';
-import { compareShadowPolicies } from './attention-shadow-economics';
+import { compareShadowPolicies, evaluateShadowEconomics } from './attention-shadow-economics';
 import { createShadowFeatureRecord, ShadowFeatureRecord } from './attention-shadow-feature';
 
 export type ShadowDatasetInput = {
@@ -40,6 +40,15 @@ export function buildShadowDatasetRow(
     input.viewabilityEvents,
     input.endMs,
   );
+  const currentEconomics = evaluateShadowEconomics(
+    {
+      renderedMs: aggregate.renderedMs,
+      viewableMs: aggregate.viewableMs,
+      aiEligibleMs: aggregate.aiEligibleMs,
+      qualifiedMs: aggregate.qualifiedMs,
+    },
+    currentPolicy,
+  );
   const record = createShadowFeatureRecord({
     sessionKey: pseudonymizeSession(input.sessionId, input.pseudonymKey),
     environmentKind: input.environmentKind,
@@ -50,16 +59,17 @@ export function buildShadowDatasetRow(
     renderedMs: aggregate.renderedMs,
     viewableMs: aggregate.viewableMs,
     aiEligibleMs: aggregate.aiEligibleMs,
-    qualifiedMs: aggregate.qualifiedMs,
-    passiveMs: Math.max(aggregate.viewableMs - aggregate.qualifiedMs, 0),
-    passiveBillableMs: 0,
-    weightedBillablePpmMs: 0n,
+    qualifiedMs: currentEconomics.qualifiedMs,
+    passiveMs: currentEconomics.passiveMs,
+    passiveBillableMs: currentEconomics.passiveBillableMs,
+    weightedBillablePpmMs: currentEconomics.weightedBillablePpmMs,
   });
   const policyComparisons = compareShadowPolicies(
     {
       renderedMs: record.renderedMs,
       viewableMs: record.viewableMs,
       aiEligibleMs: record.aiEligibleMs,
+      qualifiedMs: aggregate.qualifiedMs,
     },
     currentPolicy,
     candidatePolicies,
