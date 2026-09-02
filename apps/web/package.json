@@ -43,9 +43,9 @@
     "@types/react-dom": "^19.2.4",
     "@ateva/eslint-config": "workspace:*",
     "autoprefixer": "^10.5.4",
-    "jsdom": "^29.1.1",
+    "jsdom": "^30.0.1",
     "postcss": "^8.5.26",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }
 }
