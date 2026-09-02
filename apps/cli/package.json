@@ -30,7 +30,7 @@
     "keytar": "npm:@napi-rs/keyring@^1.1.0"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@ateva/agent-protocol": "workspace:*",
     "@ateva/eslint-config": "workspace:*",
     "@ateva/shared": "workspace:*",
