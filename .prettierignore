@@ -3,6 +3,10 @@
 # should not be edited; keep prettier off it.
 apps/web/next-env.d.ts
 
+# Generated lockfile: prettier reflowing it produces thousands of lines of
+# churn on every dependency change and fights pnpm's own writer.
+pnpm-lock.yaml
+
 # Build artifacts.
 **/dist/**
 **/.next/**
