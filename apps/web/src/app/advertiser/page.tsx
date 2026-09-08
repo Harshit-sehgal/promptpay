@@ -4,7 +4,7 @@ import { BarChart3, Megaphone, MousePointer, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard } from '@/components';
+import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
 import SandboxDepositPanel from '@/components/sandbox-deposit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
@@ -37,19 +37,6 @@ interface AdvertiserData {
   totalCampaigns: number;
   campaigns: DashboardCampaign[];
 }
-
-const statusBadge = (status: string) => {
-  const colors: Record<string, string> = {
-    draft: 'bg-ink-600 text-ink-200',
-    submitted: 'bg-yellow-500/20 text-yellow-400',
-    approved: 'bg-blue-500/20 text-blue-400',
-    active: 'bg-emerald-500/20 text-emerald-400',
-    paused: 'bg-amber-500/20 text-amber-400',
-    rejected: 'bg-red-500/20 text-red-400',
-    archived: 'bg-ink-600 text-ink-400',
-  };
-  return colors[status] || 'bg-ink-600 text-ink-200';
-};
 
 function hasApprovedCreative(campaign: DashboardCampaign): boolean {
   return campaign.creatives?.some((creative) => creative.status === 'approved') ?? false;
@@ -178,7 +165,7 @@ export default function AdvertisersPage() {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center py-24">
+        <div className="flex items-center justify-center">
           <LoadingSpinner />
         </div>
       )}
@@ -251,14 +238,10 @@ export default function AdvertisersPage() {
                 {data.campaigns.map((campaign) => (
                   <div
                     key={campaign.id}
-                    className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4"
+                    className="flex flex-col gap-3 bg-ink-700/50 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span
-                        className={`px-2 py-1 rounded text-xs font-medium ${statusBadge(campaign.status)}`}
-                      >
-                        {campaign.status}
-                      </span>
+                      <StatusBadge status={campaign.status} />
                       <p className="text-white font-medium">{campaign.name}</p>
                       {campaign.status === 'approved' && !hasApprovedCreative(campaign) && (
                         <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2 py-0.5 rounded font-medium">
@@ -273,7 +256,7 @@ export default function AdvertisersPage() {
                           </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
+                    <div className="flex flex-wrap items-center gap-3 text-sm sm:gap-6">
                       <span className="text-ink-200">
                         Budget: {formatCurrency(campaign.budgetSpentMinor, campaign.currency)} /{' '}
                         {formatCurrency(campaign.budgetTotalMinor, campaign.currency)}

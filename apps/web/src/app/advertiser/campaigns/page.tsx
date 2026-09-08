@@ -185,16 +185,22 @@ export default function AdvertiserCampaignsPage() {
           </div>
 
           {/* Filter */}
-          <div className="mb-6 flex items-center gap-2">
+          <div
+            className="mb-6 flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Filter campaigns by status"
+          >
             <span className="text-ink-300 text-sm">Status:</span>
             {['', 'draft', 'submitted', 'approved', 'active', 'paused', 'rejected', 'archived'].map(
               (status) => (
                 <button
+                  type="button"
                   key={status || 'all'}
                   onClick={() => {
                     setStatusFilter(status);
                     setPage(1);
                   }}
+                  aria-pressed={statusFilter === status}
                   className={`px-3 py-1 rounded-lg text-xs transition-colors ${
                     statusFilter === status
                       ? 'bg-brand-500 text-white'
@@ -233,7 +239,7 @@ export default function AdvertiserCampaignsPage() {
                       </div>
                     ) : null;
                   })()}
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                     <div className="flex items-center gap-3 flex-wrap">
                       <StatusBadge status={campaign.status} />
                       <h3 className="text-white font-medium">{campaign.name}</h3>
@@ -252,7 +258,7 @@ export default function AdvertiserCampaignsPage() {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       {(() => {
                         const actions = getCampaignActions(campaign);
                         return (

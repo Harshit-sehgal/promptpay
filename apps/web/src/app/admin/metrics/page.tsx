@@ -511,7 +511,7 @@ export default function AdminMetricsPage() {
               role="region"
               aria-label="Metrics table, scrolls horizontally"
             >
-              <table className="w-full text-xs">
+              <table className="w-full min-w-[760px] text-xs">
                 <thead>
                   <tr className="bg-ink-700/30 text-ink-300 font-medium uppercase tracking-wider">
                     <th className="text-left px-4 py-2">Date</th>

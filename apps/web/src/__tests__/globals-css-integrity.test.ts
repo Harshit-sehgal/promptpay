@@ -75,4 +75,22 @@ describe('globals.css integrity', () => {
     expect(header).toMatch(/aria-label="Primary navigation"/);
     expect(header).toMatch(/backdrop-blur-xl/);
   });
+
+  it('keeps dark-mode planner values readable in its light input controls', () => {
+    expect(css).toMatch(
+      /html\[data-landing-theme='dark'\][\s\S]*\.landing-page \.landing-planner input\s*\{\s*color: #1d2933 !important;/,
+    );
+    expect(css).toMatch(
+      /html\[data-landing-theme='dark'\][\s\S]*\.landing-planner \.bg-white\s*\{\s*background-color: #ffffff !important;/,
+    );
+  });
+
+  it('keeps the final component language quiet and two-tone', () => {
+    expect(css).toMatch(/--ateva-canvas-final:\s*#ffffff/);
+    expect(css).toMatch(/--ateva-action-final:\s*#17191c/);
+    expect(css).toMatch(/\.status-badge\s*\{/);
+    expect(css).toMatch(/\.status-badge__dot\s*\{/);
+    expect(css).toMatch(/\.app-stat-card__value\s*\{/);
+    expect(css).toMatch(/\.app-shell \.launch-mode-banner\s*\{/);
+  });
 });

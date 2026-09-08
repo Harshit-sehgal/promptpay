@@ -168,7 +168,7 @@ test('homepage planner controls have accessible names in both modes', async ({ p
 test('homepage planner recomputes instead of showing a fixed sentence', async ({ page }) => {
   await page.goto('/');
 
-  const output = page.getByText('verified signals a day').locator('..');
+  const output = page.getByText('signals a day').locator('..');
   const before = await output.innerText();
 
   // The regression this guards: the original component's three sliders left the
@@ -193,9 +193,9 @@ test('homepage planner recomputes instead of showing a fixed sentence', async ({
 
   // The advertiser side is a calculator as well: typing a budget moves reach.
   await page.getByRole('button', { name: 'For advertisers' }).click();
-  // Anchor on the result caption, not the unit — "qualified impressions" also
-  // appears in the Target CPM hint.
-  const reach = page.getByText(/You.d reach/).locator('..');
+  // Anchor on the result caption, not the unit — the unit is also used in the
+  // Target CPM hint and is deliberately labelled as a model rather than data.
+  const reach = page.getByText('Modelled reach').locator('..');
   const reachBefore = await reach.innerText();
   await page.getByRole('spinbutton', { name: 'Campaign budget' }).fill('4000');
   await expect(reach).not.toHaveText(reachBefore);

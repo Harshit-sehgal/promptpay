@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatNumber, formatRelativeTime } from '@/lib/format';
@@ -435,22 +436,27 @@ export default function AdminFraudPage() {
           </div>
 
           {/* Flag type filter */}
-          <select
-            value={flagTypeFilter}
-            onChange={(e) => setFlagTypeFilter(e.target.value)}
-            className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1 text-xs text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-          >
-            <option value="">All types</option>
-            {FLAG_TYPES.map((ft) => (
-              <option key={ft} value={ft}>
-                {flagTypeLabel(ft)}
-              </option>
-            ))}
-          </select>
+          <label>
+            <span className="sr-only">Filter by flag type</span>
+            <select
+              aria-label="Filter by flag type"
+              value={flagTypeFilter}
+              onChange={(e) => setFlagTypeFilter(e.target.value)}
+              className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1 text-xs text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+            >
+              <option value="">All types</option>
+              {FLAG_TYPES.map((ft) => (
+                <option key={ft} value={ft}>
+                  {flagTypeLabel(ft)}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-xs ml-auto">
             <input
+              aria-label="Search fraud flags by user email"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -459,6 +465,8 @@ export default function AdminFraudPage() {
             />
             {searchQuery && (
               <button
+                type="button"
+                aria-label="Clear fraud flag user search"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 hover:text-white"
               >
@@ -614,7 +622,7 @@ export default function AdminFraudPage() {
                       )}
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2 pt-1">
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
                         {isActive && (
                           <>
                             <button
@@ -645,7 +653,7 @@ export default function AdminFraudPage() {
                         <button
                           onClick={() => handleRecomputeTrust(flag.userId)}
                           disabled={recomputeUserId === flag.userId}
-                          className="bg-ink-700 hover:bg-ink-600 text-ink-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ml-auto"
+                          className="bg-ink-700 hover:bg-ink-600 text-ink-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 sm:ml-auto"
                         >
                           {recomputeUserId === flag.userId ? 'Recomputing...' : 'Recompute trust'}
                         </button>
@@ -704,48 +712,53 @@ export default function AdminFraudPage() {
 
       {/* Resolve with note modal */}
       {noteModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full">
-            <h3 className="text-white font-semibold mb-2">
-              {noteModal.decision === 'confirmed' ? 'Confirm fraud' : 'Mark as invalid'}
-            </h3>
-            <p className="text-ink-300 text-sm mb-4">
-              {noteModal.decision === 'confirmed'
-                ? "This will reverse the associated earnings and penalize the user's trust score."
-                : "This will release any held earnings and restore the user's trust score."}
-            </p>
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Optional note — internal review notes (not visible to user)"
-              rows={3}
-              maxLength={500}
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4 text-sm"
-            />
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setNoteModal(null);
-                  setNoteText('');
-                }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResolveWithNote}
-                disabled={resolving === noteModal.id}
-                className={`${
-                  noteModal.decision === 'confirmed'
-                    ? 'bg-red-500 hover:bg-red-600'
-                    : 'bg-emerald-500 hover:bg-emerald-600'
-                } disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm`}
-              >
-                {resolving === noteModal.id ? 'Resolving...' : 'Confirm'}
-              </button>
-            </div>
+        <ModalDialog
+          open
+          onClose={() => {
+            setNoteModal(null);
+            setNoteText('');
+          }}
+          labelledBy="admin-fraud-resolution-title"
+        >
+          <h3 id="admin-fraud-resolution-title" className="text-white font-semibold mb-2">
+            {noteModal.decision === 'confirmed' ? 'Confirm fraud' : 'Mark as invalid'}
+          </h3>
+          <p className="text-ink-300 text-sm mb-4">
+            {noteModal.decision === 'confirmed'
+              ? "This will reverse the associated earnings and penalize the user's trust score."
+              : "This will release any held earnings and restore the user's trust score."}
+          </p>
+          <textarea
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="Optional note — internal review notes (not visible to user)"
+            rows={3}
+            maxLength={500}
+            className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4 text-sm"
+          />
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              onClick={() => {
+                setNoteModal(null);
+                setNoteText('');
+              }}
+              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleResolveWithNote}
+              disabled={resolving === noteModal.id}
+              className={`${
+                noteModal.decision === 'confirmed'
+                  ? 'bg-red-500 hover:bg-red-600'
+                  : 'bg-emerald-500 hover:bg-emerald-600'
+              } disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm`}
+            >
+              {resolving === noteModal.id ? 'Resolving...' : 'Confirm'}
+            </button>
           </div>
-        </div>
+        </ModalDialog>
       )}
     </>
   );

@@ -137,7 +137,7 @@ export default function ReferralPage() {
                 role="region"
                 aria-label="Referrals table, scrolls horizontally"
               >
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[680px] text-sm">
                   <thead>
                     <tr className="bg-surface-50/50 border-b border-surface-200/80 text-surface-500 font-medium">
                       <th className="text-left px-5 py-3.5 font-medium">Referred user</th>

@@ -54,7 +54,7 @@ export default function AdminDashboard() {
       </div>
 
       {loading && (
-        <div className="flex items-center justify-center py-24">
+        <div className="flex items-center justify-center">
           <LoadingSpinner />
         </div>
       )}
@@ -127,7 +127,7 @@ export default function AdminDashboard() {
               ].map((item) => (
                 <div
                   key={item.href}
-                  className="flex items-center justify-between rounded-lg bg-ink-700/50 p-4 transition-colors hover:bg-ink-700"
+                  className="app-action-row flex items-center justify-between p-4 transition-colors"
                 >
                   <div>
                     <p className="text-white font-medium">{item.title}</p>

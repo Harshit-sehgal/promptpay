@@ -60,6 +60,16 @@ describe('CookieConsent version handling', () => {
       expect(stored).toMatchObject({ choice: 'accepted', version: 'v2' });
       expect(screen.queryByRole('dialog', { name: 'Cookie consent' })).toBeNull();
     });
+    expect(api.post).toHaveBeenCalledWith(
+      '/consent/anonymous',
+      expect.objectContaining({
+        purpose: 'marketing_cookies',
+        policyVersion: 'v2',
+        granted: true,
+      }),
+    );
+    const postMock = vi.mocked(api.post);
+    expect(postMock.mock.calls[0]?.[1]).not.toHaveProperty('version');
   });
 
   it('keeps choices disabled when the required version cannot be loaded', async () => {

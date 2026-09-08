@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 
 const IconCheck = () => (
   <svg
+    aria-hidden="true"
     width="18"
     height="18"
     viewBox="0 0 24 24"
@@ -24,6 +25,7 @@ const IconCheck = () => (
 );
 const IconMinus = () => (
   <svg
+    aria-hidden="true"
     width="18"
     height="18"
     viewBox="0 0 24 24"
@@ -35,6 +37,15 @@ const IconMinus = () => (
     <line x1="5" y1="12" x2="19" y2="12" />
   </svg>
 );
+
+function FeatureMark({ supported }: { supported: boolean }) {
+  return (
+    <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
+      <span className="sr-only">{supported ? 'Supported' : 'Not supported'}</span>
+      {supported ? <IconCheck /> : <IconMinus />}
+    </span>
+  );
+}
 // A-033: The six "Live" tool entries below are marketing labels over just two
 // real client codebases. Cursor, Windsurf, and Cline are VS Code forks that
 // reuse the same Ateva VS Code extension ('vscode-extension'), and Claude
@@ -178,7 +189,7 @@ const PLATFORM_COMPARE = [
 
 export default function ComparisonPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page public-page--comparison min-h-screen bg-white">
       <SiteHeader />
 
       <main id="main-content" tabIndex={-1}>
@@ -204,19 +215,21 @@ export default function ComparisonPage() {
               Ateva integrates directly into popular AI coding tools as a VS Code extension or
               terminal CLI.
             </p>
+            <p className="mb-5 max-w-2xl text-sm leading-6 text-surface-600">
+              Six host labels, two maintained client implementations: the VS Code extension and the
+              CLI.
+            </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {TOOLS.map((tool) => (
                 <div
                   key={tool.slug}
-                  className="bg-white border border-surface-200/80 rounded-xl p-5 hover:shadow-sm transition-shadow"
+                  className="bg-white border border-surface-200/80 rounded-xl p-5"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-surface-900 font-semibold text-sm">{tool.name}</p>
                     <span
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                        tool.status === 'live'
-                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                          : 'text-amber-700 bg-amber-50 border-amber-200'
+                      className={`text-xs font-medium ${
+                        tool.status === 'live' ? 'text-emerald-700' : 'text-amber-700'
                       }`}
                     >
                       {tool.badge}
@@ -264,9 +277,7 @@ export default function ComparisonPage() {
                       {[f.vscode, f.cursor, f.windsurf, f.cline, f.claude, f.terminal].map(
                         (supported, i) => (
                           <td key={i} className="text-center px-3 py-4">
-                            <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
-                              {supported ? <IconCheck /> : <IconMinus />}
-                            </span>
+                            <FeatureMark supported={supported} />
                           </td>
                         ),
                       )}
@@ -316,9 +327,7 @@ export default function ComparisonPage() {
                       <td className="px-5 py-4 text-surface-700">{row.feature}</td>
                       {[row.ateva, row.carbon, row.braze, row.google].map((supported, i) => (
                         <td key={i} className="text-center px-3 py-4">
-                          <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
-                            {supported ? <IconCheck /> : <IconMinus />}
-                          </span>
+                          <FeatureMark supported={supported} />
                         </td>
                       ))}
                     </tr>
@@ -349,7 +358,7 @@ export default function ComparisonPage() {
                 href="/pricing"
                 className="text-white/90 hover:text-white font-medium px-5 py-3 text-sm transition-colors"
               >
-                View pricing
+                See beta access
               </Link>
             </div>
           </div>

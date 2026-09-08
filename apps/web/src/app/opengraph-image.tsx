@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export const alt = 'Ateva — private beta for AI wait-state verification';
+export const alt = 'Ateva — delivery verification for AI-agent apps';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -68,7 +68,7 @@ export default async function OpengraphImage() {
             display: 'flex',
           }}
         >
-          Verify AI-agent wait time
+          Delivery verification for AI-agent apps
         </div>
         <div
           style={{

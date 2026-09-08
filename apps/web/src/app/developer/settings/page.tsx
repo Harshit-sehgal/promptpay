@@ -608,7 +608,12 @@ export default function DevSettingsPage() {
                 <p className="text-surface-500 text-sm">No API keys yet.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-surface-200/80 rounded-lg">
+              <div
+                className="overflow-x-auto border border-surface-200/80 rounded-lg"
+                tabIndex={0}
+                role="region"
+                aria-label="API keys table, scrolls horizontally"
+              >
                 <table className="w-full text-sm">
                   <thead className="bg-surface-50/70 border-b border-surface-200/80">
                     <tr>

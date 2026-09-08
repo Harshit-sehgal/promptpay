@@ -56,8 +56,9 @@ export function BackendStatus() {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border border-surface-200/80 px-2.5 py-1 text-xs font-medium ${text} bg-white`}
+      className={`backend-status inline-flex items-center gap-1.5 text-xs font-medium ${text}`}
       aria-label={`Platform status: ${label}`}
+      data-status={state}
     >
       <span
         className={`relative inline-flex h-2 w-2 ${state === 'operational' ? 'animate-pulse' : ''}`}
