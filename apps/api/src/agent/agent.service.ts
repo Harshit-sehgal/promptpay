@@ -459,6 +459,9 @@ export class AgentService {
       if (sessionUpdate) {
         await tx.agentSession.update({ where: { id: session.id }, data: sessionUpdate });
       }
+      if (event.eventType === 'session.started') {
+        await this.rebindShadowPolicyToSessionStart(tx, session.id, occurredAt);
+      }
       return { eventId: event.eventId, duplicate: false };
     });
   }
@@ -497,6 +500,94 @@ export class AgentService {
       where: { sessionId },
       create: { id: randomUUID(), sessionId, policyId: policy.id, assignedAt },
       update: {},
+    });
+  }
+
+  /**
+   * Rebind the session's shadow/experiment policy to the true session start.
+   *
+   * A session whose creating event was not `session.started` (for example a
+   * turn event arriving in an earlier batch) was bound against that later
+   * timestamp. If a policy rollout happened between the real start and that
+   * event, the immutable assignment silently pins the wrong version forever,
+   * making policy results depend on delivery order. When the authoritative
+   * start event arrives, the binding is corrected to the policy actually in
+   * force at the start. It is a no-op when the existing binding was already
+   * correct, when no fact has frozen the session under the old binding, and
+   * when no operator policy exists at all; the optional guards keep older
+   * test doubles and pre-migration databases telemetry-safe.
+   */
+  private async rebindShadowPolicyToSessionStart(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    sessionStart: Date,
+  ): Promise<void> {
+    const metadataClient = tx as Prisma.TransactionClient & {
+      attentionSessionFact?: {
+        findUnique(args: unknown): Promise<{ id: string } | null>;
+      };
+      attentionSessionPolicyAssignment?: {
+        findUnique(args: unknown): Promise<{
+          id: string;
+          assignedAt: Date;
+          policy: { effectiveAt: Date };
+        } | null>;
+        delete(args: unknown): Promise<unknown>;
+        create(args: unknown): Promise<unknown>;
+      };
+      attentionPricingPolicy?: {
+        findFirst(args: unknown): Promise<{ id: string } | null>;
+      };
+    };
+    if (!metadataClient.attentionSessionPolicyAssignment) return;
+
+    const existing = await metadataClient.attentionSessionPolicyAssignment.findUnique({
+      where: { sessionId },
+      select: { id: true, assignedAt: true, policy: { select: { effectiveAt: true } } },
+    });
+    // Unbound (no operator policy at creation) or already bound to a policy
+    // that was in force at the true start: the binding is order-independent.
+    if (!existing || existing.policy.effectiveAt.getTime() <= sessionStart.getTime()) return;
+
+    // A genuine start predates the creating event, so only a backwards
+    // correction is legitimate. A start claiming a later time than the
+    // binding cannot move the binding forward (that would let a mid-session
+    // event advance the policy version); it is ignored as an anomaly.
+    if (sessionStart.getTime() >= existing.assignedAt.getTime()) return;
+
+    // A materialized fact froze this session under the old binding. Facts are
+    // immutable, so reassigning now would decouple the fact from the policy
+    // that actually produced it; the dataset keeps both consistent instead.
+    if (
+      metadataClient.attentionSessionFact &&
+      (await metadataClient.attentionSessionFact.findUnique({
+        where: { sessionId },
+        select: { id: true },
+      }))
+    ) {
+      return;
+    }
+
+    // The assigned policy was not yet in force at the true start (its
+    // effectiveAt is later), so any policy found here is necessarily a
+    // different one. Select the policy that was in force at the start, if
+    // any; the immutability trigger only forbids in-place updates, so the
+    // correction is a delete-and-recreate inside this ingestion transaction.
+    const policy = metadataClient.attentionPricingPolicy
+      ? await metadataClient.attentionPricingPolicy.findFirst({
+          where: {
+            status: { in: ['shadow', 'experiment'] },
+            effectiveAt: { lte: sessionStart },
+          },
+          orderBy: [{ effectiveAt: 'desc' }, { version: 'desc' }],
+          select: { id: true },
+        })
+      : null;
+
+    await metadataClient.attentionSessionPolicyAssignment.delete({ where: { sessionId } });
+    if (!policy) return;
+    await metadataClient.attentionSessionPolicyAssignment.create({
+      data: { id: randomUUID(), sessionId, policyId: policy.id, assignedAt: sessionStart },
     });
   }
 

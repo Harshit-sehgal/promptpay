@@ -311,4 +311,152 @@ describe('AgentService', () => {
     ).rejects.toThrow('no valid events');
     expect(prisma.device.findFirst).not.toHaveBeenCalled();
   });
+
+  describe('policy binding follows the true session start', () => {
+    function rebindTx(overrides: Record<string, unknown> = {}) {
+      const tx = {
+        $executeRaw: vi.fn(),
+        agentLifecycleEvent: { findFirst: vi.fn(), create: vi.fn() },
+        agentSession: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
+        agentWorkUnit: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+        adOpportunity: { upsert: vi.fn() },
+        attentionSessionPolicyAssignment: {
+          findUnique: vi.fn(),
+          upsert: vi.fn(),
+          delete: vi.fn(),
+          create: vi.fn(),
+        },
+        attentionPricingPolicy: { findFirst: vi.fn() },
+        ...overrides,
+      };
+      const prisma = {
+        device: { findFirst: vi.fn().mockResolvedValue({ id: DEVICE_ID, eventSecret: SECRET }) },
+        agentLifecycleEvent: { findFirst: vi.fn() },
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      };
+      return { tx, prisma };
+    }
+
+    function rebindService(prisma: unknown) {
+      return new AgentService(
+        prisma as never,
+        {
+          get: vi.fn((key: string, fallback: string) => {
+            if (key === 'ATEVA_ENVIRONMENT_KIND') return 'test';
+            if (key === 'ATEVA_ENVIRONMENT_ID') return 'test-run';
+            return fallback;
+          }),
+        } as never,
+      );
+    }
+
+    function startEvent(occurredAt: string) {
+      return event({
+        eventId: '55555555-5555-4555-8555-555555555555',
+        idempotencyKey: 'start-1',
+        eventType: 'session.started',
+        occurredAt,
+      });
+    }
+
+    it('rebinds to the policy in force at the true session start', async () => {
+      const harness = rebindTx();
+      const { service, tx } = { service: rebindService(harness.prisma), tx: harness.tx };
+      // Session was created earlier by a turn event at t0+1h; the true start
+      // (t0) arrived late. The rollout between t0 and t0+1h pinned the wrong
+      // policy version.
+      tx.agentSession.findUnique.mockResolvedValue({
+        id: 'session-row',
+        userId: USER_ID,
+        deviceId: DEVICE_ID,
+        provider: 'claude_code',
+        status: 'active',
+      });
+      const trueStart = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const rolloutAt = new Date(Date.now() - 90 * 60 * 1000);
+      tx.agentLifecycleEvent.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ occurredAt: new Date(Date.now() - 60 * 60 * 1000) });
+      tx.agentLifecycleEvent.create.mockResolvedValue({});
+      tx.attentionSessionPolicyAssignment.findUnique.mockResolvedValue({
+        id: 'assignment-1',
+        assignedAt: new Date(Date.now() - 60 * 60 * 1000),
+        policy: { effectiveAt: rolloutAt },
+      });
+      tx.attentionSessionFact = { findUnique: vi.fn().mockResolvedValue(null) };
+      tx.attentionPricingPolicy.findFirst.mockResolvedValue({ id: 'policy-at-start' });
+
+      const result = await service.ingestBatch(
+        USER_ID,
+        signedBatch([startEvent(trueStart.toISOString())]),
+      );
+
+      expect(result.accepted).toHaveLength(1);
+      expect(tx.attentionSessionPolicyAssignment.delete).toHaveBeenCalledWith({
+        where: { sessionId: 'session-row' },
+      });
+      expect(tx.attentionSessionPolicyAssignment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ sessionId: 'session-row', policyId: 'policy-at-start' }),
+      });
+    });
+
+    it('leaves a binding that already matches the true start', async () => {
+      const harness = rebindTx();
+      const { service, tx } = { service: rebindService(harness.prisma), tx: harness.tx };
+      tx.agentSession.findUnique.mockResolvedValue({
+        id: 'session-row',
+        userId: USER_ID,
+        deviceId: DEVICE_ID,
+        provider: 'claude_code',
+        status: 'active',
+      });
+      tx.agentLifecycleEvent.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ occurredAt: new Date(Date.now() - 60 * 60 * 1000) });
+      tx.agentLifecycleEvent.create.mockResolvedValue({});
+      tx.attentionSessionPolicyAssignment.findUnique.mockResolvedValue({
+        id: 'assignment-1',
+        assignedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+        policy: { effectiveAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      });
+
+      await service.ingestBatch(
+        USER_ID,
+        signedBatch([startEvent(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())]),
+      );
+
+      expect(tx.attentionSessionPolicyAssignment.delete).not.toHaveBeenCalled();
+      expect(tx.attentionSessionPolicyAssignment.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps the binding when a fact already froze the session', async () => {
+      const harness = rebindTx();
+      const { service, tx } = { service: rebindService(harness.prisma), tx: harness.tx };
+      tx.agentSession.findUnique.mockResolvedValue({
+        id: 'session-row',
+        userId: USER_ID,
+        deviceId: DEVICE_ID,
+        provider: 'claude_code',
+        status: 'active',
+      });
+      tx.agentLifecycleEvent.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ occurredAt: new Date(Date.now() - 60 * 60 * 1000) });
+      tx.agentLifecycleEvent.create.mockResolvedValue({});
+      tx.attentionSessionPolicyAssignment.findUnique.mockResolvedValue({
+        id: 'assignment-1',
+        assignedAt: new Date(Date.now() - 60 * 60 * 1000),
+        policy: { effectiveAt: new Date(Date.now() - 90 * 60 * 1000) },
+      });
+      tx.attentionSessionFact = { findUnique: vi.fn().mockResolvedValue({ id: 'fact-1' }) };
+
+      await service.ingestBatch(
+        USER_ID,
+        signedBatch([startEvent(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString())]),
+      );
+
+      expect(tx.attentionSessionPolicyAssignment.delete).not.toHaveBeenCalled();
+      expect(tx.attentionSessionPolicyAssignment.create).not.toHaveBeenCalled();
+    });
+  });
 });
