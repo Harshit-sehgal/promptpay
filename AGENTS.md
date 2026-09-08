@@ -80,6 +80,21 @@ CLI 152 passed, agent-protocol 17 passed, shared 77 passed, VS Code 152 passed.
 because they `TRUNCATE` real tables and no Postgres was running; both fail
 identically on a stashed tree, so they are environmental and pre-existing.
 
+## Resolved 2026-09-01 — advertiser waitlist admin access
+
+The existing protected `GET /api/v1/admin/waitlist` API is now reachable from
+the web admin console at `/admin/waitlist`. The web BFF allowlist and
+`adminApi` client include the route, and the read-only page supports the API's
+status filter and bounded pagination. It displays only the API's narrow
+projection (email, company, country, status, consent, source, and signup time);
+no status mutation, IP pseudonym, or financial action was added.
+
+Verification: waitlist page and proxy tests (8/8), targeted Prettier check,
+`git diff --check`, and rendered unauthenticated navigation to the login gate.
+The local development database is marked `development:local` and contains 0
+waitlist rows; live records require an authenticated admin/super_admin session
+against the deployed database.
+
 Claims from that review that did NOT survive verification, recorded so they are
 not re-filed: `metadata Json` is **not** a privacy escape hatch (`readSafeMetadata`
 copies from an allowlist and accepts only scalars, so a nested `prompt` cannot
@@ -137,6 +152,31 @@ also pass. Root `pnpm test` reaches the package/unit suites but stops at the
 intentional consent-gated destructive integration reset; the local Compose image
 build was attempted but the npm registry timed out during dependency install,
 so the remote `docker-build` job remains authoritative.
+
+## Resolved 2026-08-31 — scenario evidence and build-artifact quality gates
+
+The repository now validates scenario reports before triage: report fields,
+provenance, safe evidence paths, status/failure consistency, and the content
+fingerprint are checked. Duplicate grouping recomputes the fingerprint instead
+of trusting a producer-supplied digest, and automatic issue eligibility remains
+limited to known-build, deterministic, high/critical failures with complete
+evidence. No issue-creation credential or external mutation path was added.
+
+The build-secret scanner now excludes only Next development output
+(`.next/dev`); production output remains scanned. A regression test covers both
+the ignored development marker and a detected production marker, and the test
+is part of `test:release-gates`. Repeated scenario evidence now includes a
+validated nearest-rank p99 alongside p50/p95. These are descriptive
+measurements only: A-110 hook, bridge, reconnect, reliability, and resource
+thresholds remain unfrozen until representative measurements and approval
+exist. See `docs/ops/adaptive-performance-gates.md`.
+
+Verification: focused scenario/report/triage/scanner/repeat tests, `pnpm run
+test:release-gates` plus scenario catalog/coverage checks, `pnpm run typecheck`,
+`pnpm run lint`, `pnpm --filter ateva-web build`,
+`node scripts/audit-claims.mjs` (20/20), the default build-secret scan, and
+`git diff --check` pass. `pnpm test` remains intentionally unrun because its
+integration reset requires explicit consent and an isolated database.
 
 ## Resolved 2026-08-28 — staging SSH transport and remote Compose contract
 
@@ -3193,10 +3233,11 @@ Verification: the focused integration spec and the API typecheck/lint gates.
   DBs seed them disabled. Never enable them for real money paths.
 - **Services:** Postgres `:5432` (dev, `ateva-dev` creds), `:5433` (test,
   `ateva_test`), Redis `:6379`. Keep `migrate status` current and
-  `migrate diff` drift-free. **Do not hardcode a migration count in prose** —
-  it was stated as both `89` and `91` in three places in this file (actual: 91,
-  from `find migrations -mindepth 1 -maxdepth 1 -type d`; the `0_init` directory
-  is why a `grep '^2'` undercounts by one). Derive it, don't assert it.
+  `migrate diff` drift-free. Do not repeat a migration count in operational
+  guidance: dated audit snapshots retain the count that was true when they were
+  written, while the current count is recorded only in the current resolved
+  entry above. Derive the live count with
+  `find packages/db/prisma/migrations -mindepth 1 -maxdepth 1 -type d`.
 - **Dependency audit:** the only known advisory is the quarantined dev-only
   `brace-expansion` path (`@nestjs/cli → fork-ts-checker-webpack-plugin →
 minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
