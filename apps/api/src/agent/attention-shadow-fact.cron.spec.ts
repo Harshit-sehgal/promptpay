@@ -98,6 +98,34 @@ describe('AttentionShadowFactCron', () => {
       lastResult: result,
     });
   });
+
+  it('waits for session finality before freezing an immutable fact', async () => {
+    process.env.ATEVA_ENVIRONMENT_KIND = 'test';
+    process.env.ATTENTION_SHADOW_PSEUDONYM_KEY = ['shadow-fact', 'fixture'].join('-');
+
+    const findManySessions = vi.fn((args: { where: { endedAt?: { lte?: Date } } }) => {
+      // The watermark must be part of the selection itself: a session becomes
+      // eligible only once its end is older than the protocol's late-arrival
+      // bound, because until then ingestion can still accept earlier-in-session
+      // events that a frozen fact would permanently miss.
+      const lte = args.where.endedAt?.lte;
+      expect(lte).toBeInstanceOf(Date);
+      expect(lte?.getTime()).toBeLessThanOrEqual(Date.now() - 7 * 24 * 60 * 60 * 1_000);
+      return Promise.resolve([]);
+    });
+    const prisma = {
+      agentSession: { findMany: findManySessions },
+      attentionSessionFact: { findUnique: vi.fn() },
+      attentionSessionPolicyAssignment: { findUnique: vi.fn() },
+      agentLifecycleEvent: { findMany: vi.fn() },
+    };
+
+    const cron = new AttentionShadowFactCron(prisma as never, { persist: vi.fn() } as never);
+    const result = await cron.tick();
+
+    expect(result).toMatchObject({ scanned: 0, created: 0, financialSideEffects: false });
+    expect(findManySessions).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AttentionShadowFactCron interval configuration', () => {

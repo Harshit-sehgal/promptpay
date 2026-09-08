@@ -25,6 +25,19 @@ const constraints = {
 };
 
 describe('attention policy engine', () => {
+  function currentPrediction() {
+    return {
+      expectedContributionMarginMinor: 300n,
+      contributionMarginLowerBoundMinor: 150n,
+      advertiserRetentionLowerBoundPpm: 950_000n,
+      userRetentionLowerBoundPpm: 950_000n,
+      churnUpperBoundPpm: 30_000n,
+      sampleSize: 400,
+      confidencePpm: 990_000n,
+      modelVersion: 'model-current',
+    };
+  }
+
   it('evaluates hypothetical economics without financial side effects', () => {
     const result = evaluateCounterfactualPolicy(
       { renderedMs: 20_000, viewableMs: 10_000, aiEligibleMs: 5_000 },
@@ -62,9 +75,51 @@ describe('attention policy engine', () => {
         },
       ],
       constraints,
+      currentPrediction(),
     );
     expect(result.status).toBe('retain_current');
     expect(result.recommendedPolicy).toEqual(current);
+    expect(result.financialSideEffects).toBe(false);
+  });
+
+  it('retains the current policy unless a candidate beats its own margin bound', () => {
+    // Admissible candidate whose conservative bound is worse than the current
+    // policy's own bound: "best of the candidates" is not an improvement.
+    const worseCandidate = {
+      policy: { ...current, version: 3, alphaPpm: 480_000n },
+      prediction: {
+        ...currentPrediction(),
+        contributionMarginLowerBoundMinor: 50n,
+        sampleSize: 500,
+      },
+    };
+    const result = recommendShadowPolicy(
+      current,
+      [worseCandidate],
+      constraints,
+      currentPrediction(),
+    );
+    expect(result.status).toBe('retain_current');
+    expect(result.recommendedPolicy).toEqual(current);
+  });
+
+  it('recommends a candidate that beats the current margin bound', () => {
+    const betterCandidate = {
+      policy: { ...current, version: 4, alphaPpm: 480_000n },
+      prediction: {
+        ...currentPrediction(),
+        contributionMarginLowerBoundMinor: 500n,
+        sampleSize: 500,
+      },
+    };
+    const result = recommendShadowPolicy(
+      current,
+      [betterCandidate],
+      constraints,
+      currentPrediction(),
+    );
+    expect(result.status).toBe('recommend');
+    expect(result.recommendedPolicy).toEqual(betterCandidate.policy);
     expect(result.financialSideEffects).toBe(false);
   });
 
@@ -100,6 +155,18 @@ describe('attention policy engine', () => {
         },
       ],
       constraints,
+      {
+        // Baseline for the current policy: weaker than both candidates so the
+        // winner is decided among the candidates, not against the baseline.
+        expectedContributionMarginMinor: 50n,
+        contributionMarginLowerBoundMinor: 40n,
+        advertiserRetentionLowerBoundPpm: 900_000n,
+        userRetentionLowerBoundPpm: 900_000n,
+        churnUpperBoundPpm: 60_000n,
+        sampleSize: 150,
+        confidencePpm: 850_000n,
+        modelVersion: 'model-current',
+      },
     );
     expect(result.status).toBe('recommend');
     expect(result.recommendedPolicy.version).toBe(3);
@@ -124,6 +191,7 @@ describe('attention policy engine', () => {
         },
       ],
       constraints,
+      currentPrediction(),
     );
     expect(result.status).toBe('retain_current');
   });
@@ -147,6 +215,7 @@ describe('attention policy engine', () => {
         },
       ],
       { ...constraints, minimumStressMarginMinor: 100n },
+      currentPrediction(),
     );
     expect(result.status).toBe('retain_current');
   });
@@ -161,5 +230,16 @@ describe('attention policy engine', () => {
     expect(grid).toHaveLength(16);
     expect(new Set(grid.map((policy) => policy.version)).size).toBe(16);
     expect(grid.every((policy) => !('rewardMultiplierPpm' in policy))).toBe(true);
+  });
+
+  it('never assigns the base version to a grid vector', () => {
+    const grid = buildShadowPolicyGrid(current, { alphaPpm: [400_000n, current.alphaPpm] });
+    // The base version names the current policy; a different vector carrying
+    // it would create two definitions of one immutable version.
+    expect(grid.every((policy) => policy.version !== current.version)).toBe(true);
+    expect(new Set(grid.map((policy) => policy.version)).size).toBe(grid.length);
+    // Distinct grid vectors, both versioned after the base: the base vector
+    // participates in dedup but must never carry the base's own version.
+    expect(grid).toHaveLength(2);
   });
 });

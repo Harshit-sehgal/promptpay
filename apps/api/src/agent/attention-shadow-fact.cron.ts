@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import {
+  AGENT_EVENT_MAX_AGE_MS,
   agentLifecycleEventSchema,
   type AgentLifecycleEventV1,
   canonicalAgentMetadataSchema,
@@ -114,7 +115,17 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
       const sessions = await this.prisma.agentSession.findMany({
         where: {
           status: { in: ['ended', 'abandoned'] },
-          endedAt: { not: null },
+          // Wait for session finality before freezing an immutable fact.
+          // Ingestion still accepts offline lifecycle events up to
+          // AGENT_EVENT_MAX_AGE_MS stale, so a session that ended moments ago
+          // may still receive earlier-in-the-session events. Once endedAt is
+          // older than that bound, every event that can still pass timestamp
+          // validation necessarily occurred after the session ended, and the
+          // lifecycle hardening already rejects post-terminal events from
+          // extending a fact. Selecting on this watermark (rather than
+          // selecting then skipping) keeps a bounded batch from stalling on
+          // not-yet-final sessions.
+          endedAt: { not: null, lte: new Date(Date.now() - AGENT_EVENT_MAX_AGE_MS) },
           // Do not spend the bounded batch on sessions that have already been
           // materialized. The per-session idempotency check below remains a
           // race-safe fallback, but it must not be the normal way a completed
