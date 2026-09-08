@@ -50,16 +50,27 @@ test.describe('A-047 signup / cookie lifecycle', () => {
     // A-047: the auth cookie is valid and the authenticated dashboard chrome
     // rendered (nav with Overview/Earnings/Payouts). The dashboard data
     // section is client-fetched and may error in a manual local run; we
-    // assert the authenticated route itself is reachable, not the data load.
-    // On narrow viewports the workspace nav collapses behind an accessible
+    // assert the authenticated route itself is reachable, not the data load.    // On narrow viewports the workspace nav collapses behind an accessible
     // toggle (disclosure button, aria-expanded), so open it first when it
     // reports collapsed rather than assuming a persistent desktop sidebar.
+    // A stale-consent reprompt banner is fixed to the top of the viewport and
+    // can overlay the toggle on mobile; acknowledge it first, exactly as a
+    // user would, so the navigation itself is reachable. Scoped to the alert
+    // so the cookie banner's separate Accept is never clicked by accident.
+    const repromptAccept = page
+      .getByRole('alert', { name: 'Consent update required' })
+      .getByRole('button', { name: 'Accept' });
+    if (await repromptAccept.isVisible().catch(() => false)) {
+      await repromptAccept.click();
+      await expect(repromptAccept).toBeHidden({ timeout: 15_000 });
+    }
     const navToggle = page.getByRole('button', { name: 'Open workspace navigation' });
     if (
       (await navToggle.isVisible().catch(() => false)) &&
       (await navToggle.getAttribute('aria-expanded')) === 'false'
     ) {
       await navToggle.click();
+      await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible({ timeout: 15_000 });
     }
     await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible({
       timeout: 15_000,
