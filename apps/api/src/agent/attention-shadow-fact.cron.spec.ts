@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../config/prisma.service', () => ({ PrismaService: class {} }));
+vi.mock('./attention-shadow-fact.service', () => ({ AttentionShadowFactService: class {} }));
+
 import { AttentionShadowFactCron } from './attention-shadow-fact.cron';
 
 const originalEnvironmentKind = process.env.ATEVA_ENVIRONMENT_KIND;
 const originalPseudonymKey = process.env.ATTENTION_SHADOW_PSEUDONYM_KEY;
+const originalInterval = process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS;
 
 const newSession = {
   id: 'session-new',
@@ -15,14 +19,13 @@ const newSession = {
   endedAt: new Date('2026-08-31T00:00:02.000Z'),
 };
 
-describe('AttentionShadowFactCron', () => {
-  afterEach(() => {
-    if (originalEnvironmentKind === undefined) delete process.env.ATEVA_ENVIRONMENT_KIND;
-    else process.env.ATEVA_ENVIRONMENT_KIND = originalEnvironmentKind;
-    if (originalPseudonymKey === undefined) delete process.env.ATTENTION_SHADOW_PSEUDONYM_KEY;
-    else process.env.ATTENTION_SHADOW_PSEUDONYM_KEY = originalPseudonymKey;
-  });
+afterEach(() => {
+  restoreEnvironment('ATEVA_ENVIRONMENT_KIND', originalEnvironmentKind);
+  restoreEnvironment('ATTENTION_SHADOW_PSEUDONYM_KEY', originalPseudonymKey);
+  restoreEnvironment('ATTENTION_SHADOW_FACT_INTERVAL_MS', originalInterval);
+});
 
+describe('AttentionShadowFactCron', () => {
   it('excludes materialized sessions before applying the bounded batch', async () => {
     process.env.ATEVA_ENVIRONMENT_KIND = 'test';
     process.env.ATTENTION_SHADOW_PSEUDONYM_KEY = ['shadow-fact', 'fixture'].join('-');
@@ -96,3 +99,37 @@ describe('AttentionShadowFactCron', () => {
     });
   });
 });
+
+describe('AttentionShadowFactCron interval configuration', () => {
+  function intervalMs(): number {
+    return (
+      new AttentionShadowFactCron({} as never, {} as never) as unknown as { intervalMs: number }
+    ).intervalMs;
+  }
+
+  it('uses the existing 15-minute default when unset or malformed', () => {
+    delete process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS;
+    expect(intervalMs()).toBe(15 * 60 * 1000);
+
+    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS = 'not-a-number';
+    expect(intervalMs()).toBe(15 * 60 * 1000);
+  });
+
+  it('keeps direct cron construction within the validated bounds', () => {
+    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS = '59999';
+    expect(intervalMs()).toBe(60 * 1000);
+
+    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS = '86400001';
+    expect(intervalMs()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('uses a valid configured interval', () => {
+    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS = '60000';
+    expect(intervalMs()).toBe(60 * 1000);
+  });
+});
+
+function restoreEnvironment(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}

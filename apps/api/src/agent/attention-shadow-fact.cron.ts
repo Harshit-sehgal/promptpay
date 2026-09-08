@@ -8,11 +8,14 @@ import {
 } from '@ateva/agent-protocol';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
+import { envNumber } from '../common/utils/env-number';
 import { PrismaService } from '../config/prisma.service';
 import { AttentionShadowFactService } from './attention-shadow-fact.service';
 import { buildShadowSessionFact } from './attention-shadow-facts';
 
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
+const MIN_INTERVAL_MS = 60 * 1000;
+const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type AttentionShadowFactRunResult = {
   scanned: number;
@@ -43,9 +46,11 @@ export type AttentionShadowFactJobStatus = {
 @Injectable()
 export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AttentionShadowFactCron.name);
-  private readonly intervalMs = positiveDuration(
-    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS,
+  private readonly intervalMs = envNumber(
+    'ATTENTION_SHADOW_FACT_INTERVAL_MS',
     DEFAULT_INTERVAL_MS,
+    MIN_INTERVAL_MS,
+    MAX_INTERVAL_MS,
   );
   private intervalId?: NodeJS.Timeout;
   private running = false;
@@ -280,11 +285,6 @@ function resolveEnvironmentKind(): AgentLifecycleEventV1['environmentKind'] {
     value === 'production'
     ? value
     : 'development';
-}
-
-function positiveDuration(raw: string | undefined, fallback: number): number {
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function emptyResult(): AttentionShadowFactRunResult {

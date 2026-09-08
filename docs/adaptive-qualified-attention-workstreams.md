@@ -19,6 +19,13 @@ ordering, replay, policy/session immutability, malformed and unknown provider
 state, viewability failure modes, privacy canaries, temporal leakage, model
 uncertainty, optimizer guardrails, and the absence of financial side effects.
 
+Persisted shadow facts can now be read through a bounded, read-only dataset
+service. It queries an explicit half-open observation window, projects only
+the allowlisted aggregate fields into the existing model observation contract,
+and records a deterministic telemetry manifest. An explicit caller-supplied
+outcome map is required for labeled rows; unlabeled facts are counted and
+excluded rather than assigned a synthetic outcome.
+
 These are repository and fixture-level proofs. No real provider observation,
 external user or advertiser cohort, independent attestation, payment approval,
 legal review, or canary approval is implied by the implementation or its local

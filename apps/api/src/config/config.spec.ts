@@ -244,6 +244,21 @@ describe('env validation (config module)', () => {
     ).toBe(false);
   });
 
+  it('bounds the attention shadow fact cron interval', () => {
+    const env = loadEnv(baseDevEnv({ ATTENTION_SHADOW_FACT_INTERVAL_MS: '60000' }));
+    expect(env.ATTENTION_SHADOW_FACT_INTERVAL_MS).toBe(60_000);
+    expect(
+      loadEnv(baseDevEnv({ ATTENTION_SHADOW_FACT_INTERVAL_MS: '86400000' }))
+        .ATTENTION_SHADOW_FACT_INTERVAL_MS,
+    ).toBe(86_400_000);
+
+    for (const ATTENTION_SHADOW_FACT_INTERVAL_MS of ['59999', '86400001', '1.5', 'not-a-number']) {
+      expect(envSchema.safeParse(baseDevEnv({ ATTENTION_SHADOW_FACT_INTERVAL_MS })).success).toBe(
+        false,
+      );
+    }
+  });
+
   it('loadEnv returns parsed config for a valid environment', () => {
     const env = loadEnv(baseDevEnv());
     expect(env.NODE_ENV).toBe('development');
