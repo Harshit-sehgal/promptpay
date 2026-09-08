@@ -1,4 +1,31 @@
 import chalk from 'chalk';
+import { beforeEach } from 'vitest';
+
+import { CI_ENVIRONMENT_VARIABLES } from './lib/presentation-context';
+
+/**
+ * Pin the presentation context to "interactive" for the whole CLI test suite.
+ *
+ * The same asymmetry chalk has: `canPresentTo()` consults CI environment
+ * variables, so a suite run under GitHub Actions would suppress every banner,
+ * ad, and completion summary while the identical suite on a laptop rendered
+ * them. Tests would then pass in exactly one of the two places.
+ *
+ * Suites assert the interactive behavior by default; the tests that cover
+ * suppression set `ATEVA_ASSUME_HEADLESS` or a non-TTY stream explicitly, which
+ * makes the headless expectation visible at the assertion instead of implied by
+ * whichever machine ran it.
+ */
+beforeEach(() => {
+  for (const name of CI_ENVIRONMENT_VARIABLES) delete process.env[name];
+  delete process.env.ATEVA_ASSUME_HEADLESS;
+  if (process.env.TERM === 'dumb') delete process.env.TERM;
+  // Vitest captures stdio, so the real streams report `isTTY === undefined`
+  // regardless of the host terminal. Pin both to attached for the same reason
+  // as the environment variables above.
+  process.stdout.isTTY = true;
+  process.stderr.isTTY = true;
+});
 
 /**
  * Pin colour off for the whole CLI test suite.

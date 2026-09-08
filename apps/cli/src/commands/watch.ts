@@ -8,6 +8,7 @@ import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
 import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../lib/errors';
+import { canPresentTo } from '../lib/presentation-context';
 import { createCliWaitAssertionProvider } from '../lib/wait-attestation-provider';
 
 const STATE_FILE = `${process.cwd()}/.ateva-wait`;
@@ -39,7 +40,17 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   const api = new ApiClient(creds);
   const attestationProvider = createCliWaitAssertionProvider();
   const attestation = new WaitAttestationFlow(api);
-  const serveAds = opts.ads ?? true;
+  // An ad request is suppressed, not just its rendering. Requesting and then
+  // discarding still claims an opportunity and consumes the account's hourly
+  // exposure budget, so a piped or CI-hosted `ateva watch` would silently burn
+  // a developer's real inventory on impressions no one could see.
+  const presentable = canPresentTo(process.stdout);
+  const serveAds = (opts.ads ?? true) && presentable;
+  if ((opts.ads ?? true) && !presentable) {
+    console.error(
+      chalk.dim('Ateva: ads disabled — stdout is not an interactive terminal (pipe, log, or CI).'),
+    );
+  }
 
   await printSandboxBanner(api);
   console.log(chalk.cyan('Ateva watch') + chalk.dim(` — watching ${STATE_FILE}`));

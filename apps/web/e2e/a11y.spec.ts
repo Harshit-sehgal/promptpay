@@ -48,6 +48,13 @@ const PAGES = [
   '/auth/verify-email?token=accessibility-check',
 ];
 
+test.beforeEach(async ({ page }) => {
+  // The landing page uses scroll reveals that begin at opacity 0. Analyze the
+  // stable reduced-motion rendering so axe checks final contrast values rather
+  // than an in-flight animation frame.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+});
+
 for (const path of PAGES) {
   test(`${path} has no serious or critical WCAG 2.1 AA violations`, async ({ page }) => {
     await page.goto(path, { waitUntil: 'domcontentloaded' });

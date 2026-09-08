@@ -5,10 +5,13 @@ import {
   AGENT_EVENT_TYPES,
   AGENT_PROVIDERS,
   AgentEventType,
+  AgentExecutionContext,
   AgentLifecycleEventV1,
   AgentProvider,
   sanitizeHookPayload,
 } from '@ateva/agent-protocol';
+
+import { isHeadlessEnvironment } from './presentation-context';
 
 const MAX_HOOK_INPUT_BYTES = 256 * 1024;
 const MAX_IDENTIFIER_LENGTH = 512;
@@ -208,8 +211,15 @@ export function normalizeHookEvent(
     ...(readSafeString(options.input, ['providerVersion', 'provider_version'])
       ? { providerVersion: readSafeString(options.input, ['providerVersion', 'provider_version']) }
       : {}),
-    metadata: sanitized.metadata,
+    // Stamped from this process's own environment, never from the provider
+    // payload. A hook firing inside CI records the agent work but must not let
+    // that work become human-attention inventory.
+    metadata: { ...sanitized.metadata, executionContext: resolveExecutionContext() },
   };
+}
+
+function resolveExecutionContext(): AgentExecutionContext {
+  return isHeadlessEnvironment() ? 'headless' : 'interactive';
 }
 
 export function resolveEventType(providerEvent: string): AgentEventType | null {

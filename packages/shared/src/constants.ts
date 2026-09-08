@@ -11,6 +11,24 @@ import { UserRole } from './enums';
 /** Minimum visible duration in ms for a qualified impression */
 export const MINIMUM_VISIBLE_DURATION_MS = 5000;
 
+/**
+ * Minimum percentage of the creative that must be on screen for a qualified
+ * impression.
+ *
+ * Duration answers "for how long"; this answers "how much of it". Both are
+ * required before an impression can be described as viewable — a surface
+ * scrolled 95% out of frame for six seconds satisfies the duration invariant
+ * and shows a person almost nothing.
+ *
+ * Clients report `visibleSurface` as a 0-100 percentage. A client that reports
+ * nothing is treated as unknown rather than zero: older clients predate the
+ * field, and failing them closed would silently stop qualifying their
+ * impressions. That permissiveness is acceptable only because nothing on this
+ * path is billed as an advertising-industry "viewable impression" — see the
+ * viewability note in the release plan before that changes.
+ */
+export const MINIMUM_VISIBLE_SURFACE_PERCENT = 50;
+
 /** Payout thresholds */
 export const PAYOUT = {
   MINIMUM_THRESHOLD_USD: 10_00, // $10 in cents

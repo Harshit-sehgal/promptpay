@@ -18,6 +18,7 @@ function apiDocsUrl(): string | null {
 }
 
 const PRODUCT_LINKS = [
+  ['Product', '/#product'],
   ['Developers', '/#developers'],
   ['Sponsors', '/#sponsors'],
   ['Pricing', '/pricing'],

@@ -119,8 +119,9 @@ const integrationsCommand = program
 integrationsCommand
   .command('install <provider>')
   .description('Install a user-level native hook integration')
-  .action((provider: string) => {
-    runIntegrationInstall({ provider });
+  .option('--dry-run', 'Show the exact config change without writing anything')
+  .action((provider: string, options: { dryRun?: boolean }) => {
+    runIntegrationInstall({ provider, dryRun: options.dryRun });
   });
 integrationsCommand
   .command('status [provider]')

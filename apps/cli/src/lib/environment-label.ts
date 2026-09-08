@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 
 import type { EnvironmentIdentity } from './api-client';
+import { canPresentTo } from './presentation-context';
 
 const ENVIRONMENT_KINDS = new Set(['development', 'test', 'sandbox', 'staging', 'production']);
 
@@ -11,7 +12,9 @@ const ENVIRONMENT_KINDS = new Set(['development', 'test', 'sandbox', 'staging', 
  */
 export async function printSandboxBanner(
   client?: { getEnvironmentIdentity?: () => Promise<EnvironmentIdentity> },
-  output: NodeJS.WritableStream = process.stdout,
+  // `isTTY` is carried alongside the write interface so the presentation gate
+  // can be applied without a cast; plain writable sinks simply omit it.
+  output: NodeJS.WritableStream & { isTTY?: boolean } = process.stdout,
 ): Promise<void> {
   const localKind = process.env.ATEVA_ENVIRONMENT_KIND ?? process.env.WAITLAYER_ENVIRONMENT_KIND;
   const getIdentity = client?.getEnvironmentIdentity;
@@ -30,7 +33,12 @@ export async function printSandboxBanner(
   }
 
   if (serverKind === 'sandbox' && (!localKind || localKind === 'sandbox')) {
-    writeSandbox(output);
+    // The sandbox badge is decorative reassurance for a person reading the
+    // terminal. Piped or CI output gets nothing: the badge would corrupt a
+    // parsed stream, and no reader is reassured by a line in a build log.
+    // The mismatch branch below is a misconfiguration error, not decoration,
+    // so it still prints unconditionally.
+    if (canPresentTo(output)) writeSandbox(output);
   } else if (localKind && localKind !== serverKind && ENVIRONMENT_KINDS.has(serverKind)) {
     output.write(
       `${chalk.bgRed.white(' ENVIRONMENT MISMATCH ')} ${chalk.red(`client=${localKind ?? 'unset'} server=${serverKind}`)}\n`,

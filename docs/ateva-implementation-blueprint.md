@@ -9,6 +9,13 @@
 **Document status:** Implementation-ready for Release 0.x  
 **Commercial status:** No real advertiser billing, withdrawable earnings, or payouts are authorized by this plan.
 
+> **Reconciled against `main@bbdab57` on 2026-08-30.** See
+> [§7.5](#75-register-reconciliation--verified-against-mainbbdab57-2026-08-30)
+> for the per-gap dispositions. Most of WL-G001–G010 shipped after the audit
+> below was written; do not read the 2026-08-04 basis as current state, and do
+> not start Release 0.1 from it. Any future reassessment of this document must
+> state the SHA it verified against.
+
 > **Verification-status marker — historical audit basis, current strategy.**
 > The source audit and verification limitations in this document are dated
 > 2026-08-04 and must not be read as the current repository state. The current
@@ -1034,6 +1041,60 @@ These block real-money or broad international launch, not current building:
 
 ---
 
+### 7.5 Register reconciliation — verified against `main@bbdab57`, 2026-08-30
+
+A gap register without a commit anchor is a snapshot with an unknown expiry
+date. This document's audit basis is 2026-08-04; roughly 200 commits have
+landed since, and most of WL-G001–G010 shipped in them. The register below was
+re-checked against code, not against prose. **Every future reassessment of this
+document must state the SHA it verified against.**
+
+Status vocabulary: **Closed** (implemented and machine-checked), **Substantially
+closed** (implemented; a named residual remains), **Open** (unchanged).
+
+| Gap  | Status               | Evidence                                                                                      |
+| ---- | -------------------- | --------------------------------------------------------------------------------------------- |
+| G001 | Substantially closed | CI matrix green on `99703ab` (run 32252613390); Vercel still an external failure              |
+| G002 | Substantially closed | Issues #39/#40/#41/#45 open; not a full epic breakdown                                        |
+| G003 | Closed               | `ATEVA_ENVIRONMENT_KIND` + `EnvironmentMarker` fail-closed startup guard                      |
+| G004 | Closed               | `packages/agent-protocol`; `AgentSession`/`AgentWorkUnit`/`AgentLifecycleEvent`               |
+| G005 | Closed               | `sanitizeHookPayload` allowlist + recursive value scan; server re-scrub in `agent.service.ts` |
+| G006 | Closed               | correlation + source precedence in `agent-session-correlation.ts`                             |
+| G007 | Closed               | sandbox opportunity/auction path; XTS house campaigns only                                    |
+| G008 | Substantially closed | `scenarios/catalog.json` + fixtures; full autonomous persona harness not built                |
+| G009 | Substantially closed | mode-aware copy and sandbox badge; §23 inconsistencies still open                             |
+| G010 | Closed               | random installation ID in OS keychain with a `0600` fallback (`credentials.ts`)               |
+| G011 | Closed               | `HookConfigManager` merge/backup/marker/uninstall, plus `--dry-run` (§9.7)                    |
+| G012 | Closed               | hook hot path is local-only; no synchronous network call                                      |
+| G013 | Closed               | `agent-spool.ts` durable spool with ack/TTL/quarantine                                        |
+| G014 | Closed               | `getAgentProtocolCompatibility` with machine-readable rejection codes                         |
+| G015 | Closed               | `attention-state-machine.ts` (`foreground_visible` requires focus **and** a visible surface)  |
+| G016 | Substantially closed | one attention owner per installation; **account-level** rule added 2026-08-30 (§10.4)         |
+| G017 | Closed               | `CampaignPlacement` with per-placement bids and thresholds                                    |
+| G018 | Closed               | XTS test currency; sandbox faucet/payout simulators                                           |
+| G019 | Substantially closed | scenario catalogue exists; deterministic truth labels not complete                            |
+| G020 | Open                 | no autonomous-report quality control yet                                                      |
+| G021 | Closed               | `POST /sandbox/admin/reset` behind admin MFA step-up                                          |
+| G022 | Open                 | CLI install friction still unmeasured                                                         |
+| G023 | Substantially closed | publisher and license set (`ateva`, `SEE LICENSE IN LICENSE`); marketplace policy unverified  |
+
+Findings added on 2026-08-30, after the register above was re-checked:
+
+| ID    | Finding                                                                    | Status                       |
+| ----- | -------------------------------------------------------------------------- | ---------------------------- |
+| A-101 | Ads/completion UI could render into pipes, redirected logs, and CI         | Closed — §9.8                |
+| A-102 | Headless/CI work could become human-attention inventory                    | Closed — §8.4                |
+| A-103 | One account with two devices had two attention budgets                     | Closed — §10.4               |
+| A-104 | A late event could mint an opportunity the session had superseded          | Closed                       |
+| A-105 | `visibleSurface` was collected but never gated                             | Closed — §11.7               |
+| A-106 | Same-UID processes are inside the local bridge's trust boundary            | Accepted and bounded — §9.9  |
+| A-107 | Attestation is five evidence domains, not one                              | Open — folded into issue #45 |
+| A-108 | `confidence` is an uncalibrated float already gating placement eligibility | Open — see §11.7             |
+| A-109 | No shadow-equivalence proof between `WaitStateEvent` and the agent domain  | Open                         |
+| A-110 | Distributional/performance release gates unquantified                      | Open — see §20.7             |
+
+---
+
 ## 8. Canonical agent lifecycle architecture
 
 ### 8.1 New shared package
@@ -1493,6 +1554,67 @@ The integration manager must:
 - support provider minimum versions;
 - report degraded capability rather than silently guessing.
 
+`ateva integrations install <provider> --dry-run` satisfies "show diff before
+install": it computes the exact write and prints a unified diff without touching
+the config, the state file, or a backup. The preview and the real install share
+one `resolveInstall()` decision, because a dry-run that re-implements the install
+path drifts silently and then reassures the operator about a write that never
+happens that way.
+
+### 9.8 Presentation surfaces require a reader
+
+Advertising and completion UI may only be drawn where a person can see them.
+Two independent conditions must both hold (`presentation-context.ts`):
+
+1. the target stream is a TTY; and
+2. the process is not in a recognized CI/headless environment.
+
+Stderr is not sufficient on its own — `2>build.log` and a CI runner both defeat
+it. A CI job can also allocate a pseudo-TTY, so neither check alone is enough.
+
+**The ad request is suppressed, not merely its rendering.** Requesting an ad and
+discarding it still claims an opportunity and spends the account's hourly
+exposure budget, so a piped `ateva watch` would silently burn real inventory on
+impressions nobody could see.
+
+Diagnostics are deliberately exempt: an environment-mismatch warning or a failed
+upload is information the operator needs precisely when nobody is watching.
+
+### 9.9 The local bridge trust boundary (accepted, bounded)
+
+The bridge authenticates against **other OS users**, not against **other
+processes belonging to this user**. The installation secret lives in a `0600`
+file readable by exactly the account whose processes are the threat, and peer
+credentials do not close this: `SO_PEERCRED`/`getpeereid` identify the peer's
+UID, and on Linux a PID that is subject to reuse and TOCTOU — neither
+distinguishes two processes running as the same user.
+
+**The current position is to accept the OS-user trust domain.** Processes
+running as the installation owner are inside the boundary. Defending against
+`root`/Administrator is explicitly a non-goal; at that privilege level no local
+boundary is meaningful.
+
+This is sound **only while locally reported lifecycle telemetry cannot, on its
+own, move money.** That precondition holds today and is machine-checked rather
+than asserted: `scripts/audit-claims.mjs` fails the build if anything under
+`apps/api/src/agent/` references a ledger, impression, or billing symbol. If the
+agent domain ever reaches settlement, this section must be revisited before that
+change ships — otherwise the bridge's threat model silently becomes insufficient.
+
+The general principle, which this section is one instance of:
+
+> **Locally authenticated lifecycle telemetry and independently trustworthy
+> financial evidence are different things and must never be conflated.**
+
+That separation already exists in code — the ingestion path forces every event
+to `sourceType: 'inferred'` and caps confidence regardless of what the client
+claims — but it is enforced by a comment and two magic numbers rather than by a
+type. Making it a first-class `evidenceTier` is tracked as A-108.
+
+Remote development (Remote SSH, Dev Containers, WSL, Codespaces) is a **separate**
+trust topology — `agent host ↔ bridge host ↔ extension host ↔ human` — and is not
+resolved by anything in this section.
+
 ---
 
 ## 10. VS Code strategy
@@ -1558,6 +1680,52 @@ For each installation:
 - an opportunity chooses one eligible session/work unit;
 - running multiple agents cannot multiply attention;
 - multi-device attention is recorded separately but treated conservatively for future financial logic.
+
+#### Account-level attention (canonical, decided 2026-08-30)
+
+Per-installation ownership is necessary but **not sufficient**: a developer with
+a laptop and a desktop had two independent budgets. The canonical invariant is:
+
+> **An authenticated account has one shared attention inventory across all of its
+> devices. A device may identify _where_ attention occurred, but must never
+> increase the _amount_ of attention inventory available to that account.**
+
+Consequences:
+
+- `userId` owns the attention budget; `deviceId` is attribution, diagnostics,
+  fraud context, and integration context;
+- switching laptop → desktop does not reset any frequency or claim budget;
+- two devices cannot simultaneously be billable foreground-attention owners;
+- hourly/daily/campaign/airing-period caps aggregate across all of an account's
+  devices;
+- a second device may generate telemetry but cannot mint additional eligible
+  inventory once the account budget is exhausted.
+
+Two **separate** invariants are required, and a frequency cap alone does not give
+the first:
+
+```text
+at any instant:  active billable attention owners for user <= 1
+across a period: sum(eligible claims across all devices for user) <= account cap
+```
+
+**Allocation must be atomic.** Removing `deviceId` from a `COUNT → WRITE` cap
+check replaces a per-device over-serve with a concurrent one: two devices both
+read `cap - 1` and both take the last slot. The count and the claim run in one
+transaction behind a per-user advisory lock (this is issue A-061's remedy,
+applied a second time). Rejections use `ACCOUNT_ATTENTION_CAP_REACHED`, distinct
+from "no eligible placement".
+
+This deliberately lowers the theoretical earnings of a multi-machine developer.
+That is the intended trade. If device count multiplies inventory, the economic
+primitive silently becomes `installations × attention` rather than `human
+attention`, and sophisticated users eventually discover that running more clients
+pays more — a farming incentive wired directly into the supply definition.
+
+**Reach is reported to advertisers as unique authenticated accounts, not unique
+humans.** Account-level enforcement solves multi-device inflation; it does not
+solve multi-account inflation, which remains an identity/Sybil problem for the
+attestation work (A-107).
 
 ### 10.5 Heuristic fallback
 
@@ -1717,6 +1885,62 @@ Create controlled house campaigns for:
 - developer education.
 
 Use safe destinations under a sandbox domain or local fixtures. No external affiliate tracking in Release 0.x.
+
+### 11.7 Attention and viewability parameter register
+
+These constants **are** the product — how long an agent must work before
+attention counts, how long a moment stays sellable, how often a developer sees an
+ad. They were previously chosen in code and recorded nowhere, which made them
+invisible to review. Any change to this table is a product decision.
+
+| Parameter                         | Value  | Location                           | Governs                                            |
+| --------------------------------- | ------ | ---------------------------------- | -------------------------------------------------- |
+| `MIN_FOREGROUND_WAIT_MS`          | 30 s   | `agent.service.ts`                 | minimum processing before a foreground wait counts |
+| `OPPORTUNITY_TTL_MS`              | 15 min | `agent.service.ts`                 | how long an opportunity stays claimable            |
+| `MAX_OPPORTUNITY_TRIGGER_AGE_MS`  | 15 min | `agent.service.ts`                 | how stale a trigger event may be                   |
+| `OPPORTUNITY_CONFIDENCE_CAP`      | 0.8    | `agent.service.ts`                 | ceiling on client-reported confidence              |
+| `MINIMUM_VISIBLE_DURATION_MS`     | 5 s    | `packages/shared/src/constants.ts` | minimum time on screen before qualifying           |
+| `MINIMUM_VISIBLE_SURFACE_PERCENT` | 50     | `packages/shared/src/constants.ts` | minimum fraction on screen before qualifying       |
+| `MIN_DURATION_GRACE_MS`           | 1500   | `extension-ad.trait.ts`            | clock-skew tolerance on the duration check         |
+| `maxAdsPerHour` (default)         | 6      | `extension-ad.trait.ts`            | account-wide hourly exposure cap                   |
+
+None of these are calibrated. They are starting positions to be replaced by
+measured distributions (§20.7).
+
+#### Viewability is two conditions, and Ateva does not yet claim the word
+
+Duration was already a server-authoritative invariant: the render timestamp is
+recorded by the server, so a client cannot backdate it. Surface percentage was
+collected at render and then ignored, so a creative 10% on screen qualified
+exactly like a fully visible one. Both are now required.
+
+An absent `visibleSurface` is treated as **unknown, not zero** — clients predating
+the field would otherwise silently stop qualifying.
+
+Even with both checks, this is not industry viewability. There is no occlusion
+detection, no minimized-window handling, and no proof a human looked. Internally
+and to advertisers this must be described as **attention eligibility / surface
+visibility**. Promoting it to "viewable impression" is gated on independent
+render attestation (A-107) and would make the missing occlusion work P0.
+
+#### `confidence` is doing trust-tier work it cannot support (A-108)
+
+`confidence` is persisted on `AgentLifecycleEvent`, `AttentionWindow`, and both
+`AdOpportunity` scores, and is compared directly against `CampaignPlacement`'s
+`minAttentionScore`/`minIntegrationScore` — so it already gates eligibility. It
+has no calibration method, and the `0.8` ceiling is really a trust tier
+("client telemetry") written as a quality score.
+
+The fix is not to calibrate a float. Separate the two ideas:
+
+```text
+evidenceTier = verified_native | strong_native | heuristic | unknown
+confidence   = 0.83
+confidenceModel = "claude-hook-v3"
+```
+
+Financial policy can then require an evidence tier, while confidence stays a
+within-tier ranking signal.
 
 ---
 
@@ -2848,6 +3072,56 @@ Before human alpha:
 - false-positive report is available;
 - telemetry can be disabled immediately.
 
+### 20.7 Distributional and performance gates (A-110)
+
+The gates in 20.1–20.6 are exact zeros — ledger imbalance, duplicate replay
+credit, simultaneous foreground owners, heuristic-only billable opportunities,
+acknowledged events lost after restart. Those are invariants and they are
+already quantitative.
+
+What is missing is the other category: rates and distributions. Deliberately
+**not** invented here, because numbers guessed before measurement are worse than
+none. The requirement is procedural instead:
+
+> Collect distributions during internal and sandbox usage, then **freeze explicit
+> pass/fail thresholds before the corresponding external release gate.**
+
+The freeze must be a **pre-registered artifact** — committed and stored in CI
+before the measuring run, exactly as §20.1–20.5's zeros already are. "Freeze
+before the gate" without a commit boundary is still frozen after the team has
+seen the numbers, and a target that moves on contact with mediocre results is
+not a gate.
+
+Quantities to characterize, then freeze:
+
+- native-event detection precision and lifecycle recall;
+- heuristic false-positive rate; false foreground/attention rate;
+- p95/p99 hook execution latency; p95/p99 bridge latency;
+- bridge reconnect/recovery time; crash-free session percentage;
+- CPU, RSS, disk growth, and network/event volume overhead;
+- queue loss under reconnection storms.
+
+### 20.8 Kill criteria for the solo telemetry study
+
+The first human validation is an N=1 study: install the hooks, work normally for
+two weeks, change nothing. It requires no new architecture and answers what no
+further review can. Recorded **before** the run, per §20.7:
+
+| Signal                            | Stop / reposition if       |
+| --------------------------------- | -------------------------- |
+| genuine eligible waits            | fewer than 3/day           |
+| false-positive rate on foreground | above 30%                  |
+| voluntary disable                 | before day 10              |
+| measurable slowdown of the agent  | any perceptible regression |
+
+What the study is actually testing is the product thesis, not the detector: **is
+returning to a finished agent run a moment worth selling?** If it is not, that is
+a repositioning signal, not a tuning problem — and no amount of additional
+architecture work substitutes for finding out.
+
+What it cannot tell you: ad tolerance at scale, advertiser willingness to pay,
+or Sybil resistance. Those need more people and #45 respectively.
+
 ---
 
 ## 21. Risk register
@@ -2983,6 +3257,17 @@ Any coding agent implementing this plan must follow these constraints.
 18. Include rollback notes for config, schema, hooks, and client changes.
 19. Include privacy data-flow changes in the PR description.
 20. Include exact acceptance evidence.
+21. **Never print, echo, serialize, screenshot, or return a secret value.**
+    Verify a secret's _presence and validity_ without disclosing it: report
+    `configured` / `missing` / `invalid` by key name, never the value. Do not use
+    `cat .env*` to verify configuration; disable shell tracing around commands
+    that touch credentials.
+
+Rule 21 is incident-derived, not hypothetical: a verification step on
+2026-08-27 printed live staging secrets into an agent session transcript (see
+`AGENTS.md`). The repository already forbade _committing_ debug output
+containing secrets — a different boundary from _inspecting_ a live environment.
+Any credential exposed this way must be rotated, not merely noted.
 
 ---
 

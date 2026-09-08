@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   normalizeHookEvent,
@@ -79,6 +79,44 @@ describe('hook ingestion normalization', () => {
     expect(JSON.stringify(event)).not.toContain('secret.txt');
     expect(JSON.stringify(event)).not.toContain('provider-session-1');
     expect(JSON.stringify(event)).not.toContain('never retain');
+  });
+
+  it('stamps executionContext from this process, not from the provider payload', () => {
+    const interactive = normalizeHookEvent({
+      provider: 'claude_code',
+      providerEvent: 'Stop',
+      input: baseInput,
+      installationId: INSTALLATION_ID,
+      deviceId: DEVICE_ID,
+    });
+    expect(interactive?.metadata.executionContext).toBe('interactive');
+
+    // A hook firing inside a CI job records the agent work but must be barred
+    // from generating human-attention inventory server-side.
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    const headless = normalizeHookEvent({
+      provider: 'claude_code',
+      providerEvent: 'Stop',
+      input: baseInput,
+      installationId: INSTALLATION_ID,
+      deviceId: DEVICE_ID,
+    });
+    expect(headless?.metadata.executionContext).toBe('headless');
+    vi.unstubAllEnvs();
+  });
+
+  it('ignores a provider payload that tries to claim it is interactive', () => {
+    vi.stubEnv('CI', 'true');
+    const event = normalizeHookEvent({
+      provider: 'claude_code',
+      providerEvent: 'Stop',
+      input: { ...baseInput, executionContext: 'interactive', execution_context: 'interactive' },
+      installationId: INSTALLATION_ID,
+      deviceId: DEVICE_ID,
+    });
+
+    expect(event?.metadata.executionContext).toBe('headless');
+    vi.unstubAllEnvs();
   });
 
   it('rejects Codex at the generic normalization boundary while native support is disabled', () => {

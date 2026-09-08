@@ -9,6 +9,8 @@ import {
 
 export type IntegrationCommandOptions = {
   provider?: string;
+  /** Compute and print the install without touching the provider config. */
+  dryRun?: boolean;
 };
 
 const PROVIDERS: IntegrationProvider[] = ['claude-code', 'codex'];
@@ -21,10 +23,32 @@ export function runIntegrationInstall(
     process.exitCode = 1;
     return printInvalidProvider(options.provider);
   }
-  const result = new HookConfigManager().install(provider);
+  const manager = new HookConfigManager();
+  if (options.dryRun) {
+    const planned = manager.plan(provider);
+    printResult('Planned', planned);
+    printDiff(planned.diff, planned.changed);
+    setFailureExitCode(planned);
+    return planned;
+  }
+  const result = manager.install(provider);
   printResult('Installed', result);
   setFailureExitCode(result);
   return result;
+}
+
+function printDiff(diff: string[], changed: boolean): void {
+  if (!changed) {
+    console.log(chalk.dim('  no changes — the Ateva hooks are already installed as configured'));
+    return;
+  }
+  console.log(chalk.dim('  this would change the provider config as follows (nothing written):'));
+  for (const line of diff) {
+    if (line.startsWith('+ ')) console.log(chalk.green(`  ${line}`));
+    else if (line.startsWith('- ')) console.log(chalk.red(`  ${line}`));
+    else console.log(chalk.dim(`  ${line}`));
+  }
+  console.log(chalk.dim('  re-run without --dry-run to apply. A backup is written on change.'));
 }
 
 export function runIntegrationRepair(

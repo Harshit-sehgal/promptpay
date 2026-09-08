@@ -1372,6 +1372,98 @@ describe('E2E Money Loop', () => {
       expect(result.reason).toMatch(/fraud|limit/i);
     });
 
+    it('rejects qualification when too little of the creative was on screen', async () => {
+      // Duration answers "for how long"; visibleSurface answers "how much of
+      // it". A surface scrolled almost out of frame satisfies the 5s duration
+      // invariant and shows a person essentially nothing, so both are
+      // required. Unlike duration, surface cannot improve on a retry — the
+      // value was fixed at render — so the reservation is released.
+      mockPrisma.adImpression.findUnique.mockResolvedValue({
+        id: IMPRESSION_ID,
+        campaignId: CAMPAIGN_ID,
+        creativeId: uid('cr'),
+        userId: DEV_USER_ID,
+        deviceId: DEVICE_ID,
+        sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(IMPRESSION_TOKEN)
+          .digest('hex'),
+        renderedAt: new Date(Date.now() - 6000),
+        qualifiedAt: null,
+        visibleDurationMs: null,
+        visibleSurface: 10,
+        isBillable: false,
+        campaign: {
+          id: CAMPAIGN_ID,
+          bidAmountMinor: 2_00n,
+          currency: 'USD',
+          advertiserId: ADS_PROFILE_ID,
+          bidType: 'cpm',
+        },
+        user: { status: 'active' },
+      });
+
+      const payload = {
+        impressionToken: IMPRESSION_TOKEN,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'idem-qual-occluded',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
+      expect(result).toMatchObject({
+        qualified: false,
+        reason: 'minimum_visible_surface_not_met',
+      });
+      expect(recordedLedgerEntries.advertiser).toHaveLength(0);
+      expect(recordedLedgerEntries.earnings).toHaveLength(0);
+    });
+
+    it('still qualifies when the client reports no surface percentage at all', async () => {
+      // Older clients predate the field. Failing them closed would silently
+      // stop qualifying their impressions, so absent means unknown, not zero.
+      mockPrisma.adImpression.findUnique.mockResolvedValue({
+        id: IMPRESSION_ID,
+        campaignId: CAMPAIGN_ID,
+        creativeId: uid('cr'),
+        userId: DEV_USER_ID,
+        deviceId: DEVICE_ID,
+        sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(IMPRESSION_TOKEN)
+          .digest('hex'),
+        renderedAt: new Date(Date.now() - 6000),
+        qualifiedAt: null,
+        visibleDurationMs: null,
+        visibleSurface: null,
+        isBillable: false,
+        campaign: {
+          id: CAMPAIGN_ID,
+          bidAmountMinor: 2_00n,
+          currency: 'USD',
+          advertiserId: ADS_PROFILE_ID,
+          bidType: 'cpm',
+        },
+        user: { status: 'active' },
+      });
+
+      const payload = {
+        impressionToken: IMPRESSION_TOKEN,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'idem-qual-no-surface',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
+      expect(result.reason).not.toBe('minimum_visible_surface_not_met');
+    });
+
     it('marks impression as non-billable when the developer account is restricted', async () => {
       mockPrisma.adImpression.findUnique.mockResolvedValue({
         id: IMPRESSION_ID,

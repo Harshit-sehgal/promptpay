@@ -6,6 +6,8 @@ import {
   AgentLifecycleEventV1,
 } from '@ateva/agent-protocol';
 
+import { isHeadlessEnvironment } from './presentation-context';
+
 export const GENERIC_WRAPPER_ADAPTER_VERSION = 'generic-wrapper-0.0.1';
 
 type WrapperEventInput = {
@@ -61,7 +63,13 @@ export function createGenericWrapperEvent(input: WrapperEventInput): AgentLifecy
     correlationId: input.correlationId,
     adapterVersion: GENERIC_WRAPPER_ADAPTER_VERSION,
     clientVersion: AGENT_ADAPTER_VERSION,
-    metadata,
+    // Stamped from this process's own environment. `ateva run -- <agent>` in a
+    // CI job is legitimate agent work and is recorded as such, but it must not
+    // become human-attention inventory.
+    metadata: {
+      ...metadata,
+      executionContext: isHeadlessEnvironment() ? 'headless' : 'interactive',
+    },
   };
 }
 

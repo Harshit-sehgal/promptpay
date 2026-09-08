@@ -142,6 +142,43 @@ describe('runWatch CLI ad-flow loop (A-040)', () => {
     expect(mocks.api.endWaitState).toHaveBeenCalledWith(expect.objectContaining({ waitStateId }));
   });
 
+  it('never REQUESTS an ad when stdout is not an interactive terminal', async () => {
+    // Suppressing only the rendering would still claim the opportunity and
+    // consume the account's hourly exposure budget, so the request itself has
+    // to be withheld.
+    process.stdout.isTTY = false;
+    const poll = await startWatchAndCapture();
+
+    mocks.setFileContents(waitState());
+    vi.setSystemTime(new Date(T0 + 2000));
+    await poll();
+
+    mocks.setFileContents('');
+    vi.setSystemTime(new Date(T0 + 6000));
+    await poll();
+
+    expect(mocks.api.requestAd).not.toHaveBeenCalled();
+    expect(mocks.api.recordAdRendered).not.toHaveBeenCalled();
+    expect(mocks.api.recordImpressionQualified).not.toHaveBeenCalled();
+    // Wait-state telemetry is unaffected: the work happened, nobody saw an ad.
+    expect(mocks.api.reportWaitState).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId, waitStateId }),
+    );
+    expect(mocks.api.endWaitState).toHaveBeenCalledWith(expect.objectContaining({ waitStateId }));
+  });
+
+  it('never requests an ad inside CI even with an attached terminal', async () => {
+    vi.stubEnv('CI', 'true');
+    const poll = await startWatchAndCapture();
+
+    mocks.setFileContents(waitState());
+    vi.setSystemTime(new Date(T0 + 2000));
+    await poll();
+
+    expect(mocks.api.requestAd).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+
   it('does NOT qualify the impression when the wait ends before the minimum visible duration', async () => {
     const poll = await startWatchAndCapture();
 

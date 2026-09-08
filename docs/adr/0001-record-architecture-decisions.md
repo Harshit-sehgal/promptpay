@@ -10,6 +10,7 @@ format: **Context → Decision → Consequences**.
 - `0004` — JWT refresh rotation with reuse detection + TOTP 2FA
 - `0005` — NestJS Swagger compiler plugin for API documentation
 - `0006` — Fail-closed multi-provider payout architecture
+- `0008` — Adaptive qualified-attention marketplace (proposed)
 
 See the [Architecture Overview](../16-architecture-overview.md) for how these
 fit together.

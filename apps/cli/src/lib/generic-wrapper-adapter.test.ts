@@ -30,7 +30,7 @@ describe('generic wrapper adapter', () => {
       eventType: 'session.started',
       sourceType: 'inferred',
       confidence: 0.5,
-      metadata: { executableFamily: 'claude_code' },
+      metadata: { executableFamily: 'claude_code', executionContext: 'interactive' },
     });
     expect(JSON.stringify(event)).not.toContain('/home/private');
     expect(JSON.stringify(event)).not.toContain('secret-agent');
@@ -52,6 +52,7 @@ describe('generic wrapper adapter', () => {
       elapsedDurationBucket: '30_120s',
       exitCodeCategory: 'success',
       success: true,
+      executionContext: 'interactive',
     });
   });
 
@@ -66,6 +67,7 @@ describe('generic wrapper adapter', () => {
     expect(event.metadata).toEqual({
       executableFamily: 'other',
       exitCodeCategory: 'signal_interrupt',
+      executionContext: 'interactive',
     });
   });
 

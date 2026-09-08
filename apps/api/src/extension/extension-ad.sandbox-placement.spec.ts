@@ -64,7 +64,7 @@ function buildService(
     placementList = [makePlacement()],
   } = options;
   const audit = { log: vi.fn(async () => undefined) };
-  const prisma = {
+  const prisma: Record<string, unknown> = {
     userSettings: {
       findUnique: vi.fn(async () => ({
         waitTelemetryEnabled: telemetryEnabled,
@@ -101,6 +101,12 @@ function buildService(
     },
     adCreative: { findUnique: vi.fn(async () => creative) },
     campaignPlacement: { findMany: vi.fn(async () => placementList) },
+    // The sandbox claim runs the account exposure cap and the CAS write inside
+    // one transaction behind a per-user advisory lock, so the mock has to
+    // provide both. The callback receives the same client, which is what the
+    // real serializable path sees for these two statements.
+    $executeRaw: vi.fn(async () => 1),
+    $transaction: vi.fn(async (callback: (client: unknown) => unknown) => callback(prisma)),
   };
   const runtimeConfig = createMockRuntimeConfig({
     // telemetry_only keeps the non-sandbox production path from reaching the
@@ -242,10 +248,55 @@ describe('ExtensionService sandbox placement serving (WL-G007/WL-062/WL-063)', (
     const result = await service.requestAd(userId, request);
     expect(result).toEqual({
       ad: null,
-      reason: 'no_sandbox_placement',
+      // Distinct from `no_sandbox_placement`: the account had inventory and
+      // spent its attention budget, which is a different thing from having no
+      // eligible placement, and support/telemetry need to tell them apart.
+      reason: 'account_attention_cap_reached',
       mode: 'sandbox',
       hasCashValue: false,
     });
+  });
+
+  it('counts the exposure cap across ALL of an account devices, not per device', async () => {
+    // One account has one shared attention inventory. A second machine says
+    // WHERE attention happened; it must never increase HOW MUCH the account
+    // has to sell, or `installations x attention` becomes the economic
+    // primitive and running extra clients becomes a way to earn more.
+    const { service, prisma } = buildService();
+    await service.requestAd(userId, request);
+
+    expect(prisma.adOpportunity.count).toHaveBeenCalledWith({
+      where: {
+        userId,
+        state: 'claimed',
+        claimedAt: { gte: expect.any(Date) },
+      },
+    });
+    const countArgs = prisma.adOpportunity.count.mock.calls[0][0];
+    expect(countArgs.where).not.toHaveProperty('deviceId');
+  });
+
+  it('serializes the cap check and the claim behind a per-user advisory lock', async () => {
+    // Dropping deviceId from the predicate without serializing would swap a
+    // per-device over-serve for a concurrent one: two devices both read
+    // maxPerHour - 1 and both consume the final slot. This is issue A-061 in a
+    // second location, so it takes A-061's remedy.
+    const { service, prisma } = buildService();
+    await service.requestAd(userId, request);
+
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    const lockSql = prisma.$executeRaw.mock.calls[0][0];
+    expect(lockSql.join('?')).toContain('pg_advisory_xact_lock');
+    // The count must happen inside the transaction, after the lock.
+    expect(prisma.adOpportunity.count).toHaveBeenCalled();
+  });
+
+  it('does not claim the opportunity when the account cap is already spent', async () => {
+    const { service, prisma } = buildService({ exposureCount: 6 });
+    await service.requestAd(userId, request);
+
+    expect(prisma.adOpportunity.updateMany).not.toHaveBeenCalled();
   });
 
   it('honors the platform ad kill-switch for sandbox serving', async () => {

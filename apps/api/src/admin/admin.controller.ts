@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
   Query,
@@ -12,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
+import { AttentionShadowAdminService } from '../agent/attention-shadow-admin.service';
 import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Roles } from '../common/decorators';
 import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
@@ -31,6 +33,7 @@ import {
   AuditLogQueryDto,
   EscalateFraudFlagDto,
   FraudFlagsQueryDto,
+  FreezeAttentionArtifactDto,
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,
@@ -62,12 +65,40 @@ export class AdminController {
     private service: AdminService,
     private runtimeConfig: RuntimeConfigService,
     private audit: AuditService,
+    private attentionShadow: AttentionShadowAdminService,
   ) {}
 
   @ApiOperation({ summary: 'Get admin overview' })
   @Get('overview')
   getOverview() {
     return this.service.getOverview();
+  }
+
+  @ApiOperation({ summary: 'Inspect non-financial adaptive-attention shadow state' })
+  @Get('attention/shadow')
+  getAttentionShadow() {
+    return this.attentionShadow.snapshot();
+  }
+
+  @ApiOperation({ summary: 'Freeze a draft/shadow attention policy' })
+  @Post('attention/policies/:version/freeze')
+  freezeAttentionPolicy(
+    @Param('version', ParseIntPipe) version: number,
+    @CurrentUser('id') operatorId: string,
+    @Body() dto: FreezeAttentionArtifactDto,
+  ) {
+    return this.attentionShadow.freezePolicy(version, operatorId, dto.reason);
+  }
+
+  @ApiOperation({ summary: 'Freeze a candidate/shadow attention model' })
+  @Post('attention/models/:modelId/:modelVersion/freeze')
+  freezeAttentionModel(
+    @Param('modelId') modelId: string,
+    @Param('modelVersion') modelVersion: string,
+    @CurrentUser('id') operatorId: string,
+    @Body() dto: FreezeAttentionArtifactDto,
+  ) {
+    return this.attentionShadow.freezeModel(modelId, modelVersion, operatorId, dto.reason);
   }
 
   @ApiOperation({ summary: 'Get money integrity report' })

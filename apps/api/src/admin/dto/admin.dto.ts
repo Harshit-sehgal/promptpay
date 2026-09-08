@@ -35,6 +35,14 @@ export class RejectCampaignDto {
   reason!: string;
 }
 
+export class FreezeAttentionArtifactDto {
+  @ApiProperty({ required: false, description: 'Human-readable operator reason' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
 // ── Payout approval ──
 
 export class ApprovePayoutDto {
