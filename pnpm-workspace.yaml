@@ -36,7 +36,10 @@ overrides:
   # are not forced onto 5.x. Advisory published after 2026-08-07; the fix is
   # a patch release, so drop this override once the direct parents raise their
   # own lower bounds.
-  'js-yaml@^4.0.0': 4.3.1
+  'js-yaml@^4.0.0': 4.3.2
+  # GHSA-2883-xcg3-v3hh (high): a third js-yaml advisory (4.3.1 -> 4.3.2),
+  # published 2026-09. Same handling: patch-level pin, scoped to ^4, dropped
+  # once the direct parents raise their own lower bounds.
   # GHSA-pm4m-ph32-ghv5 (high): the same class of defect in the js-yaml 5 line,
   # patched in 5.2.2. main never carried js-yaml 5 at all — @nestjs/swagger
   # 11.4.6 is what introduces it, so the bump brings the advisory with it. The
