@@ -51,6 +51,16 @@ test.describe('A-047 signup / cookie lifecycle', () => {
     // rendered (nav with Overview/Earnings/Payouts). The dashboard data
     // section is client-fetched and may error in a manual local run; we
     // assert the authenticated route itself is reachable, not the data load.
+    // On narrow viewports the workspace nav collapses behind an accessible
+    // toggle (disclosure button, aria-expanded), so open it first when it
+    // reports collapsed rather than assuming a persistent desktop sidebar.
+    const navToggle = page.getByRole('button', { name: 'Open workspace navigation' });
+    if (
+      (await navToggle.isVisible().catch(() => false)) &&
+      (await navToggle.getAttribute('aria-expanded')) === 'false'
+    ) {
+      await navToggle.click();
+    }
     await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible({
       timeout: 15_000,
     });
