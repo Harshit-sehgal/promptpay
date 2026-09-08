@@ -6,15 +6,29 @@ packages:
 overrides:
   # Security floors for transitive Next/Sentry and AJV dependency paths.
   # Keep these explicit until the direct packages raise their own lower bounds.
-  fast-uri: 3.1.5
-  multer: 2.2.0
+  fast-uri: 3.1.6
+  multer: 2.3.0
   postcss: 8.5.23
   find-my-way: 9.7.0
   valibot: 1.4.2
   undici: 7.29.0
   'brace-expansion@^1.1.0': 1.1.18
   'brace-expansion@^5.0.0': 5.0.9
-  sharp: 0.35.0
+  sharp: 0.35.4
+  # Security floors published/raised after main's 2026-08-28 green run.
+  # - browserslist >=4.28.7: two high advisories (GHSA-c83g-rgw3-j3cx unbounded
+  #   memory growth; GHSA-73wf-gq98-2v4g crash/prototype write via untrusted
+  #   stats files) through @sentry/nextjs > @babel/core paths.
+  # - fast-uri raised to >=3.1.6 above: SSRF/host-confusion advisories.
+  # - qs >=6.16.0: two moderate DoS advisories through the Next.js runtime
+  #   (the advisory names >=6.15.4, but 6.15.x was never published; 6.16.0 is
+  #   the first patched release on the registry).
+  # - mysql2 >=3.23.1: further credential-leak fixes beyond 3.22.0 through the
+  #   Prisma engine packages.
+  # Drop each once the direct parents raise their own lower bounds.
+  browserslist: 4.28.7
+  qs: 6.16.0
+  mysql2: 3.23.1
   # GHSA-5p4m-2wfm-xmqj / CVE-2026-59870 (high, CWE-407): quadratic CPU
   # consumption resolving `!!omap` in js-yaml <4.3.1. Reaches production
   # through `@nestjs/swagger`, plus dev-only paths via `@nestjs/cli` and
