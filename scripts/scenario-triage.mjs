@@ -2,7 +2,7 @@
 /** Build a deterministic, privacy-safe triage queue from scenario reports. */
 import fs from 'node:fs';
 
-import { groupDuplicateReports } from './scenario-report.mjs';
+import { groupDuplicateReports, validateScenarioReport } from './scenario-report.mjs';
 
 const STATES = new Set(['open', 'acknowledged', 'resolved']);
 
@@ -18,6 +18,15 @@ export function buildTriageQueue(reports, previous = []) {
     const old = prior.get(group.fingerprint);
     const status = STATES.has(old?.status) ? old.status : 'open';
     const report = group.reports[0];
+    const qualityErrors = validateScenarioReport(report);
+    const automaticIssueEligible =
+      qualityErrors.length === 0 &&
+      report.buildSha !== 'unknown' &&
+      report.deterministic === true &&
+      report.failureKind === 'deterministic_assertion' &&
+      report.reproductionConfidence === 1 &&
+      ['critical', 'high'].includes(report.severity) &&
+      report.evidenceArtifacts.length > 0;
     return {
       fingerprint: group.fingerprint,
       scenarioId: report.scenarioId,
@@ -26,14 +35,9 @@ export function buildTriageQueue(reports, previous = []) {
       severity: report.severity ?? 'medium',
       reproductionConfidence: report.reproductionConfidence ?? 0,
       evidenceArtifacts: [...(report.evidenceArtifacts ?? [])],
-      issueEligibility:
-        report.status === 'failed' &&
-        report.deterministic === true &&
-        report.reproductionConfidence === 1 &&
-        ['critical', 'high'].includes(report.severity)
-          ? 'automatic'
-          : 'human_review',
-      errors: [...report.errors],
+      issueEligibility: automaticIssueEligible ? 'automatic' : 'human_review',
+      qualityErrors,
+      errors: Array.isArray(report.errors) ? [...report.errors] : ['invalid scenario report'],
     };
   });
   const currentFingerprints = new Set(current.map((item) => item.fingerprint));
