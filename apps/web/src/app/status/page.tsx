@@ -126,7 +126,7 @@ export default function StatusPage() {
                   <span
                     className={`text-[11px] font-semibold ${
                       dbConnected
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/50'
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'
                     }`}
                   >
@@ -147,7 +147,7 @@ export default function StatusPage() {
                   <span
                     className={`text-[11px] font-semibold ${
                       redisConnected
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/50'
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'
                     }`}
                   >
