@@ -72,16 +72,6 @@ overrides:
   # against its compiled dist (no `deepmergeInto`/`metaMeta`/`mergeInfo`
   # references). Drop this once Prisma raises its own lower bound.
   'deepmerge-ts': 8.0.1
-  # GHSA-c83g-rgw3-j3cx / GHSA-73wf-gq98-2v4g / GHSA-3f6p-5ww8-9rcr (high,
-  # mysql2 < 3.22.0): credential-leak class advisories against the mysql2
-  # client. The tree has no MySQL database — mysql2 arrives only through
-  # Prisma's engine packages (@prisma/client -> prisma -> mysql2, used by the
-  # migration/introspection engine for MySQL sources) — but the packages are
-  # production dependencies of packages/db, so `pnpm audit --prod` gates on
-  # them. All three advisories are patched in 3.22.0; the whole tree resolves
-  # to a single mysql2, so a bare override reaches every path. Drop this once
-  # Prisma raises its own lower bound.
-  mysql2: 3.22.0
   # COMPATIBILITY HOLD, not a security floor. Prisma 7.9.1 breaks packages/db's
   # typecheck:
   #   src/index.ts: TS2345: Argument of type 'PoolConfig' is not assignable to
