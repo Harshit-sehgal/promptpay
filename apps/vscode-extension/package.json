@@ -205,8 +205,8 @@
     "@ateva/eslint-config": "workspace:*",
     "@ateva/shared": "workspace:*",
     "esbuild": "^0.28.2",
-    "typescript": "^5.9.2",
-    "vitest": "^4.1.11"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   },
   "capabilities": {
     "untrustedWorkspaces": {
