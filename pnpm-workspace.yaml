@@ -29,6 +29,12 @@ overrides:
   browserslist: 4.28.7
   qs: 6.16.0
   mysql2: 3.23.1
+  # @sentry/server-utils 10.73.0 shipped a broken dist layout: its webpack
+  # orchestrion entry resolves a doubled node_modules/node_modules/ path and
+  # crashes vitest module loading (CI 2026-09-08, cookie-consent suite).
+  # 10.70.0 is the last CI-proven version; drop this pin once upstream
+  # republishes a fixed 10.x.
+  '@sentry/server-utils': 10.70.0
   # GHSA-5p4m-2wfm-xmqj / CVE-2026-59870 (high, CWE-407): quadratic CPU
   # consumption resolving `!!omap` in js-yaml <4.3.1. Reaches production
   # through `@nestjs/swagger`, plus dev-only paths via `@nestjs/cli` and
