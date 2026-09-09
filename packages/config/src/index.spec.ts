@@ -71,6 +71,19 @@ describe('@ateva/config env schema', () => {
     expect(env.THROTTLE_AUTH_SHORT_LIMIT).toBeUndefined();
   });
 
+  it('trims the shadow pseudonym key before validating and parsing it', () => {
+    // The materializer trims the raw env value before deriving its HMAC key,
+    // so the schema must validate and emit the trimmed form: a padded key
+    // whose trimmed length is under the minimum must be rejected outright,
+    // not silently weaken the derived key.
+    const paddedKey = `  ${'k'.repeat(40)}  `;
+    const env = loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: paddedKey });
+    expect(env.ATTENTION_SHADOW_PSEUDONYM_KEY).toBe('k'.repeat(40));
+    expect(() =>
+      loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: `   ${'k'.repeat(20)}   ` }),
+    ).toThrow();
+  });
+
   it('accepts throttle overrides with coerced ints >= 1', () => {
     const env = loadEnv({
       ...BASE_ENV,
@@ -183,6 +196,19 @@ describe('@ateva/config env schema', () => {
         PRIVACY_HASH_KEY: validKey(),
       }),
     ).not.toThrow();
+  });
+
+  it('validates the optional shadow-fact pseudonym key without enabling it by default', () => {
+    expect(loadEnv(BASE_ENV).ATTENTION_SHADOW_PSEUDONYM_KEY).toBeUndefined();
+    expect(
+      loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: validKey() })
+        .ATTENTION_SHADOW_PSEUDONYM_KEY,
+    ).toBe(validKey());
+    expect(() => loadEnv({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: 'too-short' })).toThrow();
+    expect(
+      envSchema.parse({ ...BASE_ENV, ATTENTION_SHADOW_PSEUDONYM_KEY: '' })
+        .ATTENTION_SHADOW_PSEUDONYM_KEY,
+    ).toBeUndefined();
   });
 
   it('rejects mismatched environment identity and unsafe faucet settings', () => {

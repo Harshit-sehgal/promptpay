@@ -126,6 +126,10 @@ services:
       ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:-}
       ALLOWED_CURRENCIES: ${ALLOWED_CURRENCIES:-}
       VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
+      # Optional, telemetry-only shadow fact materialization. Never pass this
+      # key to a client or put it in a Docker build argument.
+      ATTENTION_SHADOW_PSEUDONYM_KEY: ${ATTENTION_SHADOW_PSEUDONYM_KEY:-}
+      ATTENTION_SHADOW_FACT_INTERVAL_MS: ${ATTENTION_SHADOW_FACT_INTERVAL_MS:-900000}
       # Independently operated providers only. Their public keys and emitted
       # versions are separate from client detector-version allowlists.
       WAIT_ATTESTATION_ISSUERS: ${WAIT_ATTESTATION_ISSUERS:-}

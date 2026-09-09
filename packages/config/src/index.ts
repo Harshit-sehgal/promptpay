@@ -195,6 +195,20 @@ const optionalAllowlist = (validate: (value: string) => boolean, message: string
     z.string().refine(validate, message).optional(),
   );
 
+/**
+ * Like `optionalSecret` would be, but the validated value is the TRIMMED key and the
+ * parsed output is that trimmed key. Use this for secrets that consumers
+ * read from `process.env` and trim before use (e.g. the shadow pseudonym
+ * key): validating the raw string would admit a padded key whose trimmed
+ * length is below the minimum, silently weakening the derived HMAC key.
+ */
+const optionalTrimmedSecret = (minimumLength: number, maximumLength: number) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }, z.string().min(minimumLength).max(maximumLength).optional());
+
 const envSchema = z
   .object({
     // General
@@ -386,6 +400,10 @@ const envSchema = z
     // Keyed pseudonymization for IP addresses and other low-entropy values.
     // A plain SHA-256 hash is reversible by enumerating the IPv4 space.
     PRIVACY_HASH_KEY: z.string().min(32).optional(),
+    // Keyed pseudonymization for privacy-safe adaptive-attention shadow facts.
+    // Optional because the materializer is opt-in; an empty value means the
+    // job remains disabled. The key never belongs in a client or build arg.
+    ATTENTION_SHADOW_PSEUDONYM_KEY: optionalTrimmedSecret(32, 256),
 
     // Sentry (error monitoring)
     SENTRY_DSN: z.string().optional(),
@@ -479,6 +497,12 @@ const envSchema = z
       .min(60_000)
       .max(86_400_000)
       .default(600_000),
+    ATTENTION_SHADOW_FACT_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(900_000),
     LEDGER_MATURATION_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(500),
     LEDGER_MATURATION_RUN_CAP: z.coerce.number().int().min(1).max(20_000).default(5_000),
     WEBHOOK_RECLAIM_CRON: z.enum(['true', 'false']).optional(),

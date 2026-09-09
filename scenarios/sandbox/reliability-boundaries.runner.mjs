@@ -3,6 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// The spool prunes queued records after a 30-day TTL, so fixture timestamps
+// must be derived from the real clock. Hardcoded dates made this scenario
+// start failing three days after the seeded day (2026-09-05).
+const now = new Date();
+const fixtureTimestamp = new Date(now.getTime() - 60_000).toISOString();
+
 import { isAgentEventTimestampBounded } from '../../packages/agent-protocol/dist/index.js';
 import {
   clearAgentEventSpool,
@@ -31,7 +37,7 @@ function spoolEvent(eventId) {
     eventType: 'session.started',
     sourceType: 'inferred',
     confidence: 0.5,
-    occurredAt: '2026-08-06T00:00:00.000Z',
+    occurredAt: fixtureTimestamp,
     correlationId: `correlation-${eventId}`,
     adapterVersion: 'scenario',
     clientVersion: 'scenario',
@@ -43,14 +49,17 @@ try {
   if (mode === 'queue-full') {
     fs.mkdirSync(directory, { recursive: true });
     const seededRecords = Array.from({ length: 10_000 }, (_, index) => ({
-      queuedAt: '2026-08-06T00:00:00.000Z',
+      queuedAt: fixtureTimestamp,
       installationId,
       deviceId,
       event: spoolEvent(`00000000-0000-4000-8000-${String(index).padStart(12, '0')}`),
     }));
     // Seed valid durable records in one isolated write; the behavior under
     // test is the real parser/capacity guard, not lock throughput.
-    fs.writeFileSync(paths.queueFile, `${seededRecords.map((record) => JSON.stringify(record)).join('\n')}\n`);
+    fs.writeFileSync(
+      paths.queueFile,
+      `${seededRecords.map((record) => JSON.stringify(record)).join('\n')}\n`,
+    );
     let rejected = false;
     try {
       enqueueAgentEvent({ installationId, deviceId, event: spoolEvent(randomUUID()) }, paths);
@@ -60,16 +69,23 @@ try {
     const status = readSpoolStatus(paths);
     if (!rejected || status.queuedEvents !== 10_000)
       throw new Error('local spool did not fail closed at its event-count limit');
-    process.stdout.write(`${JSON.stringify([{
-      eventId: 'scenario-queue-full',
-      eventType: 'queue.backpressure',
-      mode: 'sandbox',
-      financialMode: 'sandbox',
-      hasCashValue: false,
-      metadata: { queuedEvents: status.queuedEvents, rejected: true },
-    }])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([
+        {
+          eventId: 'scenario-queue-full',
+          eventType: 'queue.backpressure',
+          mode: 'sandbox',
+          financialMode: 'sandbox',
+          hasCashValue: false,
+          metadata: { queuedEvents: status.queuedEvents, rejected: true },
+        },
+      ])}\n`,
+    );
   } else if (mode === 'clock-skew') {
-    const now = Date.parse('2026-08-06T12:00:00.000Z');
+    // isAgentEventTimestampBounded is deterministic under an explicit `now`, so
+    // this case keeps a fixed reference time and asserts the documented bounds
+    // (8 days stale, 5 minutes future).
+    const clock = Date.parse('2026-08-06T12:00:00.000Z');
     const cases = [
       ['recent', '2026-08-06T11:59:00.000Z', true],
       ['too_old', '2026-07-29T11:59:59.999Z', false],
@@ -77,17 +93,21 @@ try {
       ['malformed', 'not-a-date', false],
     ];
     for (const [, timestamp, expected] of cases) {
-      if (isAgentEventTimestampBounded(timestamp, now) !== expected)
+      if (isAgentEventTimestampBounded(timestamp, clock) !== expected)
         throw new Error(`timestamp bound mismatch for ${timestamp}`);
     }
-    process.stdout.write(`${JSON.stringify([{
-      eventId: 'scenario-clock-skew-rejected',
-      eventType: 'event.rejected',
-      mode: 'sandbox',
-      financialMode: 'sandbox',
-      hasCashValue: false,
-      metadata: { staleAndFutureEventsRejected: true },
-    }])}\n`);
+    process.stdout.write(
+      `${JSON.stringify([
+        {
+          eventId: 'scenario-clock-skew-rejected',
+          eventType: 'event.rejected',
+          mode: 'sandbox',
+          financialMode: 'sandbox',
+          hasCashValue: false,
+          metadata: { staleAndFutureEventsRejected: true },
+        },
+      ])}\n`,
+    );
   } else throw new Error(`unknown reliability mode: ${mode}`);
 } finally {
   clearAgentEventSpool(paths);

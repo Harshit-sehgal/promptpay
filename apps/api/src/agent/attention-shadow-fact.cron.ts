@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import {
+  AGENT_EVENT_MAX_AGE_MS,
   agentLifecycleEventSchema,
   type AgentLifecycleEventV1,
   canonicalAgentMetadataSchema,
@@ -8,11 +9,14 @@ import {
 } from '@ateva/agent-protocol';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
+import { envNumber } from '../common/utils/env-number';
 import { PrismaService } from '../config/prisma.service';
 import { AttentionShadowFactService } from './attention-shadow-fact.service';
 import { buildShadowSessionFact } from './attention-shadow-facts';
 
 const DEFAULT_INTERVAL_MS = 15 * 60 * 1000;
+const MIN_INTERVAL_MS = 60 * 1000;
+const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type AttentionShadowFactRunResult = {
   scanned: number;
@@ -21,6 +25,17 @@ export type AttentionShadowFactRunResult = {
   skipped: number;
   errors: number;
   financialSideEffects: false;
+};
+
+export type AttentionShadowFactJobStatus = {
+  configured: boolean;
+  enabled: boolean;
+  running: boolean;
+  lastRunStatus: 'never' | 'running' | 'completed' | 'failed';
+  lastStartedAt: string | null;
+  lastCompletedAt: string | null;
+  lastFailureAt: string | null;
+  lastResult: AttentionShadowFactRunResult | null;
 };
 
 /**
@@ -32,12 +47,20 @@ export type AttentionShadowFactRunResult = {
 @Injectable()
 export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AttentionShadowFactCron.name);
-  private readonly intervalMs = positiveDuration(
-    process.env.ATTENTION_SHADOW_FACT_INTERVAL_MS,
+  private readonly intervalMs = envNumber(
+    'ATTENTION_SHADOW_FACT_INTERVAL_MS',
     DEFAULT_INTERVAL_MS,
+    MIN_INTERVAL_MS,
+    MAX_INTERVAL_MS,
   );
   private intervalId?: NodeJS.Timeout;
   private running = false;
+  private enabled = false;
+  private lastRunStatus: AttentionShadowFactJobStatus['lastRunStatus'] = 'never';
+  private lastStartedAt: string | null = null;
+  private lastCompletedAt: string | null = null;
+  private lastFailureAt: string | null = null;
+  private lastResult: AttentionShadowFactRunResult | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -50,6 +73,7 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
       this.logger.warn('Shadow fact materialization disabled: pseudonym key is not configured');
       return;
     }
+    this.enabled = true;
     void this.tick().catch((error: unknown) => {
       this.logger.error('Initial shadow fact materialization failed', error);
     });
@@ -62,6 +86,20 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
 
   onModuleDestroy(): void {
     if (this.intervalId) clearInterval(this.intervalId);
+    this.enabled = false;
+  }
+
+  getStatus(): AttentionShadowFactJobStatus {
+    return {
+      configured: Boolean(process.env.ATTENTION_SHADOW_PSEUDONYM_KEY?.trim()),
+      enabled: this.enabled,
+      running: this.running,
+      lastRunStatus: this.lastRunStatus,
+      lastStartedAt: this.lastStartedAt,
+      lastCompletedAt: this.lastCompletedAt,
+      lastFailureAt: this.lastFailureAt,
+      lastResult: this.lastResult ? { ...this.lastResult } : null,
+    };
   }
 
   async tick(): Promise<AttentionShadowFactRunResult> {
@@ -70,12 +108,30 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
     if (!pseudonymKey) return emptyResult();
 
     this.running = true;
+    this.lastRunStatus = 'running';
+    this.lastStartedAt = new Date().toISOString();
     const result = emptyResult();
     try {
       const sessions = await this.prisma.agentSession.findMany({
         where: {
           status: { in: ['ended', 'abandoned'] },
-          endedAt: { not: null },
+          // Wait for session finality before freezing an immutable fact.
+          // Ingestion still accepts offline lifecycle events up to
+          // AGENT_EVENT_MAX_AGE_MS stale, so a session that ended moments ago
+          // may still receive earlier-in-the-session events. Once endedAt is
+          // older than that bound, every event that can still pass timestamp
+          // validation necessarily occurred after the session ended, and the
+          // lifecycle hardening already rejects post-terminal events from
+          // extending a fact. Selecting on this watermark (rather than
+          // selecting then skipping) keeps a bounded batch from stalling on
+          // not-yet-final sessions.
+          endedAt: { not: null, lte: new Date(Date.now() - AGENT_EVENT_MAX_AGE_MS) },
+          // Do not spend the bounded batch on sessions that have already been
+          // materialized. The per-session idempotency check below remains a
+          // race-safe fallback, but it must not be the normal way a completed
+          // fact is discovered: otherwise the oldest 100 sessions can be
+          // selected forever and newer sessions never reach the dataset.
+          shadowFact: null,
         },
         orderBy: [{ endedAt: 'asc' }, { id: 'asc' }],
         take: 100,
@@ -173,7 +229,16 @@ export class AttentionShadowFactCron implements OnApplicationBootstrap, OnModule
           );
         }
       }
+      this.lastRunStatus = 'completed';
+      this.lastCompletedAt = new Date().toISOString();
+      this.lastResult = { ...result };
       return result;
+    } catch (error: unknown) {
+      this.lastRunStatus = 'failed';
+      this.lastFailureAt = new Date().toISOString();
+      this.lastCompletedAt = this.lastFailureAt;
+      this.lastResult = null;
+      throw error;
     } finally {
       this.running = false;
     }
@@ -231,11 +296,6 @@ function resolveEnvironmentKind(): AgentLifecycleEventV1['environmentKind'] {
     value === 'production'
     ? value
     : 'development';
-}
-
-function positiveDuration(raw: string | undefined, fallback: number): number {
-  const parsed = Number(raw);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function emptyResult(): AttentionShadowFactRunResult {

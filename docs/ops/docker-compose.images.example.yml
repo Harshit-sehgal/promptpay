@@ -55,6 +55,10 @@ services:
       PAYOUT_HMAC_KEY: ${PAYOUT_HMAC_KEY:?Set a different canonical base64 32-byte payout HMAC key}
       ATEVA_PAYOUT_PROVIDER_STATUS: ${ATEVA_PAYOUT_PROVIDER_STATUS:-{}}
       VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
+      # Optional, telemetry-only shadow fact materialization. Keep unset until
+      # the operator has approved key custody and retention for this dataset.
+      ATTENTION_SHADOW_PSEUDONYM_KEY: ${ATTENTION_SHADOW_PSEUDONYM_KEY:-}
+      ATTENTION_SHADOW_FACT_INTERVAL_MS: ${ATTENTION_SHADOW_FACT_INTERVAL_MS:-900000}
       # A null Compose mapping passes the value through when configured and
       # omits it when absent. An empty string is invalid for this optional JSON.
       WAIT_ATTESTATION_ISSUERS:

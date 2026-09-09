@@ -3,6 +3,76 @@ import { describe, expect, it, vi } from 'vitest';
 import { AttentionShadowAdminService } from './attention-shadow-admin.service';
 
 describe('attention shadow admin controls', () => {
+  it('reports pending sessions and materializer health without financial state', async () => {
+    const prisma = {
+      agentSession: { count: vi.fn().mockResolvedValue(4) },
+      attentionSessionFact: {
+        count: vi
+          .fn()
+          .mockResolvedValueOnce(9)
+          .mockResolvedValueOnce(7)
+          .mockResolvedValueOnce(1)
+          .mockResolvedValueOnce(8),
+      },
+      attentionPricingPolicy: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            version: 2,
+            status: 'shadow',
+            effectiveAt: new Date('2026-08-30T00:00:00.000Z'),
+            retiredAt: null,
+          },
+        ]),
+      },
+      attentionModelArtifact: { findMany: vi.fn().mockResolvedValue([]) },
+      attentionExperiment: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const factCron = {
+      getStatus: vi.fn().mockReturnValue({
+        configured: true,
+        enabled: true,
+        running: false,
+        lastRunStatus: 'completed',
+        lastStartedAt: '2026-08-31T00:00:00.000Z',
+        lastCompletedAt: '2026-08-31T00:01:00.000Z',
+        lastFailureAt: null,
+        lastResult: {
+          scanned: 4,
+          created: 4,
+          duplicates: 0,
+          skipped: 0,
+          errors: 0,
+          financialSideEffects: false,
+        },
+      }),
+    };
+
+    const result = await new AttentionShadowAdminService(
+      prisma as never,
+      factCron as never,
+    ).snapshot();
+
+    expect(result.materializer).toMatchObject({
+      pendingSessions: 4,
+      configured: true,
+      enabled: true,
+      lastRunStatus: 'completed',
+      lastResult: expect.objectContaining({ created: 4, financialSideEffects: false }),
+    });
+    // The pending count must mirror the materializer's selection predicate:
+    // terminal, past the late-arrival finality watermark, unmaterialized, and
+    // policy-bound. The watermark date is wall-clock derived, so assert its
+    // shape rather than its value.
+    const [countArgs] = prisma.agentSession.count.mock.calls[0];
+    expect(countArgs.where).toMatchObject({
+      status: { in: ['ended', 'abandoned'] },
+      shadowFact: null,
+      policyAssignment: { isNot: null },
+    });
+    expect(countArgs.where.endedAt).toEqual({ not: null, lte: expect.any(Date) });
+    expect(result.financialSideEffects).toBe(false);
+  });
+
   it('freezes only non-live policies and remains non-financial', async () => {
     const prisma = {
       attentionPricingPolicy: {

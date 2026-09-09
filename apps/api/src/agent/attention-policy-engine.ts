@@ -83,12 +83,17 @@ export function evaluateCounterfactualPolicy(
 /**
  * Choose among already-produced model predictions. This function is
  * deliberately pure and has no activation callback or financial dependency.
- * Unknown/under-powered predictions retain the current policy.
+ * Unknown/under-powered predictions retain the current policy. A baseline
+ * prediction for the current policy is required: a candidate is only
+ * recommended when it improves on the current policy's own conservative
+ * margin bound, so "best of the supplied candidates" can never masquerade as
+ * an improvement.
  */
 export function recommendShadowPolicy(
   currentPolicy: ShadowPolicyVector,
   candidates: readonly { policy: ShadowPolicyVector; prediction: ShadowModelPrediction }[],
   constraints: ShadowOptimizerConstraints,
+  currentPrediction: ShadowModelPrediction,
 ): ShadowRecommendation {
   const admissible = candidates.filter(({ policy, prediction }) => {
     const alphaDelta =
@@ -110,6 +115,8 @@ export function recommendShadowPolicy(
     );
   });
 
+  const baselineMarginBound = marginBound(currentPrediction);
+
   if (admissible.length === 0) {
     return {
       status: 'retain_current',
@@ -126,13 +133,17 @@ export function recommendShadowPolicy(
     marginBound(candidate.prediction) > marginBound(winner.prediction) ? candidate : winner,
   );
 
-  if (best.policy.version === currentPolicy.version) {
+  if (
+    best.policy.version === currentPolicy.version ||
+    marginBound(best.prediction) <= baselineMarginBound
+  ) {
     return {
       status: 'retain_current',
       currentPolicy,
       recommendedPolicy: currentPolicy,
       expectedEffects: best.prediction,
-      reason: 'The current policy has the strongest approved lower-bound contribution margin.',
+      reason:
+        'No admissible candidate improves the conservative margin bound of the current policy.',
       financialSideEffects: false,
     };
   }
@@ -167,7 +178,10 @@ export function buildShadowPolicyGrid(
   const caps = options.passiveSessionCapMs ?? [base.passiveSessionCapMs];
   const minimums = options.minimumQualifiedMs ?? [base.minimumQualifiedMs];
   const vectors: ShadowPolicyVector[] = [];
-  let version = base.version;
+  // Grid versions start after the base version: the base version names the
+  // current policy, and two different vectors must never share one immutable
+  // version (digest conflicts and current-policy confusion downstream).
+  let version = base.version + 1;
   for (const alphaPpm of alphas) {
     for (const passiveCapRatioPpm of ratios) {
       for (const passiveSessionCapMs of caps) {
