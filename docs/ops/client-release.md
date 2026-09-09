@@ -1,23 +1,16 @@
 # Client Release Runbook
 
-This runbook covers the distributed Ateva clients: `ateva-cli` on npm and
-the `ateva-vscode` VS Code extension.
+This runbook covers release artifacts for Ateva’s CLI (`ateva-cli`) and VS Code
+extension (`ateva-vscode`). Artifact generation and publication status are
+separate checks.
 
 ## Artifacts
 
 - CLI release workflow: `.github/workflows/publish-cli.yml`
   - Packages `apps/cli` into `ateva-cli-*.tgz`.
   - Smoke-installs the tarball and runs `ateva --version` and
-    `ateva --help` with `ATEVA_API_URL=https://ateva.vercel.app/api/v1`,
-    the shipped default (operator decision 2026-08-24 — the previous
-    `api.ateva.com` placeholder sat on a domain the project does not own).
-    **Before any real publication:** verify that origin actually serves the
-    CLI/extension endpoints. Today the web deployment's BFF proxy
-    (`app/api/[...proxy]/route.ts`) allowlists only browser UI paths,
-    forwards cookie-derived auth rather than a client-supplied Bearer
-    header, and excludes `/extension/*` entirely — so a client pointed at
-    it receives 403/dropped auth until that boundary is deliberately
-    extended or the API gets its own public hostname.
+    `ateva --help` against the current default
+    `https://ateva.vercel.app/api/v1`.
   - Uploads the tarball as the `ateva-cli-package` workflow artifact.
 - VS Code release workflow: `.github/workflows/publish-vscode.yml`
   - Packages `apps/vscode-extension` into `ateva-vscode.vsix`.
@@ -25,18 +18,26 @@ the `ateva-vscode` VS Code extension.
     `https://ateva.vercel.app/api/v1`.
   - Uploads the VSIX as the `ateva-vscode-vsix` workflow artifact.
 
-Release-published events build and upload artifacts but do not publish to npm or
-Marketplace automatically. Real publication is a manual `workflow_dispatch` run
-with `publish=true`, guarded by the `npm-publish` or `vscode-marketplace`
-GitHub environment.
+Both workflows are configured to build on `release: published` and to enter
+their guarded publication job. Manual dispatch publishes only with
+`publish=true`; either path still requires the matching GitHub environment and
+token. A successful artifact build or workflow configuration is not evidence
+that npm or Marketplace publication succeeded.
+
+The current Vercel deployment is a web BFF, not a verified client API origin:
+its allowlist is for browser paths, it translates its httpOnly access-token
+cookie rather than accepting a client Bearer header, and it excludes
+`/extension/*`. Before client distribution, provide and verify a stable API
+origin that serves the client endpoints.
 
 ## Publish
 
 1. Verify CI is green for the release commit.
-2. Create or publish the GitHub release to generate reviewable artifacts.
+2. Publish the GitHub release to generate reviewable artifacts.
 3. Download and smoke-test the uploaded artifact locally if needed.
-4. Re-run the relevant publish workflow manually with `publish=true`.
-5. Confirm the package appears in npm or Visual Studio Marketplace.
+4. Check the guarded publication job result; for a manual run, set
+   `publish=true`.
+5. Independently verify any registry or Marketplace listing.
 
 Required secrets:
 
@@ -63,9 +64,9 @@ same-device recovery without creating a second identity. Do not manually copy
 
 The identity metadata write is atomic and protected by a short-lived local lock.
 If a process crashes, a demonstrably stale lock is reclaimed; otherwise the CLI
-fails rather than racing credential metadata. Account logout/deletion cleanup removes queued, in-flight, and quarantined
-agent events as well as the credential metadata according to the normal
-credential policy.
+fails rather than racing credential metadata. Account logout/deletion cleanup
+removes queued, in-flight, and quarantined agent events as well as the
+credential metadata according to the normal credential policy.
 
 ## Local agent bridge and spool
 
@@ -121,7 +122,8 @@ financial evidence. Its local correlation layer prefers native hook/plugin
 sources over wrapper observations and deduplicates repeated event IDs. Missing
 shell/bridge capability is reported as unavailable/degraded telemetry rather
 than converted into an ad opportunity or a verified wait. It marks
-only stale active sessions with no recent lifecycle event and no activework unit as `abandoned`; it never closes active work units or changes attention,
+only stale active sessions with no recent lifecycle event and no active work unit
+as `abandoned`; it never closes active work units or changes attention,
 ad-opportunity, ledger, or payout rows. Abandoned correlations are terminal:
 late events are acknowledged as `abandoned_session` rejections, and a genuinely
 resumed provider run must use a new correlation ID. The job is lease-protected

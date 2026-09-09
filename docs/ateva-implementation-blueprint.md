@@ -929,21 +929,34 @@ Need each deterministic scenario to declare:
 
 ---
 
-#### WL-G020 — No issue-quality control for autonomous reports
+#### WL-G020 — Autonomous report quality control (substantially closed)
 
-Agents can produce duplicates, low-confidence observations, or incorrect diagnoses.
+The current repository validates the scenario-report contract before it is
+admitted to triage. `scripts/scenario-report.mjs` checks the schema,
+scenario/catalog identifiers and version fields, environment and build
+provenance, deterministic and severity/confidence fields,
+failure-kind/status consistency, safe relative
+evidence paths, and the SHA-256 report fingerprint. Duplicate grouping
+recomputes the behavior fingerprint rather than trusting a producer-supplied
+digest. `scripts/scenario-triage.mjs` carries validation failures into the
+queue and marks a report eligible for automatic issue creation only when it is
+valid, tied to a known build, deterministic, a deterministic assertion
+failure, high/critical severity, confidence `1`, and includes evidence
+artifacts.
 
-Need:
+Residuals:
 
-- report fingerprint;
-- reproduction confidence;
-- evidence links;
-- build SHA;
-- scenario ID;
-- severity rubric;
-- deduplication;
-- human approval before issue creation for medium/low confidence;
-- automatic creation only for deterministic assertion failures.
+- evidence paths are validated as safe relative references only; artifact
+  existence, redaction, and content/digest verification remain unimplemented;
+- severity is enum-validated but is not backed by a calibrated rubric;
+- reproduction confidence and evidence artifacts are producer/manifest
+  assertions, not independently measured evidence;
+- human review is a queue label, not a durable approval record with actor,
+  time, and evidence;
+- no GitHub issue-writer integration exists, pending explicit authentication
+  and policy approval; and
+- the broader autonomous persona and deterministic truth-label coverage
+  remains incomplete (G008/G019).
 
 ---
 
@@ -982,17 +995,19 @@ Longer-term, consider standalone signed binaries, but this is not required to st
 
 #### WL-G023 — VS Code publication readiness is incomplete
 
-The extension is `UNLICENSED`, uses the provisional publisher, and defaults to production domains.
+Current metadata declares `publisher: "ateva"` and
+`license: "SEE LICENSE IN LICENSE"`; `ateva.apiUrl` defaults to
+`https://ateva.vercel.app/api/v1`. The packaging checks verify the declared
+license file and an isolated self-contained bundle. They do not establish
+Marketplace acceptance, publisher ownership, signing/provenance, or
+publication.
 
 Before external distribution:
 
-- choose source/package license;
-- secure publisher identity;
-- verify marketplace policy compatibility;
-- sign packages;
-- use alpha/beta channels;
-- test update and rollback;
-- ensure sandbox builds point only to sandbox endpoints.
+- verify Marketplace policy compatibility and publisher ownership;
+- establish signing/provenance and alpha/beta channel policy;
+- test update and rollback behavior; and
+- produce and test sandbox builds against sandbox endpoints only.
 
 ---
 
@@ -1041,42 +1056,44 @@ These block real-money or broad international launch, not current building:
 
 ---
 
-### 7.5 Register reconciliation — verified against `main@bbdab57`, 2026-08-30
+### 7.5 Register reconciliation — historical snapshot `main@bbdab57`, 2026-08-30; current G020/G023 update 2026-08-31
 
 A gap register without a commit anchor is a snapshot with an unknown expiry
 date. This document's audit basis is 2026-08-04; roughly 200 commits have
 landed since, and most of WL-G001–G010 shipped in them. The register below was
-re-checked against code, not against prose. **Every future reassessment of this
-document must state the SHA it verified against.**
+re-checked against code, not against prose. The G020 and G023 entries and their
+related evidence were refreshed against `main@b851b50` plus the current working
+tree on 2026-08-31; all other rows retain the 2026-08-30 snapshot. **Every
+future reassessment of this document must state the SHA it verified against.**
 
 Status vocabulary: **Closed** (implemented and machine-checked), **Substantially
 closed** (implemented; a named residual remains), **Open** (unchanged).
 
-| Gap  | Status               | Evidence                                                                                      |
-| ---- | -------------------- | --------------------------------------------------------------------------------------------- |
-| G001 | Substantially closed | CI matrix green on `99703ab` (run 32252613390); Vercel still an external failure              |
-| G002 | Substantially closed | Issues #39/#40/#41/#45 open; not a full epic breakdown                                        |
-| G003 | Closed               | `ATEVA_ENVIRONMENT_KIND` + `EnvironmentMarker` fail-closed startup guard                      |
-| G004 | Closed               | `packages/agent-protocol`; `AgentSession`/`AgentWorkUnit`/`AgentLifecycleEvent`               |
-| G005 | Closed               | `sanitizeHookPayload` allowlist + recursive value scan; server re-scrub in `agent.service.ts` |
-| G006 | Closed               | correlation + source precedence in `agent-session-correlation.ts`                             |
-| G007 | Closed               | sandbox opportunity/auction path; XTS house campaigns only                                    |
-| G008 | Substantially closed | `scenarios/catalog.json` + fixtures; full autonomous persona harness not built                |
-| G009 | Substantially closed | mode-aware copy and sandbox badge; §23 inconsistencies still open                             |
-| G010 | Closed               | random installation ID in OS keychain with a `0600` fallback (`credentials.ts`)               |
-| G011 | Closed               | `HookConfigManager` merge/backup/marker/uninstall, plus `--dry-run` (§9.7)                    |
-| G012 | Closed               | hook hot path is local-only; no synchronous network call                                      |
-| G013 | Closed               | `agent-spool.ts` durable spool with ack/TTL/quarantine                                        |
-| G014 | Closed               | `getAgentProtocolCompatibility` with machine-readable rejection codes                         |
-| G015 | Closed               | `attention-state-machine.ts` (`foreground_visible` requires focus **and** a visible surface)  |
-| G016 | Substantially closed | one attention owner per installation; **account-level** rule added 2026-08-30 (§10.4)         |
-| G017 | Closed               | `CampaignPlacement` with per-placement bids and thresholds                                    |
-| G018 | Closed               | XTS test currency; sandbox faucet/payout simulators                                           |
-| G019 | Substantially closed | scenario catalogue exists; deterministic truth labels not complete                            |
-| G020 | Open                 | no autonomous-report quality control yet                                                      |
-| G021 | Closed               | `POST /sandbox/admin/reset` behind admin MFA step-up                                          |
-| G022 | Open                 | CLI install friction still unmeasured                                                         |
-| G023 | Substantially closed | publisher and license set (`ateva`, `SEE LICENSE IN LICENSE`); marketplace policy unverified  |
+| Gap  | Status               | Evidence                                                                                                                                      |
+| ---- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| G001 | Substantially closed | CI matrix green on `99703ab` (run 32252613390); Vercel still an external failure                                                              |
+| G002 | Substantially closed | Issues #39/#40/#41/#45 open; not a full epic breakdown                                                                                        |
+| G003 | Closed               | `ATEVA_ENVIRONMENT_KIND` + `EnvironmentMarker` fail-closed startup guard                                                                      |
+| G004 | Closed               | `packages/agent-protocol`; `AgentSession`/`AgentWorkUnit`/`AgentLifecycleEvent`                                                               |
+| G005 | Closed               | `sanitizeHookPayload` allowlist + recursive value scan; server re-scrub in `agent.service.ts`                                                 |
+| G006 | Closed               | correlation + source precedence in `agent-session-correlation.ts`                                                                             |
+| G007 | Closed               | sandbox opportunity/auction path; XTS house campaigns only                                                                                    |
+| G008 | Substantially closed | `scenarios/catalog.json` + fixtures; full autonomous persona harness not built                                                                |
+| G009 | Substantially closed | mode-aware copy and sandbox badge; §23 inconsistencies still open                                                                             |
+| G010 | Closed               | random installation ID in OS keychain with a `0600` fallback (`credentials.ts`)                                                               |
+| G011 | Closed               | `HookConfigManager` merge/backup/marker/uninstall, plus `--dry-run` (§9.7)                                                                    |
+| G012 | Closed               | hook hot path is local-only; no synchronous network call                                                                                      |
+| G013 | Closed               | `agent-spool.ts` durable spool with ack/TTL/quarantine                                                                                        |
+| G014 | Closed               | `getAgentProtocolCompatibility` with machine-readable rejection codes                                                                         |
+| G015 | Closed               | `attention-state-machine.ts` (`foreground_visible` requires focus **and** a visible surface)                                                  |
+| G016 | Substantially closed | one attention owner per installation; **account-level** rule added 2026-08-30 (§10.4)                                                         |
+| G017 | Closed               | `CampaignPlacement` with per-placement bids and thresholds                                                                                    |
+| G018 | Closed               | XTS test currency; sandbox faucet/payout simulators                                                                                           |
+| G019 | Substantially closed | scenario catalogue exists; deterministic truth labels not complete                                                                            |
+| G020 | Substantially closed | report validator plus recomputed deduplication and triage eligibility gate; artifact, rubric, human-review, and issue-writer residuals remain |
+| G021 | Closed               | `POST /sandbox/admin/reset` behind admin MFA step-up                                                                                          |
+| G022 | Open                 | CLI install friction still unmeasured                                                                                                         |
+| G023 | Substantially closed | `publisher: ateva`, `license: SEE LICENSE IN LICENSE`; Marketplace policy, ownership, signing, and publication remain unverified              |
 
 Findings added on 2026-08-30, after the register above was re-checked:
 
@@ -2254,16 +2271,13 @@ Collect:
 
 ### 13.5 Issue creation
 
-Automatic issue creation is allowed only for:
-
-- deterministic assertion failure;
-- crash;
-- ledger imbalance;
-- privacy leak detector;
-- unauthorized financial side effect;
-- reproducible security failure.
-
-Exploratory observations should enter a triage queue first.
+The current triage gate emits automatic-issue eligibility only for a validated,
+known-build, deterministic assertion report with high/critical severity,
+reproduction confidence `1`, and at least one evidence artifact. Crashes,
+ledger imbalance, privacy leaks, unauthorized financial side effects, and
+security failures remain human-review inputs until their report classes and
+evidence policy are implemented. No GitHub issue-writer integration is present;
+the queue is an eligibility signal, not evidence that an issue was created.
 
 ### 13.6 Agent limitations
 
@@ -3211,7 +3225,9 @@ Do not publish this unless that legal entity exists.
 
 - contact page uses `@ateva.com`;
 - DPA uses `privacy@ateva.dev`;
-- clients hardcode `api.ateva.com`.
+- historical client defaults used `api.ateva.com`; current CLI and VS Code
+  defaults use `https://ateva.vercel.app/api/v1`, which is still not a verified
+  client API origin.
 
 Centralize these values and use verified owned domains.
 
@@ -3693,7 +3709,9 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 | `apps/vscode-extension/src/detector-adapters.ts`        | provider names are heuristic mappings, not live integrations                                      |
 | `apps/vscode-extension/src/wait-detector.ts`            | inactivity/task/terminal/window heuristics and one-active-wait model                              |
 | `apps/vscode-extension/src/extension.ts`                | consent, attestation, ad panel, wait start/end coupling, false-positive feedback                  |
-| `apps/vscode-extension/package.json`                    | version, provisional publisher, UNLICENSED state, production domain defaults                      |
+| `scripts/scenario-report.mjs`                           | report schema/provenance validation, behavior fingerprinting, and privacy-safe report rendering   |
+| `scripts/scenario-triage.mjs`                           | validated report triage, duplicate grouping, and deterministic automatic-issue eligibility        |
+| `apps/vscode-extension/package.json`                    | version, publisher/license metadata, and production API default                                   |
 | `.env.example`                                          | current deployment, provider, privacy, attestation, and launch configuration surface              |
 | `.github/workflows/ci.yml`                              | current CI/security/migration/package/Docker coverage                                             |
 | `.github/workflows/staging.yml`                         | attestation-dependent staging financial smoke and deployment requirements                         |

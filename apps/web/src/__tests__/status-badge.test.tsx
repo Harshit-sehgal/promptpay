@@ -10,18 +10,20 @@ describe('StatusBadge', () => {
     expect(screen.getByText('high trust')).toBeTruthy();
   });
 
-  it('applies an emerald style for success-like statuses', () => {
+  it('uses a restrained semantic tone for success-like statuses', () => {
     const { container } = render(<StatusBadge status="active" />);
 
     const span = container.querySelector('span');
     expect(span).not.toBeNull();
-    expect(span?.className).toContain('bg-emerald-50');
+    expect(span?.className).toContain('status-badge');
+    expect(span?.getAttribute('data-status-tone')).toBe('success');
+    expect(span?.className).not.toContain('rounded-full');
   });
 
-  it('falls back to a neutral slate style for unknown statuses', () => {
+  it('falls back to a neutral tone for unknown statuses', () => {
     const { container } = render(<StatusBadge status="SOMETHING_WEIRD" />);
 
     const span = container.querySelector('span');
-    expect(span?.className).toContain('bg-slate-50');
+    expect(span?.getAttribute('data-status-tone')).toBe('neutral');
   });
 });

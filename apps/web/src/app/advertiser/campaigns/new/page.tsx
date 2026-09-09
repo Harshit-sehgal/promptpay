@@ -200,7 +200,7 @@ export default function NewCampaignPage() {
 
       <form onSubmit={handleSubmit} className="space-y-8 max-w-3xl">
         {/* Campaign details */}
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+        <div className="app-form-section p-6">
           <h2 className="text-white font-semibold mb-4">Campaign details</h2>
           <div className="space-y-4">
             <div>
@@ -367,7 +367,7 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Ad creative */}
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+        <div className="app-form-section p-6">
           <h2 className="text-white font-semibold mb-4">Ad creative</h2>
           <div className="space-y-4">
             <div>
@@ -454,7 +454,7 @@ export default function NewCampaignPage() {
             </div>
 
             {/* Preview */}
-            <div className="bg-ink-700/50 rounded-lg p-4 border border-ink-600/20">
+            <div className="app-form-preview p-4">
               <p className="text-ink-400 text-xs uppercase mb-2">Preview</p>
               <div className="flex items-center justify-between">
                 <div>
@@ -470,7 +470,7 @@ export default function NewCampaignPage() {
         </div>
 
         {/* Targeting */}
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+        <div className="app-form-section p-6">
           <h2 className="text-white font-semibold mb-4">Targeting</h2>
           <div>
             <label

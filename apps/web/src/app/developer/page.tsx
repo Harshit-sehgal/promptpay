@@ -115,16 +115,9 @@ function trustConfig(level: string) {
 }
 
 function StatusPill({ label, tone }: { label: string; tone: 'success' | 'warning' | 'neutral' }) {
-  const toneClass = {
-    success: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
-    warning: 'bg-amber-50 text-amber-700 border-amber-200/70',
-    neutral: 'bg-surface-50 text-surface-600 border-surface-200',
-  }[tone];
-
   return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${toneClass}`}
-    >
+    <span className="app-inline-status" data-status-tone={tone}>
+      <span className="app-inline-status__dot" aria-hidden="true" />
       {label}
     </span>
   );
@@ -158,12 +151,15 @@ export default function DeveloperDashboard() {
     setLoading(true);
     setError(null);
     try {
-      const [dashboardRes, referralRes] = await Promise.all([
-        developerApi.getDashboard(),
-        referralApi.getInfo(),
-      ]);
+      const dashboardRes = await developerApi.getDashboard();
       setData(dashboardRes.data);
-      setReferral(referralRes.data);
+      try {
+        const referralRes = await referralApi.getInfo();
+        setReferral(referralRes.data);
+      } catch {
+        // Referral information is supplemental; it should not hide the core dashboard.
+        setReferral(null);
+      }
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to load dashboard'));
     } finally {
@@ -260,7 +256,7 @@ export default function DeveloperDashboard() {
       <DeveloperGetStarted />
 
       {loading && (
-        <div className="flex items-center justify-center py-24">
+        <div className="flex items-center justify-center">
           <LoadingSpinner />
         </div>
       )}

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { SiteHeader } from '@/components/site-header';
 
 /**
  * Shared chrome for the standalone legal documents (cookie policy, data
@@ -28,19 +29,24 @@ export function LegalDocument({
   children: ReactNode;
 }) {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-white px-6 py-20">
-      <div className="mx-auto max-w-3xl">
-        <Link
-          href="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-700"
-        >
-          ← Back to home
-        </Link>
-        <h1 className="mb-3 text-4xl font-bold tracking-tight text-surface-900">{title}</h1>
-        <p className="mb-10 text-sm text-surface-500">Last updated: {lastUpdated}</p>
-        <div className="space-y-6 text-sm leading-relaxed text-surface-600">{children}</div>
-      </div>
-    </main>
+    <div className="public-page min-h-screen bg-white">
+      <SiteHeader />
+      <main id="main-content" tabIndex={-1} className="px-6 py-16 sm:py-20">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/"
+            className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-surface-500 transition-colors hover:text-surface-700"
+          >
+            ← Back to home
+          </Link>
+          <h1 className="mb-3 font-serif text-4xl font-normal tracking-tight text-surface-900">
+            {title}
+          </h1>
+          <p className="mb-10 text-sm text-surface-500">Last updated: {lastUpdated}</p>
+          <div className="space-y-6 text-sm leading-relaxed text-surface-600">{children}</div>
+        </div>
+      </main>
+    </div>
   );
 }
 

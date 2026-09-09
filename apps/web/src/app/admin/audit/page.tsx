@@ -72,24 +72,34 @@ export default function AdminAuditPage() {
         <p className="text-ink-200 text-sm">Append-only record of admin and system actions</p>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          value={actorFilter}
-          onChange={(e) => setActorFilter(e.target.value)}
-          className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
-        >
-          <option value="">All actors</option>
-          <option value="admin">Admin</option>
-          <option value="support">Support</option>
-          <option value="system">System</option>
-        </select>
-        <input
-          type="text"
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value)}
-          placeholder="Filter by action..."
-          className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-        />
+      <div className="mb-6 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-ink-300">Actor role</span>
+          <select
+            id="admin-audit-actor"
+            value={actorFilter}
+            onChange={(e) => setActorFilter(e.target.value)}
+            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
+          >
+            <option value="">All actors</option>
+            <option value="admin">Admin</option>
+            <option value="support">Support</option>
+            <option value="system">System</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-ink-300">
+            Action (current page)
+          </span>
+          <input
+            id="admin-audit-action"
+            type="text"
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+            placeholder="Filter by action..."
+            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+          />
+        </label>
       </div>
 
       {loading && <LoadingSpinner />}

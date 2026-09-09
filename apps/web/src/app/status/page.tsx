@@ -51,7 +51,7 @@ export default function StatusPage() {
   const displayTime = lastUpdatedAt ?? (data ? new Date(data.timestamp) : null);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page public-page--utility min-h-screen bg-white">
       <SiteHeader />
 
       {/* Main content */}
@@ -60,12 +60,12 @@ export default function StatusPage() {
         tabIndex={-1}
         className="mx-auto max-w-3xl px-5 py-20 sm:px-6 lg:py-24"
       >
-        <div className="text-center mb-12">
-          <p className="wl-eyebrow mb-3">Live platform check</p>
+        <div className="mb-12 max-w-2xl">
+          <p className="public-eyebrow mb-3">Live platform check</p>
           <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-4">
             System status
           </h1>
-          <p className="text-surface-600 text-sm max-w-xl mx-auto leading-6">
+          <p className="text-surface-600 text-base max-w-xl leading-7">
             The web app checks the platform API directly. This page reports availability, not
             account, campaign, or payout status.
           </p>
@@ -74,10 +74,13 @@ export default function StatusPage() {
         {loading && !data ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-surface-500 text-xs">Querying nodes...</p>
+            <p className="text-surface-500 text-xs">Checking platform API…</p>
           </div>
         ) : error ? (
-          <div className="bg-rose-50 border border-rose-200 rounded-3xl p-6 text-center">
+          <div
+            className="bg-rose-50 border border-rose-200 rounded-3xl p-6 text-center"
+            role="alert"
+          >
             <p className="text-rose-800 font-semibold text-sm mb-2">Backend status unavailable</p>
             <p className="text-rose-700 text-sm mb-4">{error}</p>
             <button
@@ -91,7 +94,9 @@ export default function StatusPage() {
           <div className="space-y-6">
             {/* Overall status banner */}
             <div
-              className={`p-6 rounded-3xl border transition-all duration-300 flex items-center gap-4 ${
+              role="status"
+              aria-live="polite"
+              className={`p-6 rounded-3xl border flex items-center gap-4 ${
                 overallHealthy
                   ? 'bg-emerald-50/50 border-emerald-200/60 text-emerald-800'
                   : 'bg-rose-50/50 border-rose-200/60 text-rose-800'
@@ -99,7 +104,7 @@ export default function StatusPage() {
             >
               <div
                 className={`w-3.5 h-3.5 rounded-full shrink-0 ${
-                  overallHealthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                  overallHealthy ? 'bg-emerald-500' : 'bg-rose-500'
                 }`}
               />
               <div>
@@ -115,11 +120,11 @@ export default function StatusPage() {
             {/* Service detail cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Database Status */}
-              <div className="bg-white border border-surface-200 rounded-3xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
+              <div className="bg-white border border-surface-200 rounded-3xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-surface-900 font-semibold text-sm">Primary Database</span>
                   <span
-                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                    className={`text-[11px] font-semibold ${
                       dbConnected
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/50'
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'
@@ -134,13 +139,13 @@ export default function StatusPage() {
               </div>
 
               {/* Redis Cache & Rate Limiting Status */}
-              <div className="bg-white border border-surface-200 rounded-3xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
+              <div className="bg-white border border-surface-200 rounded-3xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-surface-900 font-semibold text-sm">
                     Redis Cache & Rate Limiter
                   </span>
                   <span
-                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                    className={`text-[11px] font-semibold ${
                       redisConnected
                         ? 'bg-emerald-50 text-emerald-800 border border-emerald-200/50'
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'

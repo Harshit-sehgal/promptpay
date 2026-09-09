@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
@@ -290,7 +291,7 @@ export default function AdminRecoveryDebtPage() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 min-w-[320px]">
+                  <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                     <div>
                       <p className="text-ink-500 text-xs uppercase tracking-wider">Debits</p>
                       <p className="text-white font-mono">
@@ -393,55 +394,58 @@ export default function AdminRecoveryDebtPage() {
       )}
 
       {action && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-lg w-full">
-            <h3 className="text-white font-semibold mb-2 capitalize">
-              {action.mode === 'open'
-                ? `${formatStatus(action.status)} case`
-                : `${formatStatus(action.status)} case`}
-            </h3>
-            <p className="text-ink-300 text-sm mb-4">
-              {action.row.user?.email || action.row.userId} ·{' '}
-              {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
-            </p>
-            <label className="block mb-3">
-              <span className="text-ink-300 text-xs uppercase tracking-wider">
-                External reference
-              </span>
-              <input
-                value={externalReference}
-                onChange={(e) => setExternalReference(e.target.value)}
-                maxLength={255}
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-              />
-            </label>
-            <label className="block mb-5">
-              <span className="text-ink-300 text-xs uppercase tracking-wider">Note</span>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                maxLength={1000}
-                rows={4}
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-              />
-            </label>
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                onClick={() => setAction(null)}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitAction}
-                disabled={processing}
-                className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                {processing ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+        <ModalDialog
+          open
+          onClose={() => setAction(null)}
+          labelledBy="admin-recovery-action-title"
+          className="max-w-lg"
+        >
+          <h3 id="admin-recovery-action-title" className="text-white font-semibold mb-2 capitalize">
+            {action.mode === 'open'
+              ? `${formatStatus(action.status)} case`
+              : `${formatStatus(action.status)} case`}
+          </h3>
+          <p className="text-ink-300 text-sm mb-4">
+            {action.row.user?.email || action.row.userId} ·{' '}
+            {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
+          </p>
+          <label className="block mb-3">
+            <span className="text-ink-300 text-xs uppercase tracking-wider">
+              External reference
+            </span>
+            <input
+              value={externalReference}
+              onChange={(e) => setExternalReference(e.target.value)}
+              maxLength={255}
+              className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+            />
+          </label>
+          <label className="block mb-5">
+            <span className="text-ink-300 text-xs uppercase tracking-wider">Note</span>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={1000}
+              rows={4}
+              className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+            />
+          </label>
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              onClick={() => setAction(null)}
+              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitAction}
+              disabled={processing}
+              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              {processing ? 'Saving...' : 'Save'}
+            </button>
           </div>
-        </div>
+        </ModalDialog>
       )}
     </>
   );

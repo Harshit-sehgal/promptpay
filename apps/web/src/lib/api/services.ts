@@ -119,6 +119,11 @@ export const advertiserApi = {
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
   getUsers: (params?: Record<string, unknown>) => api.get('/admin/users', { params }),
+  getWaitlist: (params?: {
+    status?: 'pending' | 'invited' | 'onboarded' | 'declined';
+    page?: number;
+    limit?: number;
+  }) => api.get('/admin/waitlist', { params }),
   setUserStatus: (id: string, status: string) => api.post(`/admin/users/${id}/status`, { status }),
   eraseUser: (id: string) => api.post(`/admin/users/${id}/erase`),
   getPendingCampaigns: (params?: Record<string, unknown>) =>

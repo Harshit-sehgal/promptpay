@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AuthShell } from '@/components/auth-shell';
-import { BrandMark } from '@/components/brand-mark';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
@@ -317,16 +316,14 @@ export default function LoginPage() {
   return (
     <AuthShell>
       <div className="w-full max-w-md">
-        <div className="mb-10 flex items-center justify-center gap-2.5 lg:hidden">
-          <BrandMark />
-          <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
-        </div>
-
-        <div className="rounded-3xl border border-surface-200/70 bg-white p-6 sm:p-8 lg:rounded-none lg:border-0 lg:p-0">
+        <div className="auth-form-frame rounded-3xl border border-surface-200/70 bg-white p-6 sm:p-8 lg:rounded-none lg:border-0 lg:p-0">
           <h1 className="font-serif text-[26px] font-normal text-surface-950 mb-1.5 tracking-tight">
             Welcome back
           </h1>
           <p className="text-surface-500 text-sm mb-8">Sign in to your account</p>
+          <p className="auth-mobile-note mb-6 text-xs leading-5 text-surface-500">
+            Private beta · no code, prompts, or terminal output collected.
+          </p>
 
           {accountDeleted && (
             <div
@@ -398,7 +395,7 @@ export default function LoginPage() {
                 </label>
                 <Link
                   href="/auth/forgot-password"
-                  className="text-brand-500 hover:text-brand-600 text-xs font-medium transition-colors"
+                  className="text-brand-500 underline underline-offset-2 hover:text-brand-600 text-xs font-medium transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -473,7 +470,7 @@ export default function LoginPage() {
               <GoogleG size={18} />
               <span>Continue with Google</span>
               <span className="text-xs text-surface-300 font-normal">
-                (disabled: client ID missing)
+                Google sign-in is temporarily unavailable. Use email and password.
               </span>
             </button>
           )}
@@ -493,7 +490,7 @@ export default function LoginPage() {
             Don't have an account?{' '}
             <Link
               href="/auth/signup"
-              className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+              className="text-brand-500 underline underline-offset-2 hover:text-brand-600 font-medium transition-colors"
             >
               Sign up
             </Link>

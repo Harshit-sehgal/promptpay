@@ -1,5 +1,7 @@
 'use client';
 
+import { AuthErrorState } from '@/components/auth-state';
+
 export default function VerifyEmailError({
   error: _error,
   reset,
@@ -8,23 +10,9 @@ export default function VerifyEmailError({
   reset: () => void;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6">
-      <div className="w-full max-w-sm text-center">
-        <div className="rounded-3xl border border-surface-200/70 bg-white p-8">
-          <h2 className="text-xl font-bold text-surface-900 mb-2 tracking-tight">
-            Something went wrong
-          </h2>
-          <p className="text-surface-500 text-sm mb-6">
-            An unexpected error occurred while loading the email verification page.
-          </p>
-          <button
-            onClick={reset}
-            className="bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 px-6 rounded-xl text-sm transition-colors"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
-    </div>
+    <AuthErrorState
+      reset={reset}
+      description="An unexpected error occurred while loading the email verification page."
+    />
   );
 }

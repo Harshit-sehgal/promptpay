@@ -177,7 +177,8 @@ and the live residual register. Everything below is reference material.
   [Monitoring](docs/ops/monitoring.md) ·
   [Audit Outbox](docs/ops/audit-outbox.md)
 - [Client Release](docs/ops/client-release.md) ·
-  [Branch Protection](docs/ops/branch-protection.md)
+  [Branch Protection](docs/ops/branch-protection.md) ·
+  [Adaptive Performance Gates](docs/ops/adaptive-performance-gates.md)
 - [Public Exposure Audit](docs/ops/public-exposure-audit.md) ·
   [Remaining Open Items](docs/ops/remaining-open-items.md)
 - [Environment Reference](docs/ENV_REFERENCE.md)

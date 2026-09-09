@@ -22,7 +22,7 @@ const FAQS: FAQItem[] = [
   {
     question: 'How is participant compensation determined?',
     answer:
-      'Rewards are disabled in the private beta. If they launch, the rate is 60% of the qualifying bid for a verified impression, with Ateva retaining 40%. That amount is owed by Ateva rather than being a claim on any individual advertiser payment: an advertiser transaction settles in full to Ateva, and participant compensation is paid separately through an approved fiat payout provider.',
+      'Future proposal — not active in the private beta. If rewards launch, the rate is 60% of the qualifying bid for a verified impression, with Ateva retaining 40%. That amount is owed by Ateva rather than being a claim on any individual advertiser payment: an advertiser transaction settles in full to Ateva, and participant compensation is paid separately through an approved fiat payout provider.',
   },
   {
     question: 'Will Ateva collect my code or private information?',
@@ -32,7 +32,7 @@ const FAQS: FAQItem[] = [
   {
     question: 'Can I choose what ads are shown to me?',
     answer:
-      'Yes! You can choose display frequencies, set daily/hourly caps, configure quiet hours, and block specific advertiser categories directly from your settings dashboard.',
+      'When sponsored surfaces are enabled for your account, you can choose display frequencies, set daily/hourly caps, configure quiet hours, and block specific advertiser categories directly from your settings dashboard. Sponsored surfaces, rewards, and billing remain disabled during the beta.',
   },
 ];
 
@@ -44,7 +44,7 @@ export default function FAQPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page public-page--utility min-h-screen bg-white">
       <SiteHeader />
 
       {/* Main content */}
@@ -53,11 +53,11 @@ export default function FAQPage() {
         tabIndex={-1}
         className="mx-auto max-w-3xl px-5 py-20 sm:px-6 lg:py-24"
       >
-        <div className="text-center mb-16">
+        <div className="mb-16 max-w-2xl">
           <h1 className="font-serif text-4xl md:text-[44px] font-normal leading-[1.15] tracking-[-0.015em] text-surface-950 mb-4">
             Frequently Asked Questions
           </h1>
-          <p className="text-surface-500 text-sm">
+          <p className="text-surface-500 text-base leading-7">
             Everything you need to know about the Ateva beta and future rewards launch.
           </p>
         </div>
@@ -65,13 +65,18 @@ export default function FAQPage() {
         <div className="space-y-4">
           {FAQS.map((item, index) => {
             const isOpen = openIndex === index;
+            const answerId = `faq-answer-${index}`;
+            const questionId = `faq-question-${index}`;
             return (
               <div
                 key={index}
                 className="border border-surface-200 rounded-3xl overflow-hidden transition-all duration-200 bg-white"
               >
                 <button
+                  id={questionId}
                   type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={answerId}
                   onClick={() => toggleIndex(index)}
                   className="w-full text-left px-6 py-5 flex items-center justify-between gap-4 font-semibold text-surface-900 hover:bg-surface-50/50 transition-colors"
                 >
@@ -81,7 +86,12 @@ export default function FAQPage() {
                   </span>
                 </button>
                 {isOpen && (
-                  <div className="px-6 pb-5 text-surface-500 text-sm leading-relaxed border-t border-surface-100 pt-3">
+                  <div
+                    id={answerId}
+                    role="region"
+                    aria-labelledby={questionId}
+                    className="px-6 pb-5 text-surface-500 text-base leading-7 border-t border-surface-100 pt-4"
+                  >
                     {item.answer}
                   </div>
                 )}
