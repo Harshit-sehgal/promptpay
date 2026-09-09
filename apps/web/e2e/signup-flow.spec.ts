@@ -50,20 +50,27 @@ test.describe('A-047 signup / cookie lifecycle', () => {
     // A-047: the auth cookie is valid and the authenticated dashboard chrome
     // rendered (nav with Overview/Earnings/Payouts). The dashboard data
     // section is client-fetched and may error in a manual local run; we
-    // assert the authenticated route itself is reachable, not the data load.    // On narrow viewports the workspace nav collapses behind an accessible
-    // toggle (disclosure button, aria-expanded), so open it first when it
-    // reports collapsed rather than assuming a persistent desktop sidebar.
+    // assert the authenticated route itself is reachable, not the data load.
     // A stale-consent reprompt banner is fixed to the top of the viewport and
     // can overlay the toggle on mobile; acknowledge it first, exactly as a
     // user would, so the navigation itself is reachable. Scoped to the alert
     // so the cookie banner's separate Accept is never clicked by accident.
-    const repromptAccept = page
-      .getByRole('alert', { name: 'Consent update required' })
-      .getByRole('button', { name: 'Accept' });
-    if (await repromptAccept.isVisible().catch(() => false)) {
-      await repromptAccept.click();
-      await expect(repromptAccept).toBeHidden({ timeout: 15_000 });
+    // The banner mounts only AFTER its /consent/stale request resolves, so a
+    // point-in-time isVisible() races the fetch — wait a bounded interval for
+    // it to settle, exactly as sensitive-developer-journey.spec.ts does.
+    const repromptBanner = page.getByRole('alert', { name: 'Consent update required' });
+    try {
+      await repromptBanner.waitFor({ state: 'visible', timeout: 5_000 });
+    } catch {
+      // Genuinely no stale consent for this account.
     }
+    if (await repromptBanner.isVisible().catch(() => false)) {
+      await repromptBanner.getByRole('button', { name: 'Accept' }).click();
+      await expect(repromptBanner).toBeHidden({ timeout: 15_000 });
+    }
+    // On narrow viewports the workspace nav collapses behind an accessible
+    // toggle (disclosure button, aria-expanded); open it when it reports
+    // collapsed rather than assuming a persistent desktop sidebar.
     const navToggle = page.getByRole('button', { name: 'Open workspace navigation' });
     if (
       (await navToggle.isVisible().catch(() => false)) &&
