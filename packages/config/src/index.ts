@@ -195,14 +195,8 @@ const optionalAllowlist = (validate: (value: string) => boolean, message: string
     z.string().refine(validate, message).optional(),
   );
 
-const optionalSecret = (minimumLength: number, maximumLength: number) =>
-  z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
-    z.string().min(minimumLength).max(maximumLength).optional(),
-  );
-
 /**
- * Like `optionalSecret`, but the validated value is the TRIMMED key and the
+ * Like `optionalSecret` would be, but the validated value is the TRIMMED key and the
  * parsed output is that trimmed key. Use this for secrets that consumers
  * read from `process.env` and trim before use (e.g. the shadow pseudonym
  * key): validating the raw string would admit a padded key whose trimmed
