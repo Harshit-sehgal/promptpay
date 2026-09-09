@@ -58,6 +58,27 @@ async function acceptConsentRePromptIfShown(page: Page): Promise<void> {
   await expect(banner).toBeHidden({ timeout: 15_000 });
 }
 
+/**
+ * Clear the cookie-consent dialog if it is showing.
+ *
+ * `CookieConsent` renders `fixed bottom-0 inset-x-0 z-50` until a choice is
+ * stored for the account. The redesigned sidebar places "Sign out" in its
+ * bottom footer — underneath that strip — so the dialog intercepts the click
+ * (observed in the production-stack journey, 2026-09-09). A real user chooses
+ * first; so does this journey. Accept rather than decline: declining also
+ * disables optional client telemetry, which later assertions rely on.
+ */
+async function acceptCookieConsentIfShown(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Cookie consent' });
+  try {
+    await dialog.waitFor({ state: 'visible', timeout: 5_000 });
+  } catch {
+    return; // Consent already stored for this account.
+  }
+  await dialog.getByRole('button', { name: 'Accept' }).click();
+  await expect(dialog).toBeHidden({ timeout: 15_000 });
+}
+
 async function completeStepUp(page: Page, secret: string, expectedAction: RegExp): Promise<void> {
   const dialog = page.getByRole('dialog', {
     name: 'Confirm with two-factor authentication',
@@ -94,6 +115,7 @@ test.describe('production sensitive developer journey', () => {
     await page.getByRole('button', { name: 'Create account' }).click();
     await expectResponseOk(signupResponse, 'browser signup');
     await page.waitForURL(/\/developer(?:\/|$)/, { timeout: 30_000 });
+    await acceptCookieConsentIfShown(page);
 
     const cookies = await context.cookies();
     expect(
@@ -147,6 +169,13 @@ test.describe('production sensitive developer journey', () => {
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expectResponseOk(loginResponse, 'backup-code login');
     await page.waitForURL(/\/developer(?:\/|$)/, { timeout: 30_000 });
+
+    // The backup-code login re-renders the authenticated shell, whose fixed
+    // consent re-prompt (if this account is stale again after erasure of the
+    // earlier acceptance) would swallow the upcoming "Sign out" click. Wait
+    // for the banner to settle and accept it, exactly as a user would.
+    await acceptConsentRePromptIfShown(page);
+    await acceptCookieConsentIfShown(page);
 
     await page.goto('/developer/payouts');
     await acceptConsentRePromptIfShown(page);

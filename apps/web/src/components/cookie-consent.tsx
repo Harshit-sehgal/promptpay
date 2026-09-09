@@ -100,7 +100,7 @@ export default function CookieConsent() {
       await api.post('/consent/anonymous', {
         visitorId: getVisitorId(),
         purpose: 'marketing_cookies',
-        version: marketingVersion,
+        policyVersion: marketingVersion,
         granted,
       });
     } catch {

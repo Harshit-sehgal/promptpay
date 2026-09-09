@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi, campaignApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
@@ -156,15 +157,15 @@ export default function AdminCampaignsPage() {
         <div className="space-y-3">
           {campaigns.map((c) => (
             <div key={c.id} className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={c.status} />
                   <h3 className="text-white font-medium">{c.title || c.name}</h3>
                   <span className="text-ink-500 text-xs capitalize">
                     {c.category?.replace('_', ' ')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                   <button
                     onClick={() => setRejectModalFor(c)}
                     disabled={processing === c.id}
@@ -294,79 +295,93 @@ export default function AdminCampaignsPage() {
 
       {/* Campaign reject modal */}
       {rejectModalFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full">
-            <h3 className="text-white font-semibold mb-2">Reject campaign</h3>
-            <p className="text-ink-300 text-sm mb-4">
-              <span className="text-white">{rejectModalFor.title || rejectModalFor.name}</span>
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Reason (required) — visible to advertiser"
-              rows={3}
-              required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
-            />
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setRejectModalFor(null);
-                  setRejectReason('');
-                }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={!rejectReason.trim() || processing === rejectModalFor.id}
-                className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Reject
-              </button>
-            </div>
+        <ModalDialog
+          open
+          onClose={() => {
+            setRejectModalFor(null);
+            setRejectReason('');
+          }}
+          labelledBy="admin-reject-campaign-title"
+        >
+          <h3 id="admin-reject-campaign-title" className="text-white font-semibold mb-2">
+            Reject campaign
+          </h3>
+          <p className="text-ink-300 text-sm mb-4">
+            <span className="text-white">{rejectModalFor.title || rejectModalFor.name}</span>
+          </p>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Reason (required) — visible to advertiser"
+            rows={3}
+            required
+            className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+          />
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              onClick={() => {
+                setRejectModalFor(null);
+                setRejectReason('');
+              }}
+              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={!rejectReason.trim() || processing === rejectModalFor.id}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Reject
+            </button>
           </div>
-        </div>
+        </ModalDialog>
       )}
 
       {/* Creative reject modal */}
       {creativeRejectFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full">
-            <h3 className="text-white font-semibold mb-2">Reject creative</h3>
-            <p className="text-ink-300 text-sm mb-4">
-              Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>
-            </p>
-            <p className="text-white text-xs mb-4 truncate">{creativeRejectFor.sponsoredMessage}</p>
-            <textarea
-              value={creativeRejectReason}
-              onChange={(e) => setCreativeRejectReason(e.target.value)}
-              placeholder="Reason (required) — visible to advertiser"
-              rows={3}
-              required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
-            />
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                onClick={() => {
-                  setCreativeRejectFor(null);
-                  setCreativeRejectReason('');
-                }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRejectCreativeConfirm}
-                disabled={!creativeRejectReason.trim() || processing === creativeRejectFor.id}
-                className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
-              >
-                Reject
-              </button>
-            </div>
+        <ModalDialog
+          open
+          onClose={() => {
+            setCreativeRejectFor(null);
+            setCreativeRejectReason('');
+          }}
+          labelledBy="admin-reject-creative-title"
+        >
+          <h3 id="admin-reject-creative-title" className="text-white font-semibold mb-2">
+            Reject creative
+          </h3>
+          <p className="text-ink-300 text-sm mb-4">
+            Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>
+          </p>
+          <p className="text-white text-xs mb-4 truncate">{creativeRejectFor.sponsoredMessage}</p>
+          <textarea
+            value={creativeRejectReason}
+            onChange={(e) => setCreativeRejectReason(e.target.value)}
+            placeholder="Reason (required) — visible to advertiser"
+            rows={3}
+            required
+            className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+          />
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              onClick={() => {
+                setCreativeRejectFor(null);
+                setCreativeRejectReason('');
+              }}
+              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRejectCreativeConfirm}
+              disabled={!creativeRejectReason.trim() || processing === creativeRejectFor.id}
+              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+            >
+              Reject
+            </button>
           </div>
-        </div>
+        </ModalDialog>
       )}
 
       {/* Pagination (A-077) */}

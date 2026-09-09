@@ -25,22 +25,23 @@ import { Sidebar } from '@/components/sidebar';
 import { StepUpProvider } from '@/components/step-up-provider';
 
 const ADMIN_NAV = [
-  { label: 'Overview', href: '/admin' },
-  { label: 'Metrics', href: '/admin/metrics' },
-  { label: 'Users', href: '/admin/users' },
-  { label: 'Campaign approvals', href: '/admin/campaigns' },
-  { label: 'Fraud review', href: '/admin/fraud' },
-  { label: 'Device recovery', href: '/admin/devices' },
-  { label: 'Payout requests', href: '/admin/payouts' },
-  { label: 'Fenced payout accounts', href: '/admin/payouts/fenced' },
-  { label: 'Recovery debt', href: '/admin/recovery-debt' },
-  { label: 'Ledger / Revenue', href: '/admin/ledger' },
-  { label: 'Operations', href: '/admin/operations' },
-  { label: 'Audit log', href: '/admin/audit' },
+  { label: 'Overview', href: '/admin', section: 'Overview' },
+  { label: 'Metrics', href: '/admin/metrics', section: 'Operations' },
+  { label: 'Operations', href: '/admin/operations', section: 'Operations' },
+  { label: 'Audit log', href: '/admin/audit', section: 'Operations' },
+  { label: 'Users', href: '/admin/users', section: 'People' },
+  { label: 'Waitlist', href: '/admin/waitlist', section: 'People' },
+  { label: 'Campaign approvals', href: '/admin/campaigns', section: 'Campaigns' },
+  { label: 'Fraud review', href: '/admin/fraud', section: 'Risk' },
+  { label: 'Device recovery', href: '/admin/devices', section: 'Risk' },
+  { label: 'Payout requests', href: '/admin/payouts', section: 'Money' },
+  { label: 'Fenced payout accounts', href: '/admin/payouts/fenced', section: 'Money' },
+  { label: 'Recovery debt', href: '/admin/recovery-debt', section: 'Money' },
+  { label: 'Ledger / Revenue', href: '/admin/ledger', section: 'Money' },
   // A-099: admins need a reachable 2FA enrolment surface. The developer
   // settings page is role-gated, so without this an administrator can never
   // satisfy AdminMfaStepUpGuard and every admin write fails in production.
-  { label: 'Account security', href: '/admin/security' },
+  { label: 'Account security', href: '/admin/security', section: 'Account' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -50,12 +51,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Admin surfaces are authenticated and must never be indexed by search
           engines or appear in sitemaps. */}
         <meta name="robots" content="noindex, nofollow" />
-        <div className="dark min-h-screen bg-ink-900 flex flex-col lg:flex-row">
-          <Sidebar brand="Admin" brandLetter="A" brandColor="bg-red-500" navItems={ADMIN_NAV} />
+        <div className="app-shell app-shell--admin min-h-screen bg-ink-900 flex flex-col lg:flex-row">
+          <Sidebar brand="Admin" navItems={ADMIN_NAV} />
           <main
             id="main-content"
             tabIndex={-1}
-            className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto"
+            className="app-shell__main flex-1 min-w-0 overflow-auto p-4 sm:p-6 lg:p-8"
           >
             {children}
           </main>

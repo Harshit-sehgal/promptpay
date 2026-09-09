@@ -236,6 +236,7 @@ export default function AdvertiserReportsPage() {
         {period === 'custom' && (
           <div className="flex items-center gap-2 ml-2">
             <input
+              aria-label="Start date"
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
@@ -243,6 +244,7 @@ export default function AdvertiserReportsPage() {
             />
             <span className="text-ink-300 text-xs">to</span>
             <input
+              aria-label="End date"
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}

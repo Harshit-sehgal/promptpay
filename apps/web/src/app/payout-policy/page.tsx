@@ -15,7 +15,7 @@ export default function PayoutPolicyPage() {
   const supportedCurrencies = Object.keys(CURRENCY_POLICY);
 
   return (
-    <div className="min-h-screen bg-surface-50">
+    <div className="public-page min-h-screen bg-surface-50">
       <SiteHeader />
 
       <main

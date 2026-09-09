@@ -19,18 +19,10 @@ const SPONSOR_NOTES = [
 
 export default function AdvertisersPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page min-h-screen bg-white">
       <SiteHeader />
 
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="relative overflow-hidden px-5 py-16 sm:px-6 lg:px-8 lg:py-24"
-      >
-        <div
-          aria-hidden="true"
-          className="absolute right-[4%] top-[10%] h-80 w-80 rounded-full bg-brand-50 blur-3xl"
-        />
+      <main id="main-content" tabIndex={-1} className="px-5 py-16 sm:px-6 lg:px-8 lg:py-24">
         <div className="relative mx-auto grid max-w-[1240px] gap-14 lg:grid-cols-[.9fr_1.1fr] lg:items-start lg:gap-20">
           <div className="lg:pt-6">
             <p className="font-mono text-[11px] font-medium uppercase tracking-[0.15em] text-brand-600">
@@ -77,11 +69,10 @@ export default function AdvertisersPage() {
           </div>
 
           <div className="relative mx-auto w-full max-w-[620px] lg:mx-0 lg:ml-auto">
-            <div
-              aria-hidden="true"
-              className="absolute -bottom-5 -right-5 h-[80%] w-[82%] rounded-[32px] bg-brand-100/75 sm:-bottom-7 sm:-right-7"
-            />
-            <section className="relative rounded-[30px] border border-surface-200/80 bg-white p-6 shadow-[0_1px_2px_rgba(23,25,28,0.04),0_24px_70px_-32px_rgba(23,25,28,0.28)] sm:p-9">
+            <section
+              id="advertiser-waitlist"
+              className="public-advertiser-form__surface relative rounded-2xl border border-surface-200/80 bg-white p-6 sm:p-9"
+            >
               <div className="mb-7 border-b border-surface-200/80 pb-6">
                 <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
                   Founding sponsor register

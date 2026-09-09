@@ -2,6 +2,19 @@
 const { withSentryConfig } = require('@sentry/nextjs');
 const path = require('path');
 
+// The workspace keeps the shared development environment at the repository
+// root, while Next resolves its own env files from apps/web. Load the root
+// values before route handlers are evaluated so the local BFF uses the same
+// JWT/API settings as the API started from the workspace. Explicit process
+// values and app-local overrides remain authoritative.
+if (process.env.NODE_ENV !== 'production' && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(path.join(__dirname, '../../.env'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}
+
 const { buildCsp } = require('./src/lib/csp.js');
 
 /**
@@ -61,6 +74,11 @@ function securityHeaders() {
  */
 const nextConfig = {
   transpilePackages: ['@ateva/ui', '@ateva/shared', '@ateva/config'],
+
+  // Keep the framework's development badge out of visual QA captures. It is
+  // useful while debugging Next itself, but it reads as an Ateva control in
+  // the local product preview and is never part of the shipped UI.
+  devIndicators: false,
 
   /**
    * Next writes its own `AGENTS.md` and `CLAUDE.md` into this app on every

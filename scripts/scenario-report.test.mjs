@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import manifest from '../scenarios/sandbox/terminal-claude-background-completion.json' with { type: 'json' };
-import { buildScenarioReport, groupDuplicateReports, renderMarkdown } from './scenario-report.mjs';
+import {
+  buildScenarioReport,
+  groupDuplicateReports,
+  renderMarkdown,
+  validateScenarioReport,
+} from './scenario-report.mjs';
 
 const trace = manifest.expected.eventTypes.map((eventType) => ({ eventId: eventType, eventType }));
 trace.push({
@@ -24,6 +29,7 @@ test('report is deterministic, machine-readable, and excludes raw trace data', (
   assert.equal(first.catalogId, 11);
   assert.equal(first.reportFingerprint, second.reportFingerprint);
   assert.equal('trace' in first, false);
+  assert.deepEqual(validateScenarioReport(first), []);
   assert.match(renderMarkdown(first), /PASSED/);
 });
 
@@ -32,12 +38,12 @@ test('identical reports group into one triage item', () => {
   const groups = groupDuplicateReports([
     report,
     { ...report },
-    { ...report, reportFingerprint: 'other' },
+    { ...report, reportFingerprint: 'forged-but-ignored' },
   ]);
-  assert.equal(groups.length, 2);
+  assert.equal(groups.length, 1);
   assert.equal(
     groups.find((group) => group.fingerprint === report.reportFingerprint)?.occurrences,
-    2,
+    3,
   );
 });
 
@@ -75,4 +81,29 @@ test('repeated deterministic runs group despite different timestamps', () => {
     endedAt: '2026-08-06T00:01:01.000Z',
   });
   assert.equal(first.reportFingerprint, second.reportFingerprint);
+});
+
+test('report validation rejects unsafe evidence paths and missing provenance', () => {
+  const report = buildScenarioReport({ manifest, trace, buildSha: 'build-sha' });
+  const invalid = {
+    ...report,
+    buildSha: '',
+    evidenceArtifacts: ['../private.json'],
+    reportFingerprint: 'bad',
+  };
+  const errors = validateScenarioReport(invalid);
+  assert.match(errors.join('\n'), /buildSha/);
+  assert.match(errors.join('\n'), /evidenceArtifacts/);
+  assert.match(errors.join('\n'), /reportFingerprint/);
+});
+
+test('report validation rejects contradictory status and failure metadata', () => {
+  const report = buildScenarioReport({ manifest, trace });
+  const invalid = {
+    ...report,
+    failureKind: 'execution_error',
+    reportFingerprint: 'bad',
+  };
+  const errors = validateScenarioReport(invalid);
+  assert.match(errors.join('\n'), /passed report must have failureKind none/);
 });

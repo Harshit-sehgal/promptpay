@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
@@ -66,6 +67,7 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     adminApi
       .getUsers({ search: search || undefined, role: roleFilter || undefined })
       .then((res: { data: UsersResponse }) => setUsers(normalizeUsers(res.data)))
@@ -119,25 +121,33 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Email or name..."
-          className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 text-sm"
-        />
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
-        >
-          <option value="">All roles</option>
-          <option value="developer">Developer</option>
-          <option value="advertiser">Advertiser</option>
-          <option value="admin">Admin</option>
-          <option value="support">Support</option>
-        </select>
+      <div className="mb-6 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-ink-300">Search users</span>
+          <input
+            id="admin-users-search"
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Email or name..."
+            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-ink-300">Role</span>
+          <select
+            id="admin-users-role"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
+          >
+            <option value="">All roles</option>
+            <option value="developer">Developer</option>
+            <option value="advertiser">Advertiser</option>
+            <option value="admin">Admin</option>
+            <option value="support">Support</option>
+          </select>
+        </label>
       </div>
 
       {loading && <LoadingSpinner />}
@@ -147,10 +157,13 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-        {users.length === 0 ? (
+      <div
+        className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden"
+        aria-busy={loading}
+      >
+        {!loading && !error && users.length === 0 ? (
           <div className="text-ink-300 text-sm py-12 text-center">No users found.</div>
-        ) : (
+        ) : !loading && !error ? (
           <div
             className="overflow-x-auto"
             tabIndex={0}
@@ -179,7 +192,7 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={u.role} />
+                      <StatusBadge status={u.role} kind="metadata" />
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -249,7 +262,7 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
       </div>
 
       {users.length > pageSize && (
@@ -286,65 +299,75 @@ export default function AdminUsersPage() {
             confirmation modal. Erasure is irreversible and requires typing a
             confirmation phrase; super-admins cannot be erased from the UI. */}
       {actionUser && actionKind && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-ink-800 border border-ink-600/40 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-white font-semibold text-lg mb-2">
-              {actionKind === 'erase'
-                ? 'Erase account'
-                : actionKind === 'ban'
-                  ? 'Ban user'
-                  : actionKind === 'unban'
-                    ? 'Unban user'
-                    : 'Restrict user'}
-            </h2>
-            <p className="text-ink-200 text-sm mb-4">
-              {actionKind === 'erase' ? (
-                <>
-                  This permanently anonymizes <span className="text-white">{actionUser.email}</span>{' '}
-                  and cannot be undone.
-                </>
-              ) : (
-                <>
-                  Apply this action to <span className="text-white">{actionUser.email}</span>?
-                </>
-              )}
-            </p>
-            {actionKind === 'erase' && (
+        <ModalDialog
+          open
+          onClose={() => {
+            setActionUser(null);
+            setActionKind(null);
+            setConfirmText('');
+          }}
+          labelledBy="admin-user-action-title"
+        >
+          <h2 id="admin-user-action-title" className="text-white font-semibold text-lg mb-2">
+            {actionKind === 'erase'
+              ? 'Erase account'
+              : actionKind === 'ban'
+                ? 'Ban user'
+                : actionKind === 'unban'
+                  ? 'Unban user'
+                  : 'Restrict user'}
+          </h2>
+          <p className="text-ink-200 text-sm mb-4">
+            {actionKind === 'erase' ? (
+              <>
+                This permanently anonymizes <span className="text-white">{actionUser.email}</span>{' '}
+                and cannot be undone.
+              </>
+            ) : (
+              <>
+                Apply this action to <span className="text-white">{actionUser.email}</span>?
+              </>
+            )}
+          </p>
+          {actionKind === 'erase' && (
+            <label className="block">
+              <span className="sr-only">Confirmation phrase</span>
               <input
+                id="admin-user-confirmation"
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder='Type "ERASE" to confirm'
                 className="w-full bg-ink-900 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:border-red-500"
               />
-            )}
-            <div className="flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setActionUser(null);
-                  setActionKind(null);
-                  setConfirmText('');
-                }}
-                className="text-ink-200 hover:text-white text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={busy || (actionKind === 'erase' && confirmText !== 'ERASE')}
-                onClick={runAction}
-                className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 ${
-                  actionKind === 'erase'
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-brand-500 hover:bg-brand-600 text-white'
-                }`}
-              >
-                {busy ? 'Working…' : 'Confirm'}
-              </button>
-            </div>
+            </label>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setActionUser(null);
+                setActionKind(null);
+                setConfirmText('');
+              }}
+              className="text-ink-200 hover:text-white text-sm font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy || (actionKind === 'erase' && confirmText !== 'ERASE')}
+              onClick={runAction}
+              className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 ${
+                actionKind === 'erase'
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-brand-500 hover:bg-brand-600 text-white'
+              }`}
+            >
+              {busy ? 'Working…' : 'Confirm'}
+            </button>
           </div>
-        </div>
+        </ModalDialog>
       )}
     </>
   );

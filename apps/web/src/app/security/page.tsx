@@ -4,7 +4,7 @@ import { SiteHeader } from '@/components/site-header';
 
 export default function SecurityPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page min-h-screen bg-white">
       <SiteHeader />
 
       {/* Main content */}

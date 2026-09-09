@@ -117,7 +117,7 @@ export function LaunchModeBanner({ override }: { override?: WaitLaunchMode } = {
     <div
       role="status"
       aria-label={copy.title}
-      className={`mb-6 rounded-xl border px-4 py-3 text-sm ${copy.tone}`}
+      className={`launch-mode-banner mb-6 rounded-xl border px-4 py-3 text-sm ${copy.tone}`}
     >
       <p className="font-semibold">{copy.title}</p>
       <p className="mt-1 leading-relaxed opacity-90">{copy.body}</p>

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function ContactPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page public-page--utility min-h-screen bg-white">
       <SiteHeader />
 
       <main id="main-content" tabIndex={-1} className="px-5 py-20 sm:px-6 lg:px-8 lg:py-24">
@@ -22,9 +22,9 @@ export default function ContactPage() {
             We're here to help with accounts, payouts, campaigns, and trust scoring.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
-              <h2 className="text-surface-900 font-semibold text-base mb-2">Email support</h2>
+          <div className="public-support__grid mb-12 grid grid-cols-1 gap-5 md:grid-cols-3">
+            <div className="public-support__item bg-white border border-surface-200/80 rounded-3xl p-7">
+              <h2 className="text-surface-900 font-semibold text-base mb-2">Contact support</h2>
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 For account, payout, and campaign questions.
               </p>
@@ -32,7 +32,7 @@ export default function ContactPage() {
                 Open the feedback form
               </Link>
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
+            <div className="public-support__item bg-white border border-surface-200/80 rounded-3xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">Security reports</h2>
               <p className="text-surface-500 text-sm leading-relaxed mb-3">
                 Report vulnerabilities or abuse responsibly.
@@ -41,7 +41,7 @@ export default function ContactPage() {
                 Report via the feedback form
               </Link>
             </div>
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-7">
+            <div className="public-support__item bg-white border border-surface-200/80 rounded-3xl p-7">
               <h2 className="text-surface-900 font-semibold text-base mb-2">
                 Trust & verification
               </h2>
@@ -54,9 +54,9 @@ export default function ContactPage() {
             </div>
           </div>
 
-          <div className="bg-surface-50/60 border border-surface-200/80 rounded-3xl p-8">
+          <div className="public-support__links bg-surface-50/60 border border-surface-200/80 rounded-3xl p-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-4">Helpful links</h2>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="public-support__links-grid grid grid-cols-2 gap-3">
               <Link
                 href="/privacy"
                 className="text-surface-600 hover:text-surface-900 text-sm font-medium"

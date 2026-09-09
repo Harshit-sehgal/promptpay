@@ -1,5 +1,5 @@
-import { LoadingSpinner } from '@/components/loading-spinner';
+import { AuthLoadingState } from '@/components/auth-state';
 
 export default function AuthSignupLoading() {
-  return <LoadingSpinner size="md" />;
+  return <AuthLoadingState label="Loading sign up" />;
 }

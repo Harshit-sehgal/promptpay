@@ -241,7 +241,7 @@ export default function EditCampaignPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-ink-900 flex items-center justify-center">
+      <div className="flex min-h-[50vh] items-center justify-center">
         <LoadingSpinner />
       </div>
     );
@@ -249,7 +249,7 @@ export default function EditCampaignPage() {
 
   if (notFound) {
     return (
-      <div className="min-h-screen bg-ink-900 text-white flex flex-col items-center justify-center gap-4">
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-white">
         <p className="text-ink-300">Campaign not found.</p>
         <Link href="/advertiser/campaigns" className="text-brand-500 hover:text-brand-400 text-sm">
           ← Back to campaigns
@@ -259,291 +259,287 @@ export default function EditCampaignPage() {
   }
 
   return (
-    <div className="min-h-screen bg-ink-900">
-      <div className="mx-auto max-w-3xl px-6 py-10">
-        <Link href="/advertiser/campaigns" className="text-brand-500 hover:text-brand-400 text-sm">
-          ← Back to campaigns
-        </Link>
-        <div className="mt-6 mb-8">
-          <h1 className="text-2xl font-bold text-white mb-1">Edit campaign</h1>
-          <p className="text-ink-300 text-sm">
-            {status === 'rejected'
-              ? 'This campaign was rejected. Updating it will reset to draft and resubmit for review.'
-              : 'Update your campaign details and resubmit for review.'}
-          </p>
+    <div className="mx-auto w-full max-w-3xl px-6 py-10">
+      <Link href="/advertiser/campaigns" className="text-brand-500 hover:text-brand-400 text-sm">
+        ← Back to campaigns
+      </Link>
+      <div className="mt-6 mb-8">
+        <h1 className="text-2xl font-bold text-white mb-1">Edit campaign</h1>
+        <p className="text-ink-300 text-sm">
+          {status === 'rejected'
+            ? 'This campaign was rejected. Updating it will reset to draft and resubmit for review.'
+            : 'Update your campaign details and resubmit for review.'}
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+          <p className="text-red-400 text-sm">{error}</p>
         </div>
+      )}
+      {success && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mb-6">
+          <p className="text-emerald-400 text-sm">Campaign updated and submitted for review!</p>
+        </div>
+      )}
+      {status === 'rejected' && (campaignRejectionReason || creativeRejectionReason) && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-6">
+          <p className="text-amber-300 text-sm font-medium mb-2">Rejection reason</p>
+          {campaignRejectionReason && (
+            <p className="text-amber-100 text-sm">Campaign: {campaignRejectionReason}</p>
+          )}
+          {creativeRejectionReason && (
+            <p className="text-amber-100 text-sm">Creative: {creativeRejectionReason}</p>
+          )}
+        </div>
+      )}
 
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mb-6">
-            <p className="text-emerald-400 text-sm">Campaign updated and submitted for review!</p>
-          </div>
-        )}
-        {status === 'rejected' && (campaignRejectionReason || creativeRejectionReason) && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-6">
-            <p className="text-amber-300 text-sm font-medium mb-2">Rejection reason</p>
-            {campaignRejectionReason && (
-              <p className="text-amber-100 text-sm">Campaign: {campaignRejectionReason}</p>
-            )}
-            {creativeRejectionReason && (
-              <p className="text-amber-100 text-sm">Creative: {creativeRejectionReason}</p>
-            )}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Campaign details */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-            <h2 className="text-white font-semibold mb-4">Campaign details</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                  Campaign name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  placeholder="My developer tool campaign"
-                  autoComplete="off"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                />
-              </div>
-              {status === 'draft' && (
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Campaign currency
-                  </label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  >
-                    {fundedCurrencies.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-ink-500 text-xs mt-1">
-                    Must match a funded deposit balance — campaigns activate and spend in their own
-                    currency.
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">Bid type</label>
-                  <input
-                    value={bidType.toUpperCase()}
-                    disabled
-                    className="w-full bg-ink-700/50 border border-ink-600/50 rounded-lg px-4 py-3 text-ink-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Bid amount ({currency})
-                  </label>
-                  <input
-                    type="number"
-                    step={moneyPolicy.minorUnitStep}
-                    min={moneyPolicy.minimumBid}
-                    value={bidAmount}
-                    onChange={(e) => setBidAmount(e.target.value)}
-                    required
-                    inputMode="decimal"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Total budget ({currency})
-                  </label>
-                  <input
-                    type="number"
-                    step={moneyPolicy.minorUnitStep}
-                    min={moneyPolicy.minimumBudget}
-                    value={budgetTotal}
-                    onChange={(e) => setBudgetTotal(e.target.value)}
-                    required
-                    inputMode="decimal"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                  <p className="text-ink-500 text-xs mt-1">
-                    Minimum {moneyPolicy.minimumBudgetLabel}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">Category</label>
-                  <input
-                    value={category.replace('_', ' ')}
-                    disabled
-                    className="w-full bg-ink-700/50 border border-ink-600/50 rounded-lg px-4 py-3 text-ink-400"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Frequency cap / hour
-                  </label>
-                  <input
-                    type="number"
-                    min={FREQUENCY_CAPS.perHour.min}
-                    max={FREQUENCY_CAPS.perHour.max}
-                    step="1"
-                    value={freqCapPerHour}
-                    onChange={(e) => setFreqCapPerHour(e.target.value)}
-                    placeholder="Leave unchanged"
-                    inputMode="numeric"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                  <p className="text-ink-500 text-xs mt-1">
-                    1-30. Blank leaves the current cap unchanged.
-                  </p>
-                </div>
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Frequency cap / day
-                  </label>
-                  <input
-                    type="number"
-                    min={FREQUENCY_CAPS.perDay.min}
-                    max={FREQUENCY_CAPS.perDay.max}
-                    step="1"
-                    value={freqCapPerDay}
-                    onChange={(e) => setFreqCapPerDay(e.target.value)}
-                    placeholder="Leave unchanged"
-                    inputMode="numeric"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                  <p className="text-ink-500 text-xs mt-1">
-                    1-100. Blank leaves the current cap unchanged.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ad creative */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-            <h2 className="text-white font-semibold mb-4">Ad creative</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Headline</label>
-                <input
-                  type="text"
-                  value={headline}
-                  onChange={(e) => setHeadline(e.target.value)}
-                  required
-                  maxLength={50}
-                  placeholder="Short, attention-grabbing headline"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                />
-                <p className="text-ink-500 text-xs mt-1">{headline.length}/50 characters</p>
-              </div>
-
-              <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Message</label>
-                <textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  required
-                  maxLength={80}
-                  rows={2}
-                  placeholder="Max 80 chars — shown during wait states"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                />
-                <p className="text-ink-500 text-xs mt-1">{message.length}/80 characters</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA text</label>
-                  <input
-                    type="text"
-                    value={ctaText}
-                    onChange={(e) => setCtaText(e.target.value)}
-                    required
-                    maxLength={25}
-                    placeholder="Learn more"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA URL</label>
-                  <input
-                    type="url"
-                    value={ctaUrl}
-                    onChange={(e) => setCtaUrl(e.target.value)}
-                    placeholder="https://your-product.com"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-ink-700/50 rounded-lg p-4 border border-ink-600/20">
-                <p className="text-ink-400 text-xs uppercase mb-2">Preview</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium text-sm">{headline || 'Headline'}</p>
-                    <p className="text-ink-300 text-sm">{message || 'Ad message text'}</p>
-                  </div>
-                  <span className="bg-brand-500/20 text-brand-500 px-3 py-1.5 rounded-lg text-xs font-medium">
-                    {ctaText || 'Learn more'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Targeting */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-            <h2 className="text-white font-semibold mb-4">Targeting</h2>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Campaign details */}
+        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Campaign details</h2>
+          <div className="space-y-4">
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                Country targeting (comma-separated ISO codes)
-              </label>
+              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Campaign name</label>
               <input
                 type="text"
-                value={targetCountries}
-                onChange={(e) => setTargetCountries(e.target.value)}
-                placeholder="US, GB, DE (leave empty to keep current targeting)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="My developer tool campaign"
+                autoComplete="off"
                 className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
-              <p className="text-ink-500 text-xs mt-1">
-                Empty = leave current targeting unchanged. Use 2-letter ISO codes (US, GB, DE, IN,
-                etc.)
-              </p>
+            </div>
+            {status === 'draft' && (
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Campaign currency
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                >
+                  {fundedCurrencies.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-ink-500 text-xs mt-1">
+                  Must match a funded deposit balance — campaigns activate and spend in their own
+                  currency.
+                </p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Bid type</label>
+                <input
+                  value={bidType.toUpperCase()}
+                  disabled
+                  className="w-full bg-ink-700/50 border border-ink-600/50 rounded-lg px-4 py-3 text-ink-400"
+                />
+              </div>
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Bid amount ({currency})
+                </label>
+                <input
+                  type="number"
+                  step={moneyPolicy.minorUnitStep}
+                  min={moneyPolicy.minimumBid}
+                  value={bidAmount}
+                  onChange={(e) => setBidAmount(e.target.value)}
+                  required
+                  inputMode="decimal"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Total budget ({currency})
+                </label>
+                <input
+                  type="number"
+                  step={moneyPolicy.minorUnitStep}
+                  min={moneyPolicy.minimumBudget}
+                  value={budgetTotal}
+                  onChange={(e) => setBudgetTotal(e.target.value)}
+                  required
+                  inputMode="decimal"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+                <p className="text-ink-500 text-xs mt-1">
+                  Minimum {moneyPolicy.minimumBudgetLabel}
+                </p>
+              </div>
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Category</label>
+                <input
+                  value={category.replace('_', ' ')}
+                  disabled
+                  className="w-full bg-ink-700/50 border border-ink-600/50 rounded-lg px-4 py-3 text-ink-400"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Frequency cap / hour
+                </label>
+                <input
+                  type="number"
+                  min={FREQUENCY_CAPS.perHour.min}
+                  max={FREQUENCY_CAPS.perHour.max}
+                  step="1"
+                  value={freqCapPerHour}
+                  onChange={(e) => setFreqCapPerHour(e.target.value)}
+                  placeholder="Leave unchanged"
+                  inputMode="numeric"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+                <p className="text-ink-500 text-xs mt-1">
+                  1-30. Blank leaves the current cap unchanged.
+                </p>
+              </div>
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Frequency cap / day
+                </label>
+                <input
+                  type="number"
+                  min={FREQUENCY_CAPS.perDay.min}
+                  max={FREQUENCY_CAPS.perDay.max}
+                  step="1"
+                  value={freqCapPerDay}
+                  onChange={(e) => setFreqCapPerDay(e.target.value)}
+                  placeholder="Leave unchanged"
+                  inputMode="numeric"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+                <p className="text-ink-500 text-xs mt-1">
+                  1-100. Blank leaves the current cap unchanged.
+                </p>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
-            >
-              {submitting
-                ? 'Saving...'
-                : status === 'rejected'
-                  ? 'Update & resubmit'
-                  : 'Save & submit'}
-            </button>
-            {submitting && <LoadingSpinner size="sm" />}
+        {/* Ad creative */}
+        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Ad creative</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Headline</label>
+              <input
+                type="text"
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                required
+                maxLength={50}
+                placeholder="Short, attention-grabbing headline"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+              />
+              <p className="text-ink-500 text-xs mt-1">{headline.length}/50 characters</p>
+            </div>
+
+            <div>
+              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Message</label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                required
+                maxLength={80}
+                rows={2}
+                placeholder="Max 80 chars — shown during wait states"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+              />
+              <p className="text-ink-500 text-xs mt-1">{message.length}/80 characters</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA text</label>
+                <input
+                  type="text"
+                  value={ctaText}
+                  onChange={(e) => setCtaText(e.target.value)}
+                  required
+                  maxLength={25}
+                  placeholder="Learn more"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+              </div>
+              <div>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA URL</label>
+                <input
+                  type="url"
+                  value={ctaUrl}
+                  onChange={(e) => setCtaUrl(e.target.value)}
+                  placeholder="https://your-product.com"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                />
+              </div>
+            </div>
+
+            <div className="bg-ink-700/50 rounded-lg p-4 border border-ink-600/20">
+              <p className="text-ink-400 text-xs uppercase mb-2">Preview</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-white font-medium text-sm">{headline || 'Headline'}</p>
+                  <p className="text-ink-300 text-sm">{message || 'Ad message text'}</p>
+                </div>
+                <span className="bg-brand-500/20 text-brand-500 px-3 py-1.5 rounded-lg text-xs font-medium">
+                  {ctaText || 'Learn more'}
+                </span>
+              </div>
+            </div>
           </div>
-        </form>
-      </div>
+        </div>
+
+        {/* Targeting */}
+        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+          <h2 className="text-white font-semibold mb-4">Targeting</h2>
+          <div>
+            <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+              Country targeting (comma-separated ISO codes)
+            </label>
+            <input
+              type="text"
+              value={targetCountries}
+              onChange={(e) => setTargetCountries(e.target.value)}
+              placeholder="US, GB, DE (leave empty to keep current targeting)"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+            />
+            <p className="text-ink-500 text-xs mt-1">
+              Empty = leave current targeting unchanged. Use 2-letter ISO codes (US, GB, DE, IN,
+              etc.)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+          >
+            {submitting
+              ? 'Saving...'
+              : status === 'rejected'
+                ? 'Update & resubmit'
+                : 'Save & submit'}
+          </button>
+          {submitting && <LoadingSpinner size="sm" />}
+        </div>
+      </form>
     </div>
   );
 }

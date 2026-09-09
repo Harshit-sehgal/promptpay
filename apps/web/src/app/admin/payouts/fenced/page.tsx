@@ -158,7 +158,7 @@ export default function AdminFencedPayoutAccountsPage() {
                 role="region"
                 aria-label="Fenced payout accounts table, scrolls horizontally"
               >
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[960px] text-sm">
                   <thead className="bg-ink-700/50 border-b border-ink-600/30">
                     <tr>
                       <th className="text-left px-4 py-3 text-ink-300 font-medium">Owner</th>

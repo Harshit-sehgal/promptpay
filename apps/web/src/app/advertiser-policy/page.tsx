@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function AdvertiserPolicyPage() {
   return (
-    <div className="min-h-screen bg-surface-50">
+    <div className="public-page min-h-screen bg-surface-50">
       <SiteHeader />
 
       <main

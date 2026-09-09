@@ -5,24 +5,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warm editorial ramp ported from the Steep style reference: an
-        // achromatic ink/paper canvas punctuated by one chromatic pair,
-        // Blush Peach (#fbe1d1) and Sienna Brown (#5d2a1a). The ramp stays one
-        // hue and monotonically darker as the number rises, replacing the old
-        // green ramp value-for-value so every `brand-*` class keeps its role:
-        // 500 remains the primary accent (text, fills, rings, logo bar),
-        // 50-200 remain tints, 600+ remain hover/pressed steps.
+        // Ateva's public and application surfaces share a neutral ramp. Brand
+        // utilities remain available for existing markup, but resolve to ink
+        // and tonal gray rather than introducing a second chromatic identity.
         brand: {
-          50: '#fdf8f3',
-          100: '#faeee2',
-          200: '#fbe1d1', // Blush Peach - tint surfaces, sienna text on it is 9.2:1
-          300: '#f2cba9',
-          400: '#c07d4e', // decorative borders/rings only - 3.34:1 on white, not for text
-          500: '#5d2a1a', // Sienna Brown - 11.58:1 on white; white text on it passes AA
-          600: '#4a2113', // 13.83:1
-          700: '#3b1a0f',
-          800: '#2b1208',
-          900: '#1d0c05',
+          50: '#fafafb',
+          100: '#f2f2f3',
+          200: '#e6e6e8',
+          300: '#d5d6d9',
+          400: '#979799',
+          500: '#17191c',
+          600: '#111315',
+          700: '#0d0e10',
+          800: '#080909',
+          900: '#050506',
         },
         surface: {
           0: '#ffffff',
@@ -38,8 +34,9 @@ const config: Config = {
           900: '#171717',
           950: '#0a0a0a',
         },
-        // Dashboard dark surfaces, realigned from a blue-cast ramp to Steep's
-        // single warm-neutral near-black so panels read as ink on paper.
+        // Application dark surfaces use charcoal and white hierarchy. The
+        // older `ink-*` names stay stable so operational pages do not need a
+        // risky markup rewrite during the visual pass.
         ink: {
           900: '#0d0e10',
           800: '#17191c',

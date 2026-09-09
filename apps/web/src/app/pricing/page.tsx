@@ -51,7 +51,7 @@ export default function PricingPage() {
   const supportedCurrencies = Object.keys(CURRENCY_POLICY);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="public-page min-h-screen bg-white">
       <SiteHeader />
 
       <main id="main-content" tabIndex={-1}>
@@ -127,8 +127,41 @@ export default function PricingPage() {
           </div>
         </section>
 
+        <section className="py-20 px-6">
+          <div className="mx-auto max-w-4xl">
+            <h2 className="text-2xl font-bold text-surface-900 text-center mb-4">
+              Current beta controls
+            </h2>
+            <p className="text-surface-500 text-center text-sm mb-10">
+              These values describe policy/configuration, not currently available real-money
+              actions.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Minimum deposit policy', value: minDeposit },
+                { label: 'Minimum payout policy', value: minPayout },
+                { label: 'Configured currencies', value: supportedCurrencies.join(', ') },
+                { label: 'Beta money state', value: 'Disabled' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="bg-surface-50 rounded-xl p-5 text-center border border-surface-100"
+                >
+                  <p className="text-surface-400 text-[11px] uppercase tracking-wider mb-2">
+                    {item.label}
+                  </p>
+                  <p className="text-surface-900 font-semibold text-sm">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="py-20 px-6 bg-surface-50/70">
           <div className="mx-auto max-w-4xl">
+            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-surface-400">
+              After launch · reference only
+            </p>
             <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-4">
               How money will move after approval
             </h2>
@@ -157,36 +190,6 @@ export default function PricingPage() {
                   verification and pays it through a separately approved payout provider.
                 </p>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="py-20 px-6">
-          <div className="mx-auto max-w-4xl">
-            <h2 className="text-2xl font-bold text-surface-900 text-center mb-4">
-              Current beta controls
-            </h2>
-            <p className="text-surface-500 text-center text-sm mb-10">
-              These values describe policy/configuration, not currently available real-money
-              actions.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Minimum deposit policy', value: minDeposit },
-                { label: 'Minimum payout policy', value: minPayout },
-                { label: 'Configured currencies', value: supportedCurrencies.join(', ') },
-                { label: 'Beta money state', value: 'Disabled' },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="bg-surface-50 rounded-xl p-5 text-center border border-surface-100"
-                >
-                  <p className="text-surface-400 text-[11px] uppercase tracking-wider mb-2">
-                    {item.label}
-                  </p>
-                  <p className="text-surface-900 font-semibold text-sm">{item.value}</p>
-                </div>
-              ))}
             </div>
           </div>
         </section>
