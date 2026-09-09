@@ -201,6 +201,20 @@ const optionalSecret = (minimumLength: number, maximumLength: number) =>
     z.string().min(minimumLength).max(maximumLength).optional(),
   );
 
+/**
+ * Like `optionalSecret`, but the validated value is the TRIMMED key and the
+ * parsed output is that trimmed key. Use this for secrets that consumers
+ * read from `process.env` and trim before use (e.g. the shadow pseudonym
+ * key): validating the raw string would admit a padded key whose trimmed
+ * length is below the minimum, silently weakening the derived HMAC key.
+ */
+const optionalTrimmedSecret = (minimumLength: number, maximumLength: number) =>
+  z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }, z.string().min(minimumLength).max(maximumLength).optional());
+
 const envSchema = z
   .object({
     // General
@@ -395,7 +409,7 @@ const envSchema = z
     // Keyed pseudonymization for privacy-safe adaptive-attention shadow facts.
     // Optional because the materializer is opt-in; an empty value means the
     // job remains disabled. The key never belongs in a client or build arg.
-    ATTENTION_SHADOW_PSEUDONYM_KEY: optionalSecret(32, 256),
+    ATTENTION_SHADOW_PSEUDONYM_KEY: optionalTrimmedSecret(32, 256),
 
     // Sentry (error monitoring)
     SENTRY_DSN: z.string().optional(),

@@ -1,5 +1,7 @@
 import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
+import { AGENT_EVENT_MAX_AGE_MS } from '@ateva/agent-protocol';
+
 import { PrismaService } from '../config/prisma.service';
 import {
   AttentionShadowFactCron,
@@ -63,11 +65,18 @@ export class AttentionShadowAdminService {
       this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'unverified' } }),
       this.prisma.attentionSessionFact.count({ where: { attestationStatus: 'verified' } }),
       this.prisma.attentionSessionFact.count({ where: { fraudRiskStatus: 'unknown' } }),
+      // Mirror the materializer's own selection predicate so the count means
+      // "sessions the next tick can actually process": a session without a
+      // policy assignment is skipped by design (created before an eligible
+      // policy existed), and one still inside the late-arrival finality
+      // watermark is deliberately not frozen yet. Counting either would make
+      // pending look permanently backlogged.
       this.prisma.agentSession.count({
         where: {
           status: { in: ['ended', 'abandoned'] },
-          endedAt: { not: null },
+          endedAt: { not: null, lte: new Date(Date.now() - AGENT_EVENT_MAX_AGE_MS) },
           shadowFact: null,
+          policyAssignment: { isNot: null },
         },
       }),
       this.prisma.attentionPricingPolicy.findMany({

@@ -59,13 +59,17 @@ describe('attention shadow admin controls', () => {
       lastRunStatus: 'completed',
       lastResult: expect.objectContaining({ created: 4, financialSideEffects: false }),
     });
-    expect(prisma.agentSession.count).toHaveBeenCalledWith({
-      where: {
-        status: { in: ['ended', 'abandoned'] },
-        endedAt: { not: null },
-        shadowFact: null,
-      },
+    // The pending count must mirror the materializer's selection predicate:
+    // terminal, past the late-arrival finality watermark, unmaterialized, and
+    // policy-bound. The watermark date is wall-clock derived, so assert its
+    // shape rather than its value.
+    const [countArgs] = prisma.agentSession.count.mock.calls[0];
+    expect(countArgs.where).toMatchObject({
+      status: { in: ['ended', 'abandoned'] },
+      shadowFact: null,
+      policyAssignment: { isNot: null },
     });
+    expect(countArgs.where.endedAt).toEqual({ not: null, lte: expect.any(Date) });
     expect(result.financialSideEffects).toBe(false);
   });
 
