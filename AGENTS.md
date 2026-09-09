@@ -23,6 +23,80 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-09-09 — private-beta readiness sweep: PR stack landed, dependency advisories, scenario time bomb, beta:verify
+
+The private-beta readiness pass reconciled the repository state and landed
+three PRs: #115 (web design system + waitlist admin + docs + `beta:verify`),
+#116 (shadow-pipeline remainder + session-finality watermark + policy-engine
+fixes + policy rebinding + dependency security), and #119 (coherent CodeQL/
+SBOM action bumps). `main` CI is green on the final merge commit; branch
+protection was restored to approvals:1 / admin-enforced / 10 checks
+immediately after the batch.
+
+- **Stacked PRs #104–#108 are merged and the shadow pipeline is whole on
+  `main`.** A `gh pr merge` on a stacked PR lands into the PR's _base_ branch,
+  so #105–#108 initially merged into each other rather than into `main`; the
+  remainder was re-landed as #116 and verified file-by-file before merge. The
+  review threads that blocked the stack produced three code changes now on
+  `main`: the materializer waits for session finality (a watermark derived
+  from `AGENT_EVENT_MAX_AGE_MS` — past it, no still-acceptable late event can
+  predate the session end, and the interval aggregator already clamps
+  post-terminal events, so the frozen fact is provably complete),
+  `recommendShadowPolicy` measures candidates against the current policy and
+  the grid cannot emit a duplicate of the base version, and policy bindings
+  rebind to the authoritative `session.started` when it arrives after session
+  creation (delete+recreate inside the ingestion transaction — the trigger
+  only forbids UPDATE — only backwards, only before a fact exists).
+
+- **Two newly published advisories failed CI's fail-closed audits, and main
+  would fail today without the dependency work.** `pnpm audit --prod` (12
+  vulnerabilities incl. 2 critical Next.js RCE advisories fixed in 16.3.4)
+  and the dev-dependency quarantine audit (multer <2.3.0, js-yaml <4.3.2 —
+  both _second/third_ advisories against already-pinned packages) now pass.
+  `@sentry/server-utils` 10.73.0 shipped a broken dist layout that crashed
+  vitest module loading; it is pinned back to 10.70.0 with a drop-condition
+  comment. All pins live in `pnpm-workspace.yaml` with advisory IDs.
+
+- **The reliability-boundaries scenario was a time bomb.** It seeded spool
+  fixtures with hardcoded `2026-08-06` timestamps; the CLI spool prunes
+  records older than a 30-day TTL, so the scenario began failing everywhere
+  on 2026-09-05. Fixture timestamps are now derived from the runtime clock.
+  Any scenario that seeds time-based fixtures must do the same.
+
+- **The redesigned shell taught the e2e suite about consent surfaces.** Both
+  the stale-consent re-prompt (fixed top) and the cookie-consent dialog
+  (fixed bottom) mount asynchronously after a fetch and intercept pointer
+  events: they covered the mobile nav toggle and the sidebar's new Sign out
+  footer. The specs now wait a bounded interval for each surface to settle,
+  then dismiss it the way a user does (point-in-time `isVisible()` raced the
+  mount and failed 112 retries in a row). `/status`'s healthy pills moved
+  from emerald-700 to emerald-800 (#307d68 at 4.4:1 vs the required 4.5:1).
+
+- **`pnpm beta:verify` is the one-command verification.**
+  `scripts/beta-verify.mjs` runs every non-destructive gate in order (audit
+  claims, package contract, release gates, typecheck, lint, all unit suites,
+  production build), classifies each as CODE or ENVIRONMENT failure via
+  localhost Postgres/Redis probes, hard-stops on the first code failure,
+  exits 1 (code) / 2 (environment-only) / 0 (clean), never resets a
+  database, never runs the consent-gated destructive integration suites, and
+  never echoes environment values. Verified 12/12 on merged `main`.
+
+- **Repository hygiene.** Zero open PRs (Dependabot #109–#112 closed as
+  superseded by #119 — the package contract makes standalone CodeQL bumps
+  unmergeable by construction; #113/#114 closed earlier); every merged or
+  superseded branch deleted locally and remotely; all eight `/tmp` worktrees
+  removed after verifying each held no unmerged content; `main` reset to
+  `origin/main` after confirming its pre-rebase lineage carried nothing
+  unique.
+
+Verification: `pnpm run beta:verify` 12/12; API unit 161 files / 1595 tests,
+web 72 / 333, CLI 25 / 166, VS Code 17 files / 157+1 skipped, shared 77,
+config 24, agent-protocol 26, attestation bridge 30; release gates 161/161;
+audit claims 20/20; package contract 21/21; prod audit and quarantine audit
+clean; build 11/11; typecheck 18/18; lint 11/11; `main` CI run 34305085037
+all jobs green (incl. docker-build trivy scan and both e2e suites). The
+destructive integration reset remains consent-gated and was not run.
+
 ## Resolved 2026-08-30 — attention-boundary defects (TTY, CI, account cap, ordering, viewability)
 
 A review pass against the implementation blueprint produced findings that were
