@@ -50,7 +50,7 @@
     "erase:waitlist": "node scripts/erase-waitlist-signup.mjs"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.5.1",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "husky": "^9.1.7",
