@@ -13,13 +13,13 @@
     "lint": "eslint src/"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
-    "react": "^19.2.8",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0",
     "@ateva/eslint-config": "workspace:*",
     "typescript": "^5.9.2"
   },
   "peerDependencies": {
-    "react": "^19.2.8"
+    "react": "^19.3.0"
   }
 }
