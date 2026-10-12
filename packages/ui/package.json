@@ -17,7 +17,7 @@
     "@types/react": "^19.2.18",
     "react": "^19.2.8",
     "@ateva/eslint-config": "workspace:*",
-    "typescript": "^5.9.2"
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
     "react": "^19.2.8"
