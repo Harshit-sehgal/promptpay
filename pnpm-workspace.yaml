@@ -6,20 +6,21 @@ packages:
 overrides:
   # Security floors for transitive Next/Sentry and AJV dependency paths.
   # Keep these explicit until the direct packages raise their own lower bounds.
-  fast-uri: 3.1.6
-  multer: 2.3.0
+  fast-uri: 3.1.8
+  multer: 2.4.0
   postcss: 8.5.23
   find-my-way: 9.7.0
   valibot: 1.4.2
-  undici: 7.29.0
-  'brace-expansion@^1.1.0': 1.1.18
-  'brace-expansion@^5.0.0': 5.0.9
-  sharp: 0.35.4
+  undici: 7.29.1
+  markdown-it: 14.3.1
+  'brace-expansion@^1.1.0': 1.1.21
+  'brace-expansion@^5.0.0': 5.0.12
+  sharp: 0.35.5
   # Security floors published/raised after main's 2026-08-28 green run.
   # - browserslist >=4.28.7: two high advisories (GHSA-c83g-rgw3-j3cx unbounded
   #   memory growth; GHSA-73wf-gq98-2v4g crash/prototype write via untrusted
   #   stats files) through @sentry/nextjs > @babel/core paths.
-  # - fast-uri raised to >=3.1.6 above: SSRF/host-confusion advisories.
+  # - fast-uri raised to >=3.1.8 above: SSRF/host-confusion advisories.
   # - qs >=6.16.0: two moderate DoS advisories through the Next.js runtime
   #   (the advisory names >=6.15.4, but 6.15.x was never published; 6.16.0 is
   #   the first patched release on the registry).
@@ -29,6 +30,17 @@ overrides:
   browserslist: 4.28.7
   qs: 6.16.0
   mysql2: 3.23.1
+  # 2026-10-12 advisory wave (breaks `pnpm audit --prod` on main and open PRs).
+  # - next >=16.3.8: GHSA-f87g-xv8r-7p7x / GHSA-mcj8-r9mp-w47p / GHSA-cjq9-62q9-8jv4
+  #   / GHSA-3w37-wq28-93x7 / GHSA-4jqv-mc3x-m676 / GHSA-vcvr-r3jv-pc5j (SSG/ISR
+  #   cache poisoning and related). Direct dependency of apps/web and transitive
+  #   via @sentry/nextjs; scoped to ^16 so a future 17.x is untouched.
+  # - source-map-js >=1.2.2 (GHSA-68fv-2mgg-jv7q)
+  # - proxy-addr >=2.0.8 (GHSA-jqcg-44mw-7w3h)
+  # Drop each once the direct parents raise their own lower bounds.
+  'next@^16.0.0': 16.3.8
+  source-map-js: 1.2.2
+  proxy-addr: 2.0.8
   # @sentry/server-utils 10.73.0 shipped a broken dist layout: its webpack
   # orchestrion entry resolves a doubled node_modules/node_modules/ path and
   # crashes vitest module loading (CI 2026-09-08, cookie-consent suite).
@@ -51,7 +63,7 @@ overrides:
   # 11.4.6 is what introduces it, so the bump brings the advisory with it. The
   # ^4 floor above cannot reach a 5.x resolution; ranges are scoped per major,
   # exactly as with brace-expansion.
-  'js-yaml@^5.0.0': 5.2.2
+  'js-yaml@^5.0.0': 5.4.1
   # GHSA-2v37-7h3g-55p8 / nanoid <3.3.18 (high): a custom generator can loop
   # indefinitely when `size` is zero — the 3.3.17 fix (A-111) was incomplete
   # and a second advisory with the same title was published against it,
