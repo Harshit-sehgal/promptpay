@@ -111,7 +111,7 @@ export default function StatusPage() {
                 <p className="font-bold text-sm">
                   {overallHealthy ? 'All Systems Operational' : 'Degraded Performance'}
                 </p>
-                <p className="text-xs opacity-80 mt-0.5">
+                <p className="text-xs mt-0.5">
                   Last checked: {displayTime ? displayTime.toLocaleTimeString() : 'Unknown'}
                 </p>
               </div>
