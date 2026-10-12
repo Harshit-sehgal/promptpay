@@ -11,8 +11,9 @@ overrides:
   postcss: 8.5.23
   find-my-way: 9.7.0
   valibot: 1.4.2
-  undici: 7.29.0
-  'brace-expansion@^1.1.0': 1.1.18
+  undici: 7.29.1
+  markdown-it: 14.3.1
+  'brace-expansion@^1.1.0': 1.1.21
   'brace-expansion@^5.0.0': 5.0.12
   sharp: 0.35.5
   # Security floors published/raised after main's 2026-08-28 green run.

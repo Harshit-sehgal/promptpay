@@ -23,6 +23,20 @@ const knownDevelopmentOnly = {
       'apps__api>@nestjs/cli>fork-ts-checker-webpack-plugin>minimatch>brace-expansion',
     ]),
   },
+  // braces <=3.0.3 (GHSA-vfj7-8cjw-p6xm, high): stack-exhaustion DoS through
+  // deeply nested patterns. No patched release is published yet — the registry
+  // tops out at 3.0.3 — so this cannot be pinned away in pnpm-workspace.yaml.
+  // Dev-only, reached exclusively through lint/build tooling (micromatch in
+  // @next/eslint-plugin-next and @vscode/vsce). Remove this entry once braces
+  // >=3.0.4 ships and can be pinned like the others.
+  'GHSA-vfj7-8cjw-p6xm': {
+    moduleName: 'braces',
+    severity: 'high',
+    paths: new Set([
+      'apps__vscode-extension>@vscode/vsce>secretlint>globby>fast-glob>micromatch>braces',
+      'apps__web>@next/eslint-plugin-next>fast-glob>micromatch>braces',
+    ]),
+  },
 };
 
 const unexpected = [];
@@ -52,7 +66,7 @@ if (unexpected.length > 0) {
 
 if (Object.keys(report.advisories ?? {}).length > 0) {
   console.warn(
-    'Only the reviewed dev-only brace-expansion advisory remains; production audit is a separate hard gate.',
+    'Only reviewed dev-only advisories remain; production audit is a separate hard gate.',
   );
 } else {
   console.log('No dependency advisories detected.');
