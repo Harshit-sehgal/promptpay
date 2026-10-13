@@ -50,6 +50,22 @@ describe('MetricsService — Prometheus + bigint safety (P1.24)', () => {
     }
   });
 
+  it('escapes a hostile instance label value', () => {
+    const prev = process.env.PROMETHEUS_INSTANCE;
+    process.env.PROMETHEUS_INSTANCE = 'a"b\\c';
+    try {
+      const m = new MetricsService();
+      m.increment('errors');
+      const out = m.toPrometheus();
+      // The backslash is doubled and the quote escaped, so the value stays one
+      // well-formed Prometheus label (CodeQL js/incomplete-sanitization).
+      expect(out).toContain('errors{instance="a\\"b\\\\c"} 1');
+    } finally {
+      if (prev === undefined) delete process.env.PROMETHEUS_INSTANCE;
+      else process.env.PROMETHEUS_INSTANCE = prev;
+    }
+  });
+
   it('rejects non-bigint monetary inputs (defensive)', () => {
     const m = new MetricsService();
     // @ts-expect-error deliberately wrong type
