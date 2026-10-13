@@ -27,11 +27,11 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "pg": "^8.23.0",
+    "pg": "^8.23.1",
     "prisma": "^7.10.0"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.4",
     "@types/pg": "8.23.1",
     "@ateva/eslint-config": "workspace:*",
     "typescript": "^5.9.2"
