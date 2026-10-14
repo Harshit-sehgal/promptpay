@@ -13,7 +13,7 @@
     "lint": "eslint src/"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "react": "^19.3.0",
     "@ateva/eslint-config": "workspace:*",
