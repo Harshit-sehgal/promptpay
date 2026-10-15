@@ -60,7 +60,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 22
           cache: pnpm
@@ -87,7 +87,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 22
           cache: pnpm
@@ -135,7 +135,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 22
           cache: pnpm
@@ -337,7 +337,7 @@ jobs:
             "set -e; cd '$STAGING_DEPLOY_PATH'; CLEANUP_STATUS=0; if [ -n '$API_DIGEST' ] && [ -n '$WEB_DIGEST' ]; then export ATEVA_API_IMAGE='$API_DIGEST'; export ATEVA_WEB_IMAGE='$WEB_DIGEST'; export NEXT_PUBLIC_API_URL='${STAGING_API_URL}/api/v1'; export NEXT_PUBLIC_WEB_URL='$STAGING_WEB_URL'; COMPOSE='docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml'; \$COMPOSE down --remove-orphans || CLEANUP_STATUS=\$?; fi; if [ '$LEGACY_UNIT_EXISTS' = 1 ]; then if [ '$LEGACY_UNIT_ENABLED' = 1 ]; then sudo -n systemctl enable ateva-api.service; else sudo -n systemctl disable ateva-api.service; fi; if [ '$LEGACY_UNIT_ACTIVE' = 1 ]; then sudo -n systemctl start ateva-api.service; else sudo -n systemctl stop ateva-api.service; fi; fi; exit \$CLEANUP_STATUS"
       - name: Upload immutable staging smoke evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: staging-smoke-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: staging-smoke-evidence.json
@@ -363,7 +363,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 22
           cache: pnpm
@@ -397,7 +397,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11.9.0
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: 22
           cache: pnpm

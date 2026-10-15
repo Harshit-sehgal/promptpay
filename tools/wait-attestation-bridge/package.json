@@ -32,7 +32,7 @@
     "jose": "^6.2.12"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@ateva/eslint-config": "workspace:*",
     "tsx": "^4.23.15",
     "typescript": "^5.9.2",
