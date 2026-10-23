@@ -9365,6 +9365,11 @@ html[data-motion='enabled'] .home-page .hero-actions {
   right: 28px;
   left: 28px;
   opacity: 0;
+}
+
+/* The card's entrance moves only with motion enabled; under reduced motion it
+   switches instantly. */
+html[data-motion='enabled'] .home-page .hero-card {
   transform: translateY(10px);
   transition:
     opacity 0.28s var(--home-ease),
@@ -9373,6 +9378,9 @@ html[data-motion='enabled'] .home-page .hero-actions {
 
 .home-page .hero-card.is-visible {
   opacity: 1;
+}
+
+html[data-motion='enabled'] .home-page .hero-card.is-visible {
   transform: none;
 }
 
@@ -9546,7 +9554,7 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
 
 .home-page .slots__empty {
   border: 1.5px dashed var(--dash);
-  background: rgb(255 255 255 / 0.18);
+  background: var(--mini-bg);
 }
 
 /* Close */

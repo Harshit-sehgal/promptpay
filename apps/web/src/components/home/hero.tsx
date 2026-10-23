@@ -102,6 +102,7 @@ export function Hero() {
                 ? 'home-card hero-card glass is-visible'
                 : 'home-card hero-card glass'
             }
+            aria-hidden={!frame.cardVisible}
           >
             <strong>Tidewater CI</strong>
             2,000 free build minutes a month for open-source repos.

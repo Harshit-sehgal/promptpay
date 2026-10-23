@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 
+import { CloseSection } from './close-section';
 import { Hero } from './hero';
 
 vi.mock('@/lib/auth-context', () => ({
@@ -40,6 +41,20 @@ describe('Hero', () => {
 
     expect(doc.querySelector('.home-clock')?.textContent).toBe('0:05');
     expect(doc.querySelector('.hero-card')?.classList.contains('is-visible')).toBe(true);
+    expect(doc.querySelector('.hero-card')?.getAttribute('aria-hidden')).toBe('false');
+  });
+
+  it('server-renders the closing timer at 0:07', () => {
+    expect(renderToString(<CloseSection />)).toContain('0:07');
+  });
+
+  it('hides the sponsor card from assistive tech while it is not shown', () => {
+    const { container } = render(<Hero />);
+    act(() => {
+      vi.advanceTimersByTime(7000);
+    });
+    expect(clockText(container)).toBe('0:12');
+    expect(container.querySelector('.hero-card')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('ticks once a second after mount', () => {

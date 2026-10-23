@@ -8,15 +8,14 @@ import { getDashboardPath } from '@/lib/auth-routing';
    computed here. */
 export function HomeHeader() {
   const { isAuthenticated, user } = useAuth();
+  const signedIn = isAuthenticated && !!user;
 
   return (
     <SiteHeader
-      primaryHref={
-        isAuthenticated && user ? getDashboardPath(user.role) : '/auth/signup?role=developer'
-      }
-      primaryLabel={isAuthenticated ? 'Open dashboard' : 'Join beta'}
-      primaryShortLabel={isAuthenticated ? 'Dashboard' : 'Join beta'}
-      showLogin={!isAuthenticated}
+      primaryHref={signedIn ? getDashboardPath(user?.role) : '/auth/signup?role=developer'}
+      primaryLabel={signedIn ? 'Open dashboard' : 'Join beta'}
+      primaryShortLabel={signedIn ? 'Dashboard' : 'Join beta'}
+      showLogin={!signedIn}
     />
   );
 }
