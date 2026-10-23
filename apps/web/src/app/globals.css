@@ -203,8 +203,10 @@ html[data-palette='midnight'] {
 }
 
 /* Without backdrop-filter the translucent glass would let the colour field
-   through under text, so fall back to the opaque variant. */
-@supports not (backdrop-filter: blur(1px)) {
+   through under text, so fall back to the opaque variant. The selector must
+   match the palette blocks' specificity; it comes later, so it wins. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-palette],
   :root {
     --glass: var(--glass-strong);
   }

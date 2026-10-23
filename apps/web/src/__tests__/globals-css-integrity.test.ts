@@ -114,6 +114,27 @@ describe('globals.css integrity', () => {
       expect(block).toContain(`--c1: ${p.c[0]}`);
     });
 
+    it.each(PALETTES)('$id ink, copy, quiet and glass match palette.ts', (p) => {
+      // Light palettes inherit these from the Warm block.
+      const block = p.id === 'midnight' ? paletteBlock('midnight') : paletteBlock('warm');
+      const norm = (v: string) => v.replace(/\b0\./g, '.');
+      const read = (name: string) =>
+        norm(new RegExp(`${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim() ?? '');
+      expect(read('--ink')).toBe(norm(p.ink));
+      expect(read('--copy')).toBe(norm(p.copy));
+      expect(read('--quiet')).toBe(norm(p.quiet));
+      expect(read('--glass')).toBe(norm(p.glass));
+    });
+
+    it('falls back to the opaque glass where backdrop-filter is unsupported', () => {
+      const m =
+        /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)\s*\{([^{}]+)\{([^{}]*)\}/.exec(
+          css,
+        );
+      expect(m?.[1]).toContain('html[data-palette]');
+      expect(m?.[2]).toMatch(/--glass:\s*var\(--glass-strong\)/);
+    });
+
     it('sets color-scheme per palette', () => {
       expect(paletteBlock('midnight')).toMatch(/color-scheme:\s*dark/);
       for (const p of PALETTES.filter((x) => x.id !== 'midnight')) {
