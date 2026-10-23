@@ -8941,3 +8941,129 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-planner .land
   margin: 0;
   -webkit-appearance: none;
 }
+
+/* Background palette picker (src/components/palette-picker.tsx): a round glass
+   trigger showing the current palette and a frosted menu of the six options. */
+.palette-picker {
+  position: relative;
+}
+
+.palette-picker__trigger {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--glass-edge);
+  border-radius: 50%;
+  background: var(--glass);
+  cursor: pointer;
+}
+
+.palette-picker__current {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: conic-gradient(var(--c1), var(--c2), var(--c3), var(--c4), var(--c1));
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08) inset;
+}
+
+.palette-picker__menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  width: 236px;
+  padding: 14px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 20px;
+  background: var(--glass-strong);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  transform-origin: top right;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .palette-picker__menu {
+    animation: palette-picker-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@keyframes palette-picker-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+.palette-picker__title {
+  margin: 0 4px 10px;
+  font:
+    500 12px var(--font-utility),
+    ui-monospace,
+    monospace;
+  color: var(--quiet);
+}
+
+.palette-picker__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.palette-picker__option {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  cursor: pointer;
+  font:
+    500 12px var(--font-ui),
+    system-ui,
+    sans-serif;
+  color: var(--copy);
+}
+
+.palette-picker__option:hover {
+  background: var(--mini-bg);
+}
+
+.palette-picker__option[aria-checked='true'] {
+  color: var(--ink);
+}
+
+/* Each swatch carries its own palette's colours inline. */
+.palette-picker__option i {
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08) inset;
+}
+
+.palette-picker__option[aria-checked='true'] i {
+  border-color: var(--ink);
+}
+
+/* On phones the menu is pinned 16px from both screen edges under the header.
+   The trigger stops being the containing block so the offsets reach the
+   viewport; mount the picker outside any backdrop-filter ancestor. */
+@media (max-width: 639px) {
+  .palette-picker {
+    position: static;
+  }
+
+  .palette-picker__menu {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    transform-origin: top center;
+  }
+}
