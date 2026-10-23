@@ -7,6 +7,7 @@ import CookieConsent from '@/components/cookie-consent';
 import SandboxBanner from '@/components/sandbox-banner';
 import SiteFooter from '@/components/site-footer';
 import { SkipLink } from '@/components/skip-link';
+import { paletteBootstrapScript } from '@/lib/palette';
 
 import { Providers } from './providers';
 
@@ -30,25 +31,6 @@ const geistMono = localFont({
   display: 'swap',
   fallback: ['ui-monospace', 'monospace'],
 });
-
-const themeBootstrapScript = `
-(() => {
-  try {
-    const stored = window.localStorage.getItem('ateva-landing-theme');
-    const resolved = stored === 'dark' || stored === 'light' ? stored : 'light';
-    if (resolved) {
-      document.documentElement.dataset.landingTheme = resolved;
-      document.documentElement.classList.toggle('dark', resolved === 'dark');
-    }
-    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      document.documentElement.dataset.landingMotion = 'enabled';
-    }
-  } catch {
-    document.documentElement.dataset.landingTheme = 'light';
-    document.documentElement.classList.remove('dark');
-  }
-})();
-`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.vercel.app'),
@@ -95,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="font-sans antialiased">
         <Script id="ateva-theme-bootstrap" strategy="beforeInteractive">
-          {themeBootstrapScript}
+          {paletteBootstrapScript}
         </Script>
         <SkipLink />
         <SandboxBanner />
