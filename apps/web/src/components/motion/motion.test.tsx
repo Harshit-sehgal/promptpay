@@ -85,6 +85,13 @@ describe('Reveal', () => {
     expect(el.style.getPropertyValue('--i')).toBe('3');
   });
 
+  it('shows content immediately when IntersectionObserver is unavailable', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const { container } = render(<Reveal>hello</Reveal>);
+
+    expect((container.firstElementChild as HTMLElement).classList.contains('is-in')).toBe(true);
+  });
+
   it('is already in, with no observer, under reduced motion', () => {
     stubMotion(true);
     const { container } = render(<Reveal>hello</Reveal>);
@@ -108,21 +115,46 @@ describe('ColorFields', () => {
     expect(fields[0].style.top).toBe('-40px');
   });
 
-  it('moves each field by scrollY times its speed on a scroll frame', () => {
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      cb(0);
-      return 1;
-    });
-    const { container } = render(<ColorFields fields={[...FIELDS]} />);
+  it('offsets each field by its distance from the viewport centre times speed', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb));
+    const runFrames = () => act(() => frames.splice(0).forEach((cb) => cb(0)));
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    let sectionTop = 0;
+    const { container } = render(
+      <section>
+        <ColorFields fields={[...FIELDS]} />
+      </section>,
+    );
+    vi.spyOn(container.querySelector('section')!, 'getBoundingClientRect').mockImplementation(
+      () => ({ top: sectionTop, height: 800 }) as DOMRect,
+    );
     const fields = container.querySelectorAll<HTMLElement>('.color-field');
 
-    Object.defineProperty(window, 'scrollY', { value: 500, configurable: true });
+    // Section centred in the viewport: no offset.
+    sectionTop = 0;
     act(() => {
       window.dispatchEvent(new Event('scroll'));
     });
+    runFrames();
+    expect(parseFloat(fields[0].style.transform.split(',')[1])).toBe(0);
 
-    expect(fields[0].style.transform).toBe('translate3d(0, 40px, 0)');
-    expect(fields[1].style.transform).toBe('translate3d(0, -25px, 0)');
+    // Section centre 400px below the viewport centre: 400 * 0.08 and 400 * -0.05.
+    sectionTop = 400;
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    runFrames();
+    expect(fields[0].style.transform).toBe('translate3d(0, 32px, 0)');
+    expect(fields[1].style.transform).toBe('translate3d(0, -20px, 0)');
+
+    // A later scroll event is still picked up.
+    sectionTop = 0;
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    runFrames();
+    expect(parseFloat(fields[0].style.transform.split(',')[1])).toBe(0);
   });
 
   it('removes its scroll listener on unmount', () => {

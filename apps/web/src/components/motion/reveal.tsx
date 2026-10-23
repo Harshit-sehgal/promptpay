@@ -21,7 +21,10 @@ export function Reveal({ as: Tag = 'div', delayIndex = 0, className, children }:
   const [isIn, setIsIn] = useState(false);
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (
+      typeof IntersectionObserver === 'undefined' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
       setIsIn(true);
       return;
     }
