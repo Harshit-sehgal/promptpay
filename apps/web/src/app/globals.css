@@ -281,11 +281,6 @@ body {
   color: var(--ateva-blush-ink);
 }
 
-body:has(.site-header):not(:has(.home-page)) .site-footer {
-  border-color: var(--public-line) !important;
-  background: var(--public-subtle) !important;
-}
-
 body:has(.site-header):not(:has(.home-page)) main {
   color: var(--public-ink);
 }
@@ -804,11 +799,6 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page {
   filter: none;
   transform: none;
   transition: none;
-}
-
-body:has(.landing-page) .site-footer {
-  border-color: var(--landing-line) !important;
-  background: var(--landing-soft) !important;
 }
 
 /* Persistent verification object: one shell, changing state, quiet metadata. */
@@ -1338,14 +1328,6 @@ html[data-landing-theme='dark'] .landing-page .landing-product-window {
   color: #ffffff;
 }
 
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer {
-  background: #20262d;
-}
-
-body:has(.landing-page) .site-footer {
-  background: #ffffff;
-}
-
 /* The public landing page owns its appearance preference. Keeping the scope
    here prevents a landing-page choice from changing the authenticated shells. */
 html[data-landing-theme='dark'] body:has(.landing-page) {
@@ -1645,58 +1627,6 @@ html[data-landing-theme='dark'] .landing-page .landing-sponsor-requirements {
   border-color: rgb(255 255 255 / 0.1);
 }
 
-/* The footer sits outside the landing-page wrapper in the root layout. */
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer {
-  --landing-paper: #20262d;
-  --landing-line: rgb(255 255 255 / 0.14);
-  --landing-heading: #ffffff;
-  --landing-copy: #d3d9de;
-  --landing-muted: #aeb8c0;
-  --landing-accent-strong: #ffffff;
-  --landing-on-heading: #1d2933;
-  border-color: var(--landing-line);
-  background: var(--landing-paper);
-}
-
-html[data-landing-theme='dark']
-  body:has(.landing-page)
-  .site-footer
-  [class~='border-surface-200/80'] {
-  border-color: var(--landing-line) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='bg-surface-950'] {
-  background: var(--landing-heading) !important;
-  color: var(--landing-on-heading) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='text-surface-950'] {
-  color: var(--landing-heading) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='text-surface-600'] {
-  color: var(--landing-copy) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='text-surface-500'],
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='text-surface-400'] {
-  color: var(--landing-muted) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='text-brand-600'] {
-  color: var(--landing-accent-strong) !important;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer [class~='border-surface-300'] {
-  border-color: var(--landing-line) !important;
-}
-
-html[data-landing-theme='dark']
-  body:has(.landing-page)
-  .site-footer
-  [class~='hover:text-surface-950']:hover {
-  color: var(--landing-heading) !important;
-}
 :where(h1, h2, h3) {
   text-wrap: balance;
 }
@@ -3128,14 +3058,12 @@ html[data-landing-theme='dark'] .landing-page {
   font-kerning: normal;
 }
 
-.landing-page > header,
-body:has(.landing-page) .site-footer {
+.landing-page > header {
   font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: -0.006em;
 }
 
-.landing-page :where(p, li),
-body:has(.landing-page) .site-footer :where(p, li) {
+.landing-page :where(p, li) {
   text-wrap: pretty;
 }
 
@@ -3676,8 +3604,7 @@ html[data-landing-theme='dark'] .landing-page .landing-showcase-footnote {
    trace carry the visual signature. The rest of the page stays quiet and
    editorial, with motion reserved for useful state changes. */
 .landing-page,
-.landing-page > header,
-body:has(.landing-page) .site-footer {
+.landing-page > header {
   font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: -0.006em;
 }
@@ -4049,51 +3976,6 @@ html[data-landing-theme='dark'] .landing-page .landing-product-stage {
 .landing-planner-switch:hover,
 .landing-planner-mode-toggle:hover {
   transform: translateY(-1px);
-}
-
-body:has(.landing-page) .site-footer button {
-  border-radius: 0.65rem;
-}
-
-body:has(.landing-page) .site-footer {
-  --landing-paper: #fcfaf7;
-  --landing-line: rgb(77 58 47 / 0.16);
-  --landing-heading: #2a2623;
-  --landing-copy: #5d554f;
-  --landing-muted: #6b625b;
-  --landing-accent-strong: #8d4e35;
-  --landing-on-heading: #ffffff;
-  border-color: rgb(77 58 47 / 0.16);
-  background: #fcfaf7;
-}
-
-html[data-landing-theme='dark'] body:has(.landing-page) .site-footer {
-  --landing-paper: #202326;
-  --landing-line: rgb(255 255 255 / 0.14);
-  --landing-heading: #faf9f6;
-  --landing-copy: #d9d7d2;
-  --landing-muted: #b7b3ac;
-  --landing-accent-strong: #ffffff;
-  --landing-on-heading: #202326;
-  border-color: rgb(255 255 255 / 0.14);
-  background: #202326;
-}
-
-body:has(.landing-page) .site-footer [class~='text-surface-950'] {
-  color: var(--landing-heading) !important;
-}
-
-body:has(.landing-page) .site-footer [class~='text-surface-600'] {
-  color: var(--landing-copy) !important;
-}
-
-body:has(.landing-page) .site-footer [class~='text-surface-500'],
-body:has(.landing-page) .site-footer [class~='text-surface-400'] {
-  color: var(--landing-muted) !important;
-}
-
-body:has(.landing-page) .site-footer [class~='text-brand-600'] {
-  color: var(--landing-accent-strong) !important;
 }
 
 /* -------------------------------------------------------------------------
@@ -5789,16 +5671,6 @@ html:is(.dark, [data-landing-theme='dark'])
   background: var(--landing-card-subtle) !important;
 }
 
-body:has(.landing-page) .site-footer [class~='bg-surface-950'] {
-  background: var(--landing-heading) !important;
-  color: var(--landing-on-heading) !important;
-}
-
-body:has(.landing-page) .site-footer [class~='border-surface-200/80'],
-body:has(.landing-page) .site-footer [class~='border-surface-300'] {
-  border-color: var(--landing-line) !important;
-}
-
 /* The hero trace is the one expressive object on the page: an evidence line,
    a labelled sponsor moment, and a final qualified delivery state. */
 .landing-terminal-wrap {
@@ -6261,22 +6133,6 @@ html:is(.dark, [data-landing-theme='dark']) .app-shell [class~='text-red-800'] {
   background-color: var(--public-canvas) !important;
 }
 
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-950'],
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-900'],
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-800'] {
-  color: var(--public-ink) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-700'],
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-600'] {
-  color: var(--public-copy) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-500'],
-body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-400'] {
-  color: var(--public-muted) !important;
-}
-
 .public-page main [class~='bg-white'] {
   background-color: var(--public-surface) !important;
 }
@@ -6412,8 +6268,7 @@ html:is(.dark, [data-landing-theme='dark']) .public-page main [class~='text-emer
    motion vocabulary. Display type carries the narrative, Inter keeps product
    copy comfortable, and mono identifies evidence rather than decoration. */
 .landing-page,
-.landing-page > header,
-body:has(.landing-page) .site-footer {
+.landing-page > header {
   font-family: var(--font-ui);
 }
 
@@ -7573,35 +7428,6 @@ html:is(.dark, [data-landing-theme='dark'])
   border-color: var(--landing-line) !important;
 }
 
-/* Footer is outside the landing root, so give it the same paper/ink choice. */
-body:has(.landing-page) .site-footer {
-  --landing-paper: #ffffff;
-  --landing-heading: #17191c;
-  --landing-copy: #4b4f55;
-  --landing-muted: #62666f;
-  --landing-accent-strong: #17191c;
-  --landing-on-heading: #ffffff;
-  --landing-line: rgb(23 25 28 / 0.14);
-  border-color: var(--landing-line) !important;
-  background: #ffffff !important;
-}
-
-html:is(.dark, [data-landing-theme='dark']) body:has(.landing-page) .site-footer {
-  --landing-paper: #202226;
-  --landing-heading: #ffffff;
-  --landing-copy: #d3d5d8;
-  --landing-muted: #b1b4ba;
-  --landing-accent-strong: #ffffff;
-  --landing-on-heading: #17191c;
-  --landing-line: rgb(255 255 255 / 0.16);
-  border-color: var(--landing-line) !important;
-  background: #202226 !important;
-}
-
-body:has(.landing-page) .site-footer [class~='text-brand-600'] {
-  color: var(--landing-accent-strong) !important;
-}
-
 /* Last cascade guard: keep the final shared language authoritative after the
    legacy compatibility layers above it. */
 .app-sidebar .theme-toggle {
@@ -8386,15 +8212,6 @@ body:has(.site-header):not(:has(.home-page)) main .public-advertiser-form__surfa
 
 .public-page .public-changelog-entry {
   border-bottom: 1px solid var(--ateva-line-final) !important;
-}
-
-.site-footer--compact .site-footer__lead {
-  gap: 1.5rem;
-  padding-bottom: 1.75rem;
-}
-
-.site-footer--compact .site-footer__compact-note {
-  max-width: 24rem;
 }
 
 .app-shell__main {
@@ -9523,4 +9340,129 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
   .home-page .moments {
     grid-template-columns: 1fr;
   }
+}
+
+/* -------------------------------------------------------------------------
+   Global site footer. Sits on the palette page colour on every route, so it
+   needs no per-page overrides; auth and app shells still hide it (above).
+   ------------------------------------------------------------------------- */
+.site-footer {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: transparent;
+  color: var(--copy);
+  font-family: var(--font-ui), system-ui, sans-serif;
+}
+
+.site-footer__lead {
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  padding-bottom: 2.5rem;
+}
+
+.site-footer__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  border-radius: 999px;
+}
+
+.site-footer__mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.site-footer__wordmark {
+  color: var(--ink);
+  font:
+    800 1.125rem / 1 var(--font-display),
+    sans-serif;
+  letter-spacing: -0.045em;
+}
+
+.site-footer__description {
+  max-width: 24rem;
+  margin-top: 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  text-wrap: pretty;
+}
+
+.site-footer__heading {
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.site-footer__note {
+  max-width: 250px;
+  margin-top: 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.5rem;
+  text-wrap: pretty;
+}
+
+.site-footer__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+.site-footer__link {
+  display: inline-block;
+  width: fit-content;
+  border-radius: 0.25rem;
+  color: var(--copy);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  transition: color 0.18s ease;
+}
+
+.site-footer__link:hover {
+  color: var(--ink);
+}
+
+.site-footer :focus-visible {
+  outline-color: var(--ink);
+}
+
+.site-footer__base {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  padding-top: 1.5rem;
+  color: var(--quiet);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+@media (min-width: 640px) {
+  .site-footer__base {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.site-footer__cookie {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  padding: 0.5rem 0.875rem;
+  color: var(--copy);
+  font: inherit;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.site-footer__cookie:hover {
+  border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+  color: var(--ink);
 }
