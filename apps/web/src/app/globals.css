@@ -9067,3 +9067,47 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-planner .land
     transform-origin: top center;
   }
 }
+
+/* Scroll reveal. The hidden state needs html[data-motion='enabled'] (set by the
+   pre-paint bootstrap when reduced motion is not preferred), so without JS or
+   under reduced motion the content stays visible. */
+html[data-motion='enabled'] .reveal {
+  transition:
+    opacity 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
+html[data-motion='enabled'] .reveal:not(.is-in) {
+  opacity: 0;
+  transform: translateY(28px);
+}
+
+/* Colour fields: large blurred palette circles behind the glass. They must not
+   clip (no overflow: hidden); body's overflow-x: clip stops sideways scroll. */
+.color-fields {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.color-field {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: var(--orb-op);
+  will-change: transform;
+}
+
+@media (max-width: 639px) {
+  .color-field {
+    filter: blur(48px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .color-field {
+    transition: background-color 0.6s ease;
+  }
+}
