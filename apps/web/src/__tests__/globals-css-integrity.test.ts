@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { PALETTES } from '../lib/palette';
+
 /**
  * Structural guards for `globals.css`.
  *
@@ -97,5 +99,26 @@ describe('globals.css integrity', () => {
     expect(css).toMatch(/\.status-badge__dot\s*\{/);
     expect(css).toMatch(/\.app-stat-card__value\s*\{/);
     expect(css).toMatch(/\.app-shell \.launch-mode-banner\s*\{/);
+  });
+
+  describe('palette token layer', () => {
+    const paletteBlock = (id: string) => {
+      const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+      const hit = blocks.find(([, selector]) => selector!.includes(`html[data-palette='${id}']`));
+      return hit?.[2] ?? '';
+    };
+
+    it.each(PALETTES)('defines $id page and --c1 inside its html[data-palette] block', (p) => {
+      const block = paletteBlock(p.id);
+      expect(block).toContain(`--page: ${p.page}`);
+      expect(block).toContain(`--c1: ${p.c[0]}`);
+    });
+
+    it('sets color-scheme per palette', () => {
+      expect(paletteBlock('midnight')).toMatch(/color-scheme:\s*dark/);
+      for (const p of PALETTES.filter((x) => x.id !== 'midnight')) {
+        expect(paletteBlock(p.id)).toMatch(/color-scheme:\s*light/);
+      }
+    });
   });
 });

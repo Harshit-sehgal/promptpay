@@ -19,7 +19,6 @@
 
   --accent: #5d2a1a;
   --accent-strong: #4a2113;
-  --ink: #17191c;
   --ink-muted: #777b86;
   --line: #e6e6e8;
   --canvas: #fafafb;
@@ -92,16 +91,17 @@ body {
   --ateva-line: rgb(23 25 28 / 0.12);
   --ateva-line-strong: rgb(23 25 28 / 0.2);
   --ateva-focus: #17191c;
-  --public-canvas: var(--ateva-paper);
-  --public-surface: var(--ateva-paper);
-  --public-subtle: var(--ateva-fog);
-  --public-nested: var(--ateva-mist);
-  --public-ink: var(--ateva-ink);
-  --public-copy: #52565f;
-  /* Keep the canonical muted token available for metadata, while body-sized
-     UI copy uses a slightly darker accessible companion. */
-  --public-muted: #62666f;
-  --public-line: var(--ateva-line);
+  /* Public surfaces follow the chosen palette (see the palette blocks
+     below); none of these depend on `.dark`. subtle and nested are the ink
+     tinted into the solid surface, so they stay a step apart in every palette. */
+  --public-canvas: var(--page);
+  --public-surface: var(--solid);
+  --public-subtle: color-mix(in srgb, var(--ink) 3%, var(--solid));
+  --public-nested: color-mix(in srgb, var(--ink) 7%, var(--solid));
+  --public-ink: var(--ink);
+  --public-copy: var(--copy);
+  --public-muted: var(--quiet);
+  --public-line: color-mix(in srgb, var(--ink) 12%, transparent);
   --app-canvas: var(--ateva-fog);
   --app-surface: var(--ateva-paper);
   --app-nested: var(--ateva-mist);
@@ -114,19 +114,117 @@ body {
   --app-shadow: 0 1px 2px rgb(23 25 28 / 0.04), 0 16px 36px -30px rgb(23 25 28 / 0.22);
 }
 
-html:is(.dark, [data-landing-theme='dark']) {
+/* Palette tokens: one set per background palette, chosen by the pre-paint
+   bootstrap (src/lib/palette.ts) through html[data-palette]. Warm is also the
+   default, so a missing attribute still renders Warm. */
+:root,
+html[data-palette='warm'] {
+  color-scheme: light;
+  --page: #f4f3ef;
+  --c1: #f6c9a8;
+  --c2: #c4dcc6;
+  --c3: #d6cdea;
+  --c4: #ecdcb4;
+  --orb-op: 0.75;
+  --ink: #111111;
+  --copy: #55554f;
+  --quiet: #6e6e68;
+  --glass: rgb(255 255 255 / 0.52);
+  --glass-strong: rgb(255 255 255 / 0.72);
+  --glass-edge: rgb(255 255 255 / 0.85);
+  --glass-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 24px 60px -30px rgb(40 30 20 / 0.35);
+  --on-ink: #ffffff;
+  --mini-bg: rgb(255 255 255 / 0.6);
+  --solid: #ffffff;
+  --struck: #a9a8a0;
+  --dash: rgb(17 17 17 / 0.22);
+  --ok: #2f9e5b;
+}
+
+html[data-palette='sunset'] {
+  color-scheme: light;
+  --page: #fbf3ee;
+  --c1: #ff9f87;
+  --c2: #ffc98f;
+  --c3: #f7a8cc;
+  --c4: #ffd9a0;
+  --orb-op: 0.7;
+}
+
+html[data-palette='mint'] {
+  color-scheme: light;
+  --page: #f2f6f3;
+  --c1: #9fe3c6;
+  --c2: #b3d9f2;
+  --c3: #f1ec9e;
+  --c4: #c9eedd;
+}
+
+html[data-palette='lavender'] {
+  color-scheme: light;
+  --page: #f6f3f9;
+  --c1: #c8b4f4;
+  --c2: #f5b5d4;
+  --c3: #b9c6f6;
+  --c4: #e6d4fa;
+}
+
+html[data-palette='citrus'] {
+  color-scheme: light;
+  --page: #f7f6ee;
+  --c1: #d6f08c;
+  --c2: #ffe07a;
+  --c3: #ffbf8c;
+  --c4: #c5ecb0;
+  --orb-op: 0.7;
+}
+
+html[data-palette='midnight'] {
+  color-scheme: dark;
+  --page: #0f0f12;
+  --ink: #f4f3ef;
+  --copy: #b4b4bb;
+  --quiet: #8a8a92;
+  --glass: rgb(255 255 255 / 0.07);
+  --glass-strong: rgb(30 30 36 / 0.85);
+  --glass-edge: rgb(255 255 255 / 0.16);
+  --glass-shadow: 0 1px 0 rgb(255 255 255 / 0.12) inset, 0 30px 60px -30px rgb(0 0 0 / 0.7);
+  --c1: #6b4cf6;
+  --c2: #ff7a45;
+  --c3: #18b88f;
+  --c4: #c43d8f;
+  --orb-op: 0.45;
+  --on-ink: #111111;
+  --mini-bg: rgb(255 255 255 / 0.06);
+  --solid: #1c1c21;
+  --struck: #6d6d74;
+  --dash: rgb(255 255 255 / 0.22);
+  --ok: #4fd18b;
+}
+
+/* Without backdrop-filter the translucent glass would let the colour field
+   through under text, so fall back to the opaque variant. */
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --glass: var(--glass-strong);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition:
+      background-color 0.6s,
+      color 0.6s;
+  }
+}
+
+/* The app shell (--app-*) still follows `.dark` until the dashboards move to
+   palettes in PR 2. */
+html.dark {
   color-scheme: dark;
   --ateva-blush: #2d3036;
   --ateva-blush-ink: #ffffff;
   --ateva-focus: #ffffff;
-  --public-canvas: #17191c;
-  --public-surface: #202226;
-  --public-subtle: #1c1f22;
-  --public-nested: #2d3036;
-  --public-ink: #f7f6f2;
-  --public-copy: #c6c7c9;
-  --public-muted: #a3a6af;
-  --public-line: rgb(255 255 255 / 0.12);
   --app-canvas: #17191c;
   --app-surface: #202226;
   --app-nested: #2d3036;
@@ -137,10 +235,6 @@ html:is(.dark, [data-landing-theme='dark']) {
   --app-line: rgb(255 255 255 / 0.12);
   --app-line-strong: rgb(255 255 255 / 0.2);
   --app-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 40px -32px rgb(0 0 0 / 0.65);
-}
-
-html:not(.dark):not([data-landing-theme='dark']) {
-  color-scheme: light;
 }
 
 body {

@@ -22,7 +22,7 @@ export interface Palette {
 const LIGHT = {
   ink: '#111111',
   copy: '#55554f',
-  quiet: '#8a8a84',
+  quiet: '#6e6e68',
   glass: 'rgb(255 255 255 / .52)',
 } as const;
 
@@ -75,7 +75,7 @@ export const PALETTES: readonly Palette[] = [
     fieldOpacity: 0.45,
     ink: '#f4f3ef',
     copy: '#b4b4bb',
-    quiet: '#85858d',
+    quiet: '#8a8a92',
     glass: 'rgb(255 255 255 / .07)',
   },
 ];
