@@ -112,9 +112,6 @@ body {
   --app-line: var(--ateva-line);
   --app-line-strong: var(--ateva-line-strong);
   --app-shadow: 0 1px 2px rgb(23 25 28 / 0.04), 0 16px 36px -30px rgb(23 25 28 / 0.22);
-  --font-display: var(--font-serif), 'Instrument Serif', Georgia, Cambria, serif;
-  --font-ui: var(--font-inter), Inter, system-ui, sans-serif;
-  --font-utility: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 }
 
 html:is(.dark, [data-landing-theme='dark']) {
@@ -181,7 +178,7 @@ body {
   border-radius: 999px;
   background: transparent;
   color: var(--public-muted);
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-size: 0.7rem;
   letter-spacing: 0;
   text-transform: none;
@@ -399,7 +396,7 @@ body:has(.app-shell) .site-footer {
   min-height: 100vh;
   background: var(--app-canvas) !important;
   color: var(--app-ink);
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
 }
 
 .app-shell main {
@@ -694,7 +691,7 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page {
 
 .landing-page .landing-display,
 .landing-page .font-serif {
-  font-family: var(--font-serif), 'Instrument Serif', Georgia, Cambria, serif;
+  font-family: var(--font-display), Georgia, Cambria, serif;
   font-weight: 400;
   letter-spacing: -0.035em;
 }
@@ -794,7 +791,7 @@ body:has(.landing-page) .site-footer {
 .landing-verification-canvas__label,
 .landing-verification-canvas__caption {
   color: rgb(255 255 255 / 0.56);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.68rem;
   letter-spacing: 0.04em;
 }
@@ -859,7 +856,7 @@ body:has(.landing-page) .site-footer {
 .landing-verification-private-work .landing-product-overline,
 .landing-verification-wait .landing-product-overline {
   color: rgb(255 255 255 / 0.52);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.62rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -978,7 +975,7 @@ body:has(.landing-page) .site-footer {
   border-top: 1px solid rgb(255 255 255 / 0.12);
   padding: 0.8rem 1rem;
   color: rgb(255 255 255 / 0.54);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.62rem;
   line-height: 1.4;
 }
@@ -1024,7 +1021,7 @@ body:has(.landing-page) .site-footer {
 .landing-verification-story__index {
   padding-top: 0.15rem;
   color: rgb(255 255 255 / 0.5);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.7rem;
 }
 
@@ -1035,7 +1032,7 @@ body:has(.landing-page) .site-footer {
 
 .landing-verification-story__label {
   color: #f4c8b0;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.68rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1043,7 +1040,7 @@ body:has(.landing-page) .site-footer {
 
 .landing-verification-story__copy strong {
   color: #ffffff;
-  font-family: var(--font-serif), 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-size: clamp(1.8rem, 3vw, 2.7rem);
   font-weight: 400;
   letter-spacing: -0.03em;
@@ -1672,7 +1669,7 @@ html[data-landing-theme='dark']
   opacity: 1;
 }
 .wl-eyebrow {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.12em;
@@ -1785,7 +1782,7 @@ html[data-landing-theme='dark'] .landing-page {
   background: rgb(255 255 255 / 0.72);
   padding: 0.375rem 0.7rem 0.375rem 0.45rem;
   color: #52616d;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -1846,7 +1843,7 @@ html[data-landing-theme='dark'] .landing-page {
 }
 
 .landing-display {
-  font-family: var(--font-serif), 'Instrument Serif', Georgia, Cambria, serif;
+  font-family: var(--font-display), Georgia, Cambria, serif;
   font-weight: 400;
 }
 
@@ -1874,7 +1871,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-kicker,
 .landing-eyebrow {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.14em;
@@ -1900,7 +1897,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-radius: 999px;
   padding: 0.375rem 0.75rem;
   color: var(--landing-copy);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -2024,7 +2021,7 @@ html[data-landing-theme='dark'] .landing-page {
   background: var(--landing-success-bg);
   padding: 0.375rem 0.625rem;
   color: var(--landing-success);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -2047,7 +2044,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-block: 1px solid var(--landing-line);
   padding-block: 1rem;
   color: var(--landing-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.11em;
@@ -2101,7 +2098,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-radius: 999px;
   background: var(--landing-accent-wash);
   color: var(--landing-accent-strong);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
 }
@@ -2123,7 +2120,7 @@ html[data-landing-theme='dark'] .landing-page {
 .landing-note-label {
   flex: 0 0 auto;
   color: var(--landing-accent-strong);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.625rem;
   font-weight: 500;
   letter-spacing: 0.11em;
@@ -2144,7 +2141,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-status-cell strong {
   color: var(--landing-accent-strong);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -2325,7 +2322,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-radius: 999px;
   padding: 0.625rem 0.9rem 0.625rem 1rem;
   color: rgb(255 255 255 / 0.55);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.09em;
@@ -2417,7 +2414,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-radius: 999px;
   background: #1d2933;
   color: #ffffff;
-  font-family: var(--font-serif), Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-size: 0.95rem;
 }
 
@@ -2431,7 +2428,7 @@ html[data-landing-theme='dark'] .landing-page {
 .landing-sponsor-requirements span,
 .landing-window-legend,
 .landing-private-work p {
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6rem;
   letter-spacing: 0.1em;
   line-height: 1.4;
@@ -2537,7 +2534,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-radius: 999px;
   padding: 0.4rem 0.6rem;
   color: #737373;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.58rem;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -2659,7 +2656,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-ad-label {
   color: #34434f;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.58rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -2669,7 +2666,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-ad-example {
   color: rgb(52 67 79 / 0.62);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.54rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2680,7 +2677,7 @@ html[data-landing-theme='dark'] .landing-page {
   display: block;
   margin-block: 0.85rem 0.7rem;
   color: #2f3d49;
-  font-family: var(--font-serif), Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-size: clamp(1.55rem, 2.3vw, 2.1rem);
   font-weight: 400;
   letter-spacing: -0.035em;
@@ -2702,7 +2699,7 @@ html[data-landing-theme='dark'] .landing-page {
   border: 1px solid rgb(47 61 73 / 0.3);
   border-radius: 999px;
   padding: 0.35rem 0.5rem;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.52rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2753,7 +2750,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-dashboard-stats strong {
   color: #445361;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.78rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -2806,13 +2803,13 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-evidence-number {
   color: #a3a3a3;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.6rem;
 }
 
 .landing-evidence-list strong {
   color: #17623a;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.56rem;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -2828,7 +2825,7 @@ html[data-landing-theme='dark'] .landing-page {
   border-top: 1px solid rgb(23 25 28 / 0.09);
   padding-top: 0.75rem;
   color: #8a8d8c;
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.54rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -2936,7 +2933,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-product-fact dt {
   color: rgb(255 255 255 / 0.45);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.58rem;
   font-weight: 500;
   letter-spacing: 0.1em;
@@ -3074,7 +3071,7 @@ html[data-landing-theme='dark'] .landing-page {
 /* Landing refinement: a calmer type rhythm, stronger small-text contrast, and
    motion that describes a verified signal instead of decorating the page. */
 .landing-page {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-size: 1rem;
   line-height: 1.55;
   letter-spacing: -0.008em;
@@ -3083,7 +3080,7 @@ html[data-landing-theme='dark'] .landing-page {
 
 .landing-page > header,
 body:has(.landing-page) .site-footer {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: -0.006em;
 }
 
@@ -3094,7 +3091,7 @@ body:has(.landing-page) .site-footer :where(p, li) {
 
 .landing-page .landing-display,
 .landing-page .font-serif {
-  font-family: var(--font-serif), 'Instrument Serif', Georgia, Cambria, serif;
+  font-family: var(--font-display), Georgia, Cambria, serif;
   font-synthesis: none;
 }
 
@@ -3118,13 +3115,13 @@ body:has(.landing-page) .site-footer :where(p, li) {
 }
 
 .landing-type-subhead {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: -0.018em;
 }
 
 .landing-type-card-title {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-weight: 600;
   letter-spacing: -0.025em;
 }
@@ -3143,7 +3140,7 @@ body:has(.landing-page) .site-footer :where(p, li) {
 }
 
 .landing-type-stat {
-  font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.015em;
 }
@@ -3156,7 +3153,7 @@ body:has(.landing-page) .site-footer :where(p, li) {
 .landing-page .landing-kicker,
 .landing-page .landing-eyebrow,
 .landing-page .landing-chip {
-  font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
   font-synthesis: none;
 }
@@ -3631,13 +3628,13 @@ html[data-landing-theme='dark'] .landing-page .landing-showcase-footnote {
 .landing-page,
 .landing-page > header,
 body:has(.landing-page) .site-footer {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: -0.006em;
 }
 
 .landing-page .landing-display,
 .landing-page .font-serif {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-weight: 600;
   font-synthesis: none;
   letter-spacing: -0.04em;
@@ -3722,7 +3719,7 @@ html[data-landing-theme='dark'] body:has(.landing-page) {
 .landing-process-card h3,
 .landing-audience-card h3,
 .landing-privacy-card h3 {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-size: clamp(1.15rem, 2vw, 1.5rem);
   font-weight: 600;
   letter-spacing: -0.025em;
@@ -3736,7 +3733,7 @@ html[data-landing-theme='dark'] body:has(.landing-page) {
 .landing-note-label,
 .landing-proof-strip,
 .landing-status-cell strong {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   text-transform: none;
@@ -3796,7 +3793,7 @@ html[data-landing-theme='dark'] body:has(.landing-page) {
 .landing-ad-example,
 .landing-ad-dismiss,
 .landing-product-fact dt {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: 0.025em;
   text-transform: none;
 }
@@ -3879,7 +3876,7 @@ html[data-landing-theme='dark'] body:has(.landing-page) {
   border-color: var(--landing-line);
   background: var(--landing-card-subtle);
   color: var(--landing-copy);
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: 0.04em;
 }
 
@@ -3896,7 +3893,7 @@ html[data-landing-theme='dark'] body:has(.landing-page) {
 
 .landing-showcase-tabs button {
   border-radius: 0.65rem;
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -3968,7 +3965,7 @@ html[data-landing-theme='dark'] .landing-page .landing-product-stage {
 }
 
 .landing-planner-result-value {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   font-size: clamp(2.25rem, 4vw, 3rem);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -3977,7 +3974,7 @@ html[data-landing-theme='dark'] .landing-page .landing-product-stage {
 
 .landing-planner-result-label,
 .landing-planner-result > span:last-child {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
   letter-spacing: 0.01em;
   text-transform: none;
 }
@@ -3995,7 +3992,7 @@ html[data-landing-theme='dark'] .landing-page .landing-product-stage {
 
 .landing-planner-mode-toggle,
 .landing-planner-reset {
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-family: var(--font-ui), system-ui, sans-serif;
 }
 
 .landing-planner-choice:hover,
@@ -4188,7 +4185,7 @@ html:is(.dark, [data-landing-theme='dark']) .status-badge[data-status-tone='dang
 
 .status-badge--metadata {
   color: var(--ateva-muted-final);
-  font-family: var(--font-mono);
+  font-family: var(--font-utility);
   font-size: 0.68rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -5995,7 +5992,7 @@ html[data-landing-theme='dark'] .landing-terminal-wrap:focus-within .landing-ter
 
 .landing-terminal-step time {
   color: var(--landing-muted);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  font-family: var(--font-utility), ui-monospace, monospace;
   font-size: 0.62rem;
   line-height: 1.5;
   white-space: nowrap;

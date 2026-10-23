@@ -10,33 +10,25 @@ import { SkipLink } from '@/components/skip-link';
 
 import { Providers } from './providers';
 
-const inter = localFont({
-  src: [
-    { path: '../../public/fonts/inter-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/inter-500.ttf', weight: '500', style: 'normal' },
-    { path: '../../public/fonts/inter-600.ttf', weight: '600', style: 'normal' },
-    { path: '../../public/fonts/inter-700.ttf', weight: '700', style: 'normal' },
-  ],
-  variable: '--font-inter',
+const interTight = localFont({
+  src: [{ path: '../../public/fonts/inter-tight-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-display',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
-const instrumentSerif = localFont({
-  src: [
-    { path: '../../public/fonts/instrument-serif-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/instrument-serif-400-italic.ttf', weight: '400', style: 'italic' },
-  ],
-  variable: '--font-serif',
+const geist = localFont({
+  src: [{ path: '../../public/fonts/geist-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-ui',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
-const jetbrainsMono = localFont({
-  src: [
-    { path: '../../public/fonts/jetbrains-mono-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/jetbrains-mono-500.ttf', weight: '500', style: 'normal' },
-  ],
-  variable: '--font-mono',
+const geistMono = localFont({
+  src: [{ path: '../../public/fonts/geist-mono-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-utility',
   display: 'swap',
+  fallback: ['ui-monospace', 'monospace'],
 });
 
 const themeBootstrapScript = `
@@ -99,7 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       data-scroll-behavior="smooth"
       suppressHydrationWarning
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+      className={`${interTight.variable} ${geist.variable} ${geistMono.variable}`}
     >
       <body className="font-sans antialiased">
         <Script id="ateva-theme-bootstrap" strategy="beforeInteractive">

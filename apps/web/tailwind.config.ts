@@ -48,12 +48,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
-        // Without this key `font-serif` fell through to Tailwind's default
-        // (Georgia), so the Instrument Serif face imported in globals.css only
-        // ever rendered where a page hardcoded it in an inline style.
-        serif: ['var(--font-serif)', 'Instrument Serif', 'Georgia', 'Cambria', 'serif'],
+        sans: ['var(--font-ui)', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['var(--font-utility)', 'ui-monospace', 'monospace'],
+        // `font-serif` is kept as the key existing public-page headings use; it
+        // now resolves to the display face (Inter Tight), not a serif.
+        serif: ['var(--font-display)', 'system-ui', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.6s ease-out forwards',

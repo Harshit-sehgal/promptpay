@@ -9,22 +9,20 @@ export const contentType = 'image/png';
 /**
  * The social share card.
  *
- * Rendered as an editorial spread on paper white: serif display type with one
- * italicized sienna phrase, a single Blush Peach chip, and the three-bar mark.
+ * Rendered on paper white: heavy Inter Tight display type, a single Blush
+ * Peach chip, and the three-bar mark.
  * This mirrors the palette and claim of the homepage rather than inventing its
  * own visual language.
  *
  * Drawn with divs rather than the shared `BrandMark` SVG because this renders
  * through Satori, which supports only a flexbox subset and no CSS classes.
- * The serif faces are read from `public/fonts` and passed explicitly — Satori
- * has no access to `next/font`.
+ * The display face is read from `public/fonts` and passed explicitly — Satori
+ * has no access to `next/font`, and its font parser rejects variable fonts, so
+ * this loads a static ExtraBold instance cut from `inter-tight-var.ttf`.
  */
 export default async function OpengraphImage() {
   const fontsDir = path.join(process.cwd(), 'public', 'fonts');
-  const [serifRegular, serifItalic] = await Promise.all([
-    readFile(path.join(fontsDir, 'instrument-serif-400.ttf')),
-    readFile(path.join(fontsDir, 'instrument-serif-400-italic.ttf')),
-  ]);
+  const display = await readFile(path.join(fontsDir, 'inter-tight-800.ttf'));
 
   const bar = { height: 10, borderRadius: 3, background: '#17191c' };
 
@@ -61,27 +59,15 @@ export default async function OpengraphImage() {
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div
           style={{
-            fontFamily: 'Instrument Serif',
+            fontFamily: 'Inter Tight',
+            fontWeight: 800,
             fontSize: 88,
             lineHeight: 1.08,
             letterSpacing: -2,
             display: 'flex',
           }}
         >
-          Delivery verification for AI-agent apps
-        </div>
-        <div
-          style={{
-            fontFamily: 'Instrument Serif',
-            fontStyle: 'italic',
-            fontSize: 88,
-            lineHeight: 1.08,
-            letterSpacing: -2,
-            color: '#5d2a1a',
-            display: 'flex',
-          }}
-        >
-          without reading the work.
+          Your agent has been working for 0:05.
         </div>
       </div>
 
@@ -106,10 +92,7 @@ export default async function OpengraphImage() {
     </div>,
     {
       ...size,
-      fonts: [
-        { name: 'Instrument Serif', data: serifRegular, weight: 400, style: 'normal' },
-        { name: 'Instrument Serif', data: serifItalic, weight: 400, style: 'italic' },
-      ],
+      fonts: [{ name: 'Inter Tight', data: display, weight: 800, style: 'normal' }],
     },
   );
 }

@@ -32,19 +32,24 @@ describe('globals.css integrity', () => {
   });
 
   it('imports Tailwind and pulls no webfont from a third party', () => {
-    // Fonts are self-hosted through `next/font/local` in `layout.tsx` (Inter,
-    // JetBrains Mono, Instrument Serif). A remote `@import url(fonts.googleapis…)`
+    // Fonts are self-hosted through `next/font/local` in `layout.tsx` (Inter Tight,
+    // Geist, Geist Mono). A remote `@import url(fonts.googleapis…)`
     // would add a render-blocking third-party request the build cannot control.
     expect(css).toMatch(/@import ['"]tailwindcss['"];/);
     expect(css).not.toMatch(/@import\s+url\(/);
   });
 
-  it('has the serif wired as a local font, not merely referenced', () => {
-    // The failure mode this guards: `font-serif` classes shipped while the face
-    // was never loaded, so headings silently fell back to Georgia.
+  it('wires the three self-hosted families used by the design system', () => {
+    // The failure mode this guards: font classes shipped while the face was
+    // never loaded, so text silently fell back to a system font.
     const layout = readFileSync(join(__dirname, '..', 'app', 'layout.tsx'), 'utf8');
-    expect(layout).toMatch(/instrument-serif-400\.ttf/);
-    expect(layout).toMatch(/--font-serif/);
+    for (const file of ['inter-tight-var.ttf', 'geist-var.ttf', 'geist-mono-var.ttf']) {
+      expect(layout).toContain(file);
+    }
+    for (const v of ['--font-display', '--font-ui', '--font-utility']) {
+      expect(layout).toContain(v);
+    }
+    expect(layout).not.toMatch(/instrument-serif|jetbrains-mono/);
   });
 
   it('balances every brace', () => {
