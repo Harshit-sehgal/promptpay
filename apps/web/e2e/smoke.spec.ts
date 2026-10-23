@@ -32,9 +32,9 @@ test.describe('Landing page', () => {
     await expect(page.locator('h1').first()).toBeVisible();
     const nav = page.locator('nav').first();
     await expect(nav).toHaveCount(1);
-    // The primary nav is hidden below the md breakpoint (no mobile menu yet).
+    // The primary nav is hidden below 860px (narrow screens keep only the wordmark, picker and join button).
     const width = page.viewportSize()?.width ?? 0;
-    if (width >= 768) {
+    if (width >= 860) {
       await expect(nav).toBeVisible();
     } else {
       await expect(nav).toBeHidden();

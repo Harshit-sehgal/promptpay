@@ -253,21 +253,9 @@ body {
   outline: 2px solid var(--ateva-focus);
   outline-offset: 3px;
 }
-
 /* Shared public chrome. Public content keeps its own page structure; these
    rules only align the canvas, type, controls, and surfaces. */
-.site-header {
-  border-color: var(--public-line) !important;
-  background: color-mix(in srgb, var(--public-canvas) 96%, transparent) !important;
-  backdrop-filter: none;
-}
 
-.site-header__inner {
-  min-height: 4.25rem;
-}
-
-.site-header .theme-toggle,
-.auth-shell .theme-toggle,
 .app-sidebar .theme-toggle {
   min-height: 2.25rem;
   border: 1px solid var(--public-line-strong);
@@ -280,50 +268,17 @@ body {
   text-transform: none;
 }
 
-.site-header .theme-toggle:hover,
-.auth-shell .theme-toggle:hover,
 .app-sidebar .theme-toggle:hover {
   border-color: var(--ateva-blush-ink);
   background: var(--public-nested);
   color: var(--public-ink);
 }
 
-.site-header .theme-toggle__icon,
-.auth-shell .theme-toggle__icon,
 .app-sidebar .theme-toggle__icon {
   width: 1.5rem;
   height: 1.5rem;
   background: var(--ateva-blush);
   color: var(--ateva-blush-ink);
-}
-
-.site-header__cta {
-  background: var(--ateva-ink) !important;
-  color: #ffffff !important;
-}
-
-.site-header__cta:hover {
-  background: #303238 !important;
-}
-
-.site-header__menu-toggle {
-  border-color: var(--public-line-strong) !important;
-  background: transparent;
-  color: var(--public-ink) !important;
-}
-
-.site-header__menu-toggle:hover {
-  background: var(--public-nested) !important;
-}
-
-.site-header__menu-icon {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.site-header__mobile-nav {
-  border-color: var(--public-line) !important;
-  background: var(--public-canvas);
 }
 
 body:has(.site-header):not(:has(.home-page)) .site-footer {
@@ -1236,7 +1191,6 @@ body:has(.landing-page) .site-footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site-header__mobile-link,
   .auth-shell__legal a,
   .landing-verification-artifact,
   .landing-verification-story li,
@@ -4388,22 +4342,6 @@ body {
   outline: 2px solid var(--ateva-refine-ink) !important;
   outline-offset: 3px;
 }
-
-/* Shared chrome stays quiet and flat. The backdrop-blur class remains in the
-   component for compatibility, but the product does not depend on glass. */
-.site-header {
-  background: var(--ateva-refine-canvas) !important;
-  border-color: var(--ateva-refine-line) !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-}
-
-.site-header__inner {
-  min-height: 4.25rem;
-}
-
-.site-header .theme-toggle,
-.auth-shell .theme-toggle,
 .app-sidebar .theme-toggle {
   border: 0 !important;
   border-radius: 999px;
@@ -4414,48 +4352,25 @@ body {
   font-weight: 500;
 }
 
-.site-header .theme-toggle:hover,
-.auth-shell .theme-toggle:hover,
 .app-sidebar .theme-toggle:hover {
   background: var(--ateva-refine-inset) !important;
   color: var(--ateva-refine-ink) !important;
 }
 
-.site-header .theme-toggle__icon,
-.auth-shell .theme-toggle__icon,
 .app-sidebar .theme-toggle__icon {
   background: transparent !important;
   color: currentColor !important;
 }
 
-.site-header__cta,
 .landing-button--primary {
   background: var(--ateva-refine-action) !important;
   color: var(--ateva-refine-action-ink) !important;
   box-shadow: none !important;
 }
 
-.site-header__cta:hover,
 .landing-button--primary:hover {
   background: var(--ateva-refine-ink) !important;
   color: var(--ateva-refine-action-ink) !important;
-}
-
-.site-header__menu-toggle {
-  border-color: var(--ateva-refine-line-strong) !important;
-  background: transparent !important;
-  color: var(--ateva-refine-ink) !important;
-}
-
-.site-header__menu-toggle:hover,
-.site-header__mobile-link:hover {
-  background: var(--ateva-refine-inset) !important;
-  color: var(--ateva-refine-ink) !important;
-}
-
-.site-header__mobile-nav {
-  border-color: var(--ateva-refine-line) !important;
-  background: var(--ateva-refine-canvas) !important;
 }
 
 /* Public pages use rules and type for structure. A product surface or a real
@@ -5284,32 +5199,6 @@ body {
   box-shadow: none !important;
 }
 
-.site-header,
-body:has(.site-header):not(:has(.home-page)) .site-header {
-  background: var(--ateva-canvas-final) !important;
-  border-color: var(--ateva-line-final) !important;
-  backdrop-filter: none !important;
-}
-
-.site-header [class~='text-surface-950'],
-.site-header [class~='text-surface-900'],
-.site-header [class~='text-surface-800'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.site-header [class~='text-surface-700'],
-.site-header [class~='text-surface-600'] {
-  color: var(--ateva-copy-final) !important;
-}
-
-.site-header [class~='bg-surface-950'],
-.site-header .site-header__cta {
-  background: var(--ateva-action-final) !important;
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.site-header .theme-toggle,
-.auth-shell .theme-toggle,
 .app-sidebar .theme-toggle {
   min-height: 2.25rem;
   border: 0 !important;
@@ -5319,8 +5208,6 @@ body:has(.site-header):not(:has(.home-page)) .site-header {
   padding-inline: 0.25rem;
 }
 
-.site-header .theme-toggle:hover,
-.auth-shell .theme-toggle:hover,
 .app-sidebar .theme-toggle:hover {
   background: var(--ateva-subtle-final) !important;
   color: var(--ateva-ink-final) !important;
@@ -6374,22 +6261,6 @@ html:is(.dark, [data-landing-theme='dark']) .app-shell [class~='text-red-800'] {
   background-color: var(--public-canvas) !important;
 }
 
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='text-surface-950'],
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='text-surface-900'],
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='text-surface-800'] {
-  color: var(--public-ink) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='text-surface-700'],
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='text-surface-600'] {
-  color: var(--public-copy) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) .site-header [class~='bg-surface-950'] {
-  background-color: var(--public-ink) !important;
-  color: var(--public-canvas) !important;
-}
-
 body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-950'],
 body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-900'],
 body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-800'] {
@@ -6404,22 +6275,6 @@ body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-
 body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-500'],
 body:has(.site-header):not(:has(.home-page)) .site-footer [class~='text-surface-400'] {
   color: var(--public-muted) !important;
-}
-
-html:is(.dark, [data-landing-theme='dark'])
-  body:has(.site-header):not(:has(.home-page))
-  .site-header
-  [class~='bg-surface-950'] {
-  background-color: var(--public-ink) !important;
-  color: var(--public-canvas) !important;
-}
-
-html:is(.dark, [data-landing-theme='dark'])
-  body:has(.site-header):not(:has(.home-page))
-  .site-header
-  .site-header__cta {
-  background-color: var(--public-ink) !important;
-  color: var(--public-canvas) !important;
 }
 
 .public-page main [class~='bg-white'] {
@@ -7006,51 +6861,6 @@ html:is(.dark, [data-landing-theme='dark'])
     transform: none;
   }
 }
-
-/* Narrow screens need the same quiet chrome without forcing the public CTA
-   or theme control outside the viewport. The full CTA remains available at
-   normal mobile widths; only sub-390px screens use its shorter label. */
-.site-header__cta-label--short {
-  display: none;
-}
-
-@media (max-width: 639px) {
-  .site-header .theme-toggle {
-    gap: 0;
-    padding-inline: 0.45rem;
-  }
-
-  .site-header .theme-toggle__label {
-    display: none;
-  }
-
-  .site-header__inner {
-    gap: 0.5rem;
-  }
-
-  .site-header__inner > div:last-child {
-    gap: 0.35rem;
-  }
-}
-
-@media (max-width: 389px) {
-  .site-header__inner {
-    padding-inline: 0.75rem;
-  }
-
-  .site-header__cta {
-    padding-inline: 0.7rem !important;
-  }
-
-  .site-header__cta-label--full {
-    display: none;
-  }
-
-  .site-header__cta-label--short {
-    display: inline;
-  }
-}
-
 /* On small screens the hero keeps its statement and primary action together,
    then lets the product evidence follow as the supporting proof. This keeps
    the first viewport useful for both comprehension and conversion. */
@@ -7429,7 +7239,6 @@ html:is(.dark, [data-landing-theme='dark']) .auth-shell [class~='text-amber-950'
   color: var(--public-ink) !important;
 }
 
-.site-header .fill-brand-500,
 .auth-shell .fill-brand-500,
 .app-shell .fill-brand-500 {
   fill: currentColor !important;
@@ -7795,8 +7604,6 @@ body:has(.landing-page) .site-footer [class~='text-brand-600'] {
 
 /* Last cascade guard: keep the final shared language authoritative after the
    legacy compatibility layers above it. */
-.site-header .theme-toggle,
-.auth-shell .theme-toggle,
 .app-sidebar .theme-toggle {
   color: var(--ateva-copy-final) !important;
 }
@@ -8471,35 +8278,6 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-verification-
   color: var(--ateva-action-ink-final);
 }
 
-.site-header__nav-link--active {
-  background-size: 100% 1px;
-  color: var(--ateva-ink-final) !important;
-}
-
-.site-header__mobile-link--active {
-  background: var(--ateva-subtle-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .site-header__mobile-nav {
-    animation: ateva-mobile-nav-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
-    transform-origin: top center;
-  }
-}
-
-@keyframes ateva-mobile-nav-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, -0.35rem, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 /* A public support page is a directory, not a dashboard of tiles. Preserve
    the existing links and copy, but let rules and columns carry the grouping. */
 .public-page
@@ -8649,7 +8427,6 @@ body:has(.site-header):not(:has(.home-page)) main .public-advertiser-form__surfa
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site-header__mobile-nav,
   .public-page--utility .public-support__links-grid a {
     animation: none !important;
     transition: none !important;
@@ -9050,9 +8827,10 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-planner .land
   border-color: var(--ink);
 }
 
-/* On phones the menu is pinned 16px from both screen edges under the header.
-   The trigger stops being the containing block so the offsets reach the
-   viewport; mount the picker outside any backdrop-filter ancestor. */
+/* On phones the menu is pinned 16px from both screen edges under the header
+   (12px inset + 64px bar + 8px gap). The trigger stops being the containing
+   block so the offsets reach the viewport; mount the picker outside any
+   backdrop-filter ancestor. */
 @media (max-width: 639px) {
   .palette-picker {
     position: static;
@@ -9060,11 +8838,142 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-planner .land
 
   .palette-picker__menu {
     position: fixed;
-    top: 72px;
+    top: 84px;
     right: 16px;
     left: 16px;
     width: auto;
     transform-origin: top center;
+  }
+}
+
+/* Public header: an inset sticky bar, transparent at the top of the page and a
+   frosted-glass pill once it has scrolled (data-scrolled, set at >24px). It is
+   64px tall so the -64px top margin of the homepage hero tucks it underneath. The glass
+   is the separate .site-header__glass layer, never a filter on the bar: the
+   palette picker lives inside the bar, and a backdrop-filter ancestor would
+   become the containing block for its fixed phone menu. */
+.site-header {
+  position: sticky;
+  top: 12px;
+  z-index: 50;
+  padding: 0 clamp(20px, 4vw, 48px);
+  color: var(--ink);
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.site-header__bar {
+  position: relative;
+  /* Own stacking context, so the glass layer can sit at z-index -1: behind the
+     content of the bar, not blurring it. isolation never affects fixed positioning. */
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  max-width: 1240px;
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 18px;
+}
+
+.site-header__glass {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-header__glass {
+    transition: opacity 0.4s;
+  }
+}
+
+.site-header[data-scrolled] .site-header__glass {
+  opacity: 1;
+}
+
+.site-header__brand {
+  margin-right: auto;
+  border-radius: 6px;
+  color: var(--ink);
+  font:
+    800 20px var(--font-display),
+    sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.site-header__nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.site-header__nav-link {
+  border-radius: 4px;
+  color: var(--copy);
+  transition: color 0.2s;
+}
+
+.site-header__nav-link:hover {
+  color: var(--ink);
+}
+
+.site-header__cta {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.site-header__cta-label--short {
+  display: none;
+}
+
+.site-header :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* Narrow screens keep three controls: wordmark, palette picker, join button. */
+@media (max-width: 859px) {
+  .site-header__nav,
+  .site-header__login {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .site-header__bar {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 389px) {
+  .site-header {
+    padding: 0 12px;
+  }
+
+  .site-header__bar {
+    padding: 0 12px;
+  }
+
+  /* Only when a distinct short label exists; otherwise the full one stays. */
+  .site-header__cta-label--full:has(+ .site-header__cta-label--short) {
+    display: none;
+  }
+
+  .site-header__cta-label--short {
+    display: inline;
   }
 }
 

@@ -102,11 +102,6 @@ export function PalettePicker() {
   };
 
   const onOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    if (event.key === 'Escape') {
-      setOpen(false);
-      triggerRef.current?.focus();
-      return;
-    }
     const step = ARROW_STEP[event.key];
     if (!step) return;
     event.preventDefault();
@@ -115,10 +110,18 @@ export function PalettePicker() {
     optionRefs.current[next]?.focus();
   };
 
+  // Escape closes from anywhere inside the picker, the trigger included. Key
+  // events from the options bubble up here too.
+  const onRootKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || !open) return;
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
   const current = PALETTES.find((p) => p.id === paletteId);
 
   return (
-    <div className="palette-picker" ref={rootRef}>
+    <div className="palette-picker" ref={rootRef} onKeyDown={onRootKeyDown}>
       <button
         ref={triggerRef}
         type="button"

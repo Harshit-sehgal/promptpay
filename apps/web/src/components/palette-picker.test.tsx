@@ -116,6 +116,18 @@ describe('PalettePicker', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Background: Warm' }));
   });
 
+  it('closes on Escape while the trigger itself has focus', async () => {
+    await renderPicker();
+    openMenu();
+
+    const trigger = screen.getByRole('button', { name: 'Background: Warm' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('closes on a press outside, but not inside, the picker', async () => {
     await renderPicker();
     openMenu();

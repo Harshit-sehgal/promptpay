@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { BrandMark } from './brand-mark';
-import { ThemeToggle } from './theme-toggle';
+import { PalettePicker } from './palette-picker';
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -58,7 +58,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
 
         <div className="auth-shell__content relative flex min-h-[640px] flex-col items-center justify-center p-5 sm:p-10 lg:p-14">
           <div className="auth-shell__toolbar">
-            <ThemeToggle />
+            <PalettePicker />
           </div>
           <Link
             href="/"
