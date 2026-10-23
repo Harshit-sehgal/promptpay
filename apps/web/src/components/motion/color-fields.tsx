@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-type ColorField = {
+export type ColorField = {
   /** Which palette colour to use: --c1 to --c4. */
   color: 1 | 2 | 3 | 4;
   /** Diameter in px. */
