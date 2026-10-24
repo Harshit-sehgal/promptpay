@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
@@ -78,21 +79,20 @@ export default function AdminWaitlistPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Advertiser waitlist</h1>
-        <p className="text-ink-200 text-sm">
-          Review sponsor-interest signups captured while advertiser billing is closed.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Advertiser waitlist"
+        lede="Review sponsor-interest signups captured while advertiser billing is closed."
+      />
 
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-ink-300">Status</span>
+          <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">Status</span>
           <select
             id="admin-waitlist-status"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as '' | WaitlistStatus)}
-            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
+            className="px-4 py-2 text-sm"
           >
             {STATUS_OPTIONS.map((option) => (
               <option key={option.value || 'all'} value={option.value}>
@@ -101,28 +101,33 @@ export default function AdminWaitlistPage() {
             ))}
           </select>
         </label>
-        <p className="text-ink-300 text-sm" aria-live="polite">
+        <p className="text-sm text-[var(--muted)]" aria-live="polite">
           {total.toLocaleString()} signup{total === 1 ? '' : 's'}
         </p>
       </div>
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button
-            type="button"
-            onClick={loadWaitlist}
-            className="text-red-300 text-xs underline mt-1"
-          >
-            Retry
-          </button>
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            <button
+              type="button"
+              onClick={loadWaitlist}
+              className="dash-btn dash-btn--glass dash-btn--sm"
+            >
+              Retry
+            </button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
-      <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
+      <Panel label="Advertiser waitlist" flush>
         {!loading && !error && entries.length === 0 ? (
-          <div className="text-ink-300 text-sm py-12 text-center">
+          <div className="py-12 text-center text-sm text-[var(--muted)]">
             No waitlist signups match this filter.
           </div>
         ) : (
@@ -132,22 +137,22 @@ export default function AdminWaitlistPage() {
             role="region"
             aria-label="Advertiser waitlist table, scrolls horizontally"
           >
-            <table className="w-full min-w-[900px] text-sm">
-              <thead className="bg-ink-700/50 border-b border-ink-600/30">
+            <table className="min-w-[900px]">
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Joined</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Email</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Company</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Country</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Consent</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Source</th>
+                  <th>Joined</th>
+                  <th>Email</th>
+                  <th>Company</th>
+                  <th>Country</th>
+                  <th>Status</th>
+                  <th>Consent</th>
+                  <th>Source</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-600/20">
+              <tbody>
                 {entries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
-                    <td className="px-4 py-3 text-ink-200 text-xs">
+                  <tr key={entry.id}>
+                    <td className="text-xs">
                       <time
                         dateTime={entry.createdAt}
                         title={new Date(entry.createdAt).toLocaleString()}
@@ -155,24 +160,24 @@ export default function AdminWaitlistPage() {
                         {formatRelativeTime(entry.createdAt)}
                       </time>
                     </td>
-                    <td className="px-4 py-3 text-white">{entry.email}</td>
-                    <td className="px-4 py-3 text-ink-200">{entry.company || '—'}</td>
-                    <td className="px-4 py-3 text-ink-200">{entry.country || '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="text-[var(--ink)]">{entry.email}</td>
+                    <td>{entry.company || '—'}</td>
+                    <td>{entry.country || '—'}</td>
+                    <td>
                       <StatusBadge status={formatStatus(entry.status)} />
                     </td>
-                    <td className="px-4 py-3 text-ink-200">{entry.consent ? 'Granted' : '—'}</td>
-                    <td className="px-4 py-3 text-ink-300 text-xs">{entry.source}</td>
+                    <td>{entry.consent ? 'Granted' : '—'}</td>
+                    <td className="text-xs">{entry.source}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Panel>
 
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-ink-300">
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-[var(--muted)]">
           Page {page} of {totalPages}
         </span>
         <div className="flex gap-2">
@@ -180,7 +185,7 @@ export default function AdminWaitlistPage() {
             type="button"
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             disabled={page <= 1 || loading}
-            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+            className="dash-btn dash-btn--glass dash-btn--sm"
           >
             Previous
           </button>
@@ -188,14 +193,14 @@ export default function AdminWaitlistPage() {
             type="button"
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             disabled={page >= totalPages || loading}
-            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+            className="dash-btn dash-btn--glass dash-btn--sm"
           >
             Next
           </button>
         </div>
       </div>
 
-      <p className="mt-5 text-xs text-ink-500">
+      <p className="text-xs text-[var(--muted)]">
         Read-only view. Waitlist status changes and GDPR erasure are handled through separate
         operator workflows.
       </p>

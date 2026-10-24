@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AccountErasure } from '@/components/account-erasure';
+import { Notice, PageHeader, Panel, PanelHeader } from '@/components/dash';
 import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { stringifyApiData } from '@/lib/api/client';
@@ -52,36 +53,37 @@ export default function AdvertiserSettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <div className="mb-8">
-        <h1 className="mb-2 text-3xl font-bold tracking-tight text-surface-900">Settings</h1>
-        <p className="text-sm text-surface-500">Manage your advertiser data and account security</p>
-      </div>
+    <>
+      <PageHeader
+        eyebrow="Advertiser"
+        title="Settings"
+        lede="Manage your advertiser data and account security"
+      />
 
       {exportError && (
-        <div className="mb-6 rounded-xl border border-red-200/60 bg-red-50 p-4">
-          <p className="text-sm text-red-600">{exportError}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {exportError}
+        </Notice>
       )}
 
-      <div className="space-y-6">
-        <section className="rounded-3xl border border-surface-200/80 bg-white p-7 shadow-sm">
-          <h2 className="mb-2 text-[16px] font-bold text-surface-900">Export my data</h2>
-          <p className="mb-4 text-xs text-surface-500">
+      <div className="grid max-w-2xl gap-5">
+        <Panel label="Export my data">
+          <PanelHeader title="Export my data" />
+          <p className="mb-4 text-xs text-[var(--copy)]">
             Download a recent self-service JSON snapshot of your profile, campaigns, creatives,
             billing ledger, and consent records. High-volume sections are capped and marked in
-            <code className="mx-1 font-mono">exportMeta</code>; contact support for a
-            compliance-grade full export.
+            <code className="mx-1">exportMeta</code>; contact support for a compliance-grade full
+            export.
           </p>
           <button
             type="button"
             onClick={handleExport}
             disabled={exportBusy}
-            className="rounded-xl border border-surface-200 bg-surface-50 px-6 py-2.5 text-sm font-medium text-surface-600 transition-colors hover:bg-surface-100/50 hover:text-surface-900"
+            className="dash-btn dash-btn--glass dash-btn--md"
           >
             {exportBusy ? 'Preparing…' : 'Export my data'}
           </button>
-        </section>
+        </Panel>
 
         <TwoFactorEnrolment
           initialEnabled={twoFactorEnabled}
@@ -104,6 +106,6 @@ export default function AdvertiserSettingsPage() {
           accountEmail={user?.email}
         />
       </div>
-    </div>
+    </>
   );
 }

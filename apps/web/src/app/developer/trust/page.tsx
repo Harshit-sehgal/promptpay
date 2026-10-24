@@ -2,7 +2,8 @@
 
 import type { AxiosResponse } from 'axios';
 import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Pill, Stat, type Tone } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { developerApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
@@ -46,28 +47,26 @@ export default function DevTrustPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const bandColor = (band: TrustInfo['band']) => {
+  const bandTone = (band: TrustInfo['band']): Tone => {
     switch (band) {
       case 'excellent':
-        return 'text-emerald-600';
       case 'high':
-        return 'text-brand-600';
+        return 'ok';
       case 'medium':
-        return 'text-amber-600';
+        return 'warn';
       case 'low':
       default:
-        return 'text-rose-600';
+        return 'bad';
     }
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Trust & fraud</h1>
-        <p className="text-surface-500 text-sm font-normal">
-          How your account is scored for fraud-risk. Higher trust leads to faster payouts.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        eyebrow="Developer"
+        title="Trust & fraud"
+        lede="How your account is scored for fraud-risk. Higher trust leads to faster payouts."
+      />
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -76,86 +75,80 @@ export default function DevTrustPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm font-normal">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {!loading && !error && !data && (
-        <div className="bg-white border border-surface-200/80 rounded-lg p-8 text-center shadow-sm">
-          <p className="text-surface-500 text-sm font-normal">
+        <Panel label="Trust details unavailable">
+          <p className="text-center text-sm text-[var(--muted)]">
             Trust details are not available yet.
           </p>
-        </div>
+        </Panel>
       )}
 
       {data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard
-              label="Trust score"
-              value={`${data.score}/100`}
-              valueColor={bandColor(data.band)}
-              subtitle={`Band: ${data.band.toUpperCase()}`}
-              variant="light"
-            />
-            <StatCard
-              label="Open fraud flags"
-              value={data.openFlags.length.toString()}
-              valueColor={data.openFlags.length > 0 ? 'text-rose-600' : undefined}
-              variant="light"
-            />
-            <StatCard
-              label="Recent penalties"
-              value={data.recentPenalties.length.toString()}
-              variant="light"
-            />
+          <div className="dash-grid dash-grid--3">
+            <Panel label="Trust score">
+              <Stat
+                label="Trust score"
+                value={`${data.score}/100`}
+                detail={
+                  <Pill tone={bandTone(data.band)}>{`Band: ${data.band.toUpperCase()}`}</Pill>
+                }
+              />
+            </Panel>
+            <Panel label="Open fraud flags">
+              <Stat label="Open fraud flags" value={data.openFlags.length.toString()} />
+            </Panel>
+            <Panel label="Recent penalties">
+              <Stat label="Recent penalties" value={data.recentPenalties.length.toString()} />
+            </Panel>
           </div>
 
           {/* Score breakdown */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Score breakdown</h2>
+          <Panel label="Score breakdown">
+            <PanelHeader title="Score breakdown" />
             <div className="space-y-6">
               {data.factors.map((factor) => {
                 const pct = (factor.points / factor.maxPoints) * 100;
                 return (
                   <div key={factor.key}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-surface-800 font-medium text-sm">{factor.label}</span>
-                      <span className="text-surface-900 font-semibold font-mono text-sm">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-sm font-medium text-[var(--ink)]">{factor.label}</span>
+                      <span className="dash-mono text-sm text-[var(--ink)]">
                         {factor.points}/{factor.maxPoints}
                       </span>
                     </div>
-                    <div className="h-2 bg-surface-100 rounded-full overflow-hidden">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--hair)]">
                       <div
-                        className="h-full bg-brand-500 transition-all duration-500"
+                        className="h-full rounded-full bg-[var(--ink)] transition-all duration-500 motion-reduce:transition-none"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <p className="text-surface-400 text-xs mt-1.5 font-normal">{factor.detail}</p>
+                    <p className="mt-1.5 text-xs text-[var(--muted)]">{factor.detail}</p>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Panel>
 
           {/* Open flags */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Open fraud flags</h2>
+          <Panel label="Open fraud flags list" flush>
+            <PanelHeader title="Open fraud flags" />
             {data.openFlags.length === 0 ? (
-              <p className="text-surface-400 text-sm py-4 text-center font-normal">
+              <p className="px-[22px] pb-6 pt-2 text-center text-sm text-[var(--muted)]">
                 No open flags. Keep your activity clean.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="dash-rows">
                 {data.openFlags.map((flag) => (
-                  <div
-                    key={flag.id}
-                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5 border-l-2 border-l-amber-500"
-                  >
+                  <div key={flag.id} className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-surface-900 font-medium text-sm">{flag.reason}</p>
-                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
+                      <p className="text-sm font-medium text-[var(--ink)]">{flag.reason}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
                         Detected {formatRelativeTime(flag.createdAt)}
                       </p>
                     </div>
@@ -164,25 +157,22 @@ export default function DevTrustPage() {
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
 
           {/* Recent penalties */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent penalties</h2>
+          <Panel label="Recent penalties list" flush>
+            <PanelHeader title="Recent penalties" />
             {data.recentPenalties.length === 0 ? (
-              <p className="text-surface-400 text-sm py-4 text-center font-normal">
+              <p className="px-[22px] pb-6 pt-2 text-center text-sm text-[var(--muted)]">
                 No penalty history. Stay active and verified to keep your score high.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="dash-rows">
                 {data.recentPenalties.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5"
-                  >
+                  <div key={p.id} className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-surface-900 font-medium text-sm">{p.description}</p>
-                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
+                      <p className="text-sm font-medium text-[var(--ink)]">{p.description}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
                         {formatRelativeTime(p.appliedAt)}
                       </p>
                     </div>
@@ -191,9 +181,9 @@ export default function DevTrustPage() {
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
-    </div>
+    </>
   );
 }

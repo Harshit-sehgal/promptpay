@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, Pill } from '@/components/dash';
 import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi, campaignApi } from '@/lib/api/services';
@@ -132,36 +133,46 @@ export default function AdminCampaignsPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Campaign approvals</h1>
-        <p className="text-ink-200 text-sm">
-          Review campaigns and their creatives before activation
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Campaign approvals"
+        lede="Review campaigns and their creatives before activation"
+      />
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-300 text-xs mt-1 underline">
-            Dismiss
-          </button>
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="dash-btn dash-btn--ghost dash-btn--sm"
+            >
+              Dismiss
+            </button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
       {campaigns.length === 0 && !loading ? (
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-300 text-sm">No campaigns awaiting review.</p>
-        </div>
+        <Panel label="No campaigns awaiting review">
+          <p className="py-8 text-center text-sm text-[var(--muted)]">
+            No campaigns awaiting review.
+          </p>
+        </Panel>
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-5">
           {campaigns.map((c) => (
-            <div key={c.id} className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+            <Panel key={c.id} label={c.title || c.name}>
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={c.status} />
-                  <h3 className="text-white font-medium">{c.title || c.name}</h3>
-                  <span className="text-ink-500 text-xs capitalize">
+                  <h3 className="font-medium text-[var(--ink)]">{c.title || c.name}</h3>
+                  <span className="text-xs text-[var(--muted)] capitalize">
                     {c.category?.replace('_', ' ')}
                   </span>
                 </div>
@@ -169,43 +180,43 @@ export default function AdminCampaignsPage() {
                   <button
                     onClick={() => setRejectModalFor(c)}
                     disabled={processing === c.id}
-                    className="bg-ink-700 hover:bg-ink-600 text-red-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                    className="dash-btn dash-btn--glass dash-btn--sm"
                   >
                     Reject
                   </button>
                   <button
                     onClick={() => handleApprove(c.id)}
                     disabled={processing === c.id}
-                    className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                    className="dash-btn dash-btn--primary dash-btn--sm"
                   >
                     {processing === c.id ? 'Processing...' : 'Approve Campaign'}
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+              <div className="mb-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                 <div>
-                  <p className="text-ink-500 text-xs">Advertiser</p>
-                  <p className="text-white text-xs">
+                  <p className="text-xs text-[var(--muted)]">Advertiser</p>
+                  <p className="text-xs text-[var(--ink)]">
                     {c.advertiser?.companyName || c.advertiserEmail || '—'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-ink-500 text-xs">Bid</p>
-                  <p className="text-white font-mono">
+                  <p className="text-xs text-[var(--muted)]">Bid</p>
+                  <p className="dash-mono text-[var(--ink)]">
                     {formatCurrency(c.bidAmountMinor, c.currency)}/
                     {c.bidType === 'cpm' ? '1k imp' : 'click'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-ink-500 text-xs">Budget</p>
-                  <p className="text-white font-mono">
+                  <p className="text-xs text-[var(--muted)]">Budget</p>
+                  <p className="dash-mono text-[var(--ink)]">
                     {formatCurrency(c.budgetTotalMinor, c.currency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-ink-500 text-xs">Submitted</p>
-                  <p className="text-ink-200 text-xs">
+                  <p className="text-xs text-[var(--muted)]">Submitted</p>
+                  <p className="text-xs text-[var(--copy)]">
                     {formatRelativeTime(c.submittedAt || c.createdAt)}
                   </p>
                 </div>
@@ -213,36 +224,38 @@ export default function AdminCampaignsPage() {
 
               {/* Creatives section */}
               {c.creatives && c.creatives.length > 0 && (
-                <div className="border-t border-ink-600/30 pt-3 mt-3">
+                <div className="mt-3 border-t border-[var(--hair)] pt-3">
                   <button
                     onClick={() => setExpandedCampaign(expandedCampaign === c.id ? null : c.id)}
                     aria-expanded={expandedCampaign === c.id}
                     aria-controls={`creative-list-${c.id}`}
-                    className="text-brand-400 hover:text-brand-300 text-xs font-medium mb-2 flex items-center gap-1"
+                    className="mb-2 flex items-center gap-1 text-xs font-medium text-[var(--ink)]"
                   >
                     {expandedCampaign === c.id ? '▼' : '▶'} {c.creatives.length} creative
                     {c.creatives.length !== 1 ? 's' : ''}
-                    <span className="text-ink-500 ml-1">
+                    <span className="ml-1 text-[var(--muted)]">
                       ({c.creatives.filter((cr) => cr.status === 'approved').length} approved,{' '}
                       {c.creatives.filter((cr) => cr.status === 'pending_review').length} pending)
                     </span>
                   </button>
 
                   {expandedCampaign === c.id && (
-                    <div id={`creative-list-${c.id}`} className="space-y-2 mt-2">
+                    <div id={`creative-list-${c.id}`} className="mt-2 space-y-2">
                       {c.creatives.map((cr) => (
                         <div
                           key={cr.id}
-                          className="bg-ink-700/50 border border-ink-600/20 rounded-lg p-3 flex items-center justify-between"
+                          className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-3"
                         >
-                          <div className="flex-1 min-w-0 mr-4">
-                            <div className="flex items-center gap-2 mb-1">
+                          <div className="mr-4 min-w-0 flex-1">
+                            <div className="mb-1 flex items-center gap-2">
                               <StatusBadge status={cr.status} />
-                              <span className="text-ink-200 text-xs truncate">
+                              <span className="truncate text-xs text-[var(--copy)]">
                                 {cr.displayDomain}
                               </span>
                             </div>
-                            <p className="text-white text-xs truncate">{cr.sponsoredMessage}</p>
+                            <p className="truncate text-xs text-[var(--ink)]">
+                              {cr.sponsoredMessage}
+                            </p>
                             <a
                               href={
                                 /^https?:\/\//i.test(cr.destinationUrl ?? '')
@@ -251,44 +264,40 @@ export default function AdminCampaignsPage() {
                               }
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-brand-500 hover:text-brand-400 text-xs truncate block mt-0.5"
+                              className="mt-0.5 block truncate text-xs text-[var(--ink)] underline"
                             >
                               {cr.destinationUrl}
                             </a>
                           </div>
                           {(cr.status === 'pending_review' || cr.status === 'draft') && (
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex flex-shrink-0 items-center gap-2">
                               <button
                                 onClick={() => {
                                   setCreativeRejectFor(cr);
                                   setCreativeRejectReason('');
                                 }}
                                 disabled={processing === cr.id}
-                                className="bg-ink-600 hover:bg-ink-500 text-red-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                className="dash-btn dash-btn--glass dash-btn--sm"
                               >
                                 Reject
                               </button>
                               <button
                                 onClick={() => handleApproveCreative(cr.id)}
                                 disabled={processing === cr.id}
-                                className="bg-emerald-500/80 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+                                className="dash-btn dash-btn--primary dash-btn--sm"
                               >
                                 {processing === cr.id ? '...' : 'Approve'}
                               </button>
                             </div>
                           )}
-                          {cr.status === 'approved' && (
-                            <span className="text-emerald-400 text-xs font-medium px-3 py-1.5">
-                              ✓ Approved
-                            </span>
-                          )}
+                          {cr.status === 'approved' && <Pill tone="ok">✓ Approved</Pill>}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
               )}
-            </div>
+            </Panel>
           ))}
         </div>
       )}
@@ -303,11 +312,11 @@ export default function AdminCampaignsPage() {
           }}
           labelledBy="admin-reject-campaign-title"
         >
-          <h3 id="admin-reject-campaign-title" className="text-white font-semibold mb-2">
+          <h3 id="admin-reject-campaign-title" className="mb-2 font-semibold text-[var(--ink)]">
             Reject campaign
           </h3>
-          <p className="text-ink-300 text-sm mb-4">
-            <span className="text-white">{rejectModalFor.title || rejectModalFor.name}</span>
+          <p className="mb-4 text-sm text-[var(--muted)]">
+            <span className="text-[var(--ink)]">{rejectModalFor.title || rejectModalFor.name}</span>
           </p>
           <textarea
             value={rejectReason}
@@ -315,7 +324,7 @@ export default function AdminCampaignsPage() {
             placeholder="Reason (required) — visible to advertiser"
             rows={3}
             required
-            className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+            className="mb-4 w-full px-4 py-3"
           />
           <div className="flex items-center gap-3 justify-end">
             <button
@@ -323,14 +332,14 @@ export default function AdminCampaignsPage() {
                 setRejectModalFor(null);
                 setRejectReason('');
               }}
-              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--glass dash-btn--md"
             >
               Cancel
             </button>
             <button
               onClick={handleReject}
               disabled={!rejectReason.trim() || processing === rejectModalFor.id}
-              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--danger dash-btn--md"
             >
               Reject
             </button>
@@ -348,20 +357,22 @@ export default function AdminCampaignsPage() {
           }}
           labelledBy="admin-reject-creative-title"
         >
-          <h3 id="admin-reject-creative-title" className="text-white font-semibold mb-2">
+          <h3 id="admin-reject-creative-title" className="mb-2 font-semibold text-[var(--ink)]">
             Reject creative
           </h3>
-          <p className="text-ink-300 text-sm mb-4">
-            Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>
+          <p className="mb-4 text-sm text-[var(--muted)]">
+            Domain: <span className="text-[var(--ink)]">{creativeRejectFor.displayDomain}</span>
           </p>
-          <p className="text-white text-xs mb-4 truncate">{creativeRejectFor.sponsoredMessage}</p>
+          <p className="mb-4 truncate text-xs text-[var(--ink)]">
+            {creativeRejectFor.sponsoredMessage}
+          </p>
           <textarea
             value={creativeRejectReason}
             onChange={(e) => setCreativeRejectReason(e.target.value)}
             placeholder="Reason (required) — visible to advertiser"
             rows={3}
             required
-            className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+            className="mb-4 w-full px-4 py-3"
           />
           <div className="flex items-center gap-3 justify-end">
             <button
@@ -369,14 +380,14 @@ export default function AdminCampaignsPage() {
                 setCreativeRejectFor(null);
                 setCreativeRejectReason('');
               }}
-              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--glass dash-btn--md"
             >
               Cancel
             </button>
             <button
               onClick={handleRejectCreativeConfirm}
               disabled={!creativeRejectReason.trim() || processing === creativeRejectFor.id}
-              className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--danger dash-btn--md"
             >
               Reject
             </button>
@@ -386,23 +397,23 @@ export default function AdminCampaignsPage() {
 
       {/* Pagination (A-077) */}
       {total > limit && (
-        <div className="mt-6 flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-4">
           <button
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+            className="dash-btn dash-btn--glass dash-btn--md"
           >
             Previous
           </button>
-          <span className="text-ink-300 text-sm">
+          <span className="text-sm text-[var(--muted)]">
             Page {page} of {Math.max(1, Math.ceil(total / limit))}
           </span>
           <button
             type="button"
             onClick={() => setPage((p) => p + 1)}
             disabled={page >= Math.ceil(total / limit)}
-            className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+            className="dash-btn dash-btn--glass dash-btn--md"
           >
             Next
           </button>

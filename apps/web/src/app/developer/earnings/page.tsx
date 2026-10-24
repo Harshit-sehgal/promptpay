@@ -2,7 +2,8 @@
 
 import type { AxiosResponse } from 'axios';
 import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, Stat } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { ledgerApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
@@ -55,51 +56,51 @@ export default function DevEarningsPage() {
     }, {}) || {};
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Earnings ledger</h1>
-        <p className="text-surface-500 text-sm font-normal">
-          Every earning entry with status and availability date
-        </p>
-      </div>
+    <>
+      <PageHeader
+        eyebrow="Developer"
+        title="Earnings ledger"
+        lede="Every earning entry with status and availability date"
+      />
 
       {/* Status summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Shown estimated"
-          value={formatCurrencyBreakdown(totalsByStatus.estimated || {})}
-          subtitle="Pending hold period"
-          variant="light"
-        />
-        <StatCard
-          label="Shown pending"
-          value={formatCurrencyBreakdown(totalsByStatus.pending || {})}
-          subtitle="Awaiting confirmation"
-          valueColor="text-amber-600"
-          variant="light"
-        />
-        <StatCard
-          label="Shown confirmed"
-          value={formatCurrencyBreakdown(totalsByStatus.confirmed || {})}
-          valueColor="text-emerald-600"
-          subtitle="Available for payout"
-          variant="light"
-        />
-        <StatCard
-          label="Shown held"
-          value={formatCurrencyBreakdown(totalsByStatus.held || {})}
-          valueColor="text-rose-600"
-          subtitle="Under review"
-          variant="light"
-        />
+      <div className="dash-grid dash-grid--4">
+        <Panel label="Shown estimated">
+          <Stat
+            label="Shown estimated"
+            value={formatCurrencyBreakdown(totalsByStatus.estimated || {})}
+            detail="Pending hold period"
+          />
+        </Panel>
+        <Panel label="Shown pending">
+          <Stat
+            label="Shown pending"
+            value={formatCurrencyBreakdown(totalsByStatus.pending || {})}
+            detail="Awaiting confirmation"
+          />
+        </Panel>
+        <Panel label="Shown confirmed">
+          <Stat
+            label="Shown confirmed"
+            value={formatCurrencyBreakdown(totalsByStatus.confirmed || {})}
+            detail="Available for payout"
+          />
+        </Panel>
+        <Panel label="Shown held">
+          <Stat
+            label="Shown held"
+            value={formatCurrencyBreakdown(totalsByStatus.held || {})}
+            detail="Under review"
+          />
+        </Panel>
       </div>
-      <p className="-mt-5 mb-8 text-xs text-surface-400">
+      <p className="-mt-3 text-xs text-[var(--muted)]">
         Status totals reflect the current page of ledger entries.
       </p>
 
       {/* Filter */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-surface-400 text-sm font-medium mr-1.5">Filter:</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1.5 text-sm font-medium text-[var(--muted)]">Filter:</span>
         {['', 'estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'].map((status) => (
           <button
             key={status || 'all'}
@@ -107,10 +108,8 @@ export default function DevEarningsPage() {
               setStatusFilter(status);
               setPage(1);
             }}
-            className={`px-3.5 py-1.5 rounded-xl text-xs border transition-all ${
-              statusFilter === status
-                ? 'bg-surface-900 border-surface-900 text-white font-medium'
-                : 'bg-white border-surface-200 text-surface-600 hover:bg-surface-50 hover:text-surface-950 font-normal'
+            className={`dash-btn dash-btn--sm ${
+              statusFilter === status ? 'dash-btn--primary' : 'dash-btn--glass'
             }`}
           >
             {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
@@ -125,15 +124,15 @@ export default function DevEarningsPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm font-normal">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {data && (
-        <div className="bg-white border border-surface-200/80 rounded-3xl shadow-sm overflow-hidden">
+        <Panel label="Earnings ledger" flush>
           {data.entries.length === 0 ? (
-            <div className="text-surface-400 text-sm py-16 text-center font-normal">
+            <div className="py-16 text-center text-sm text-[var(--muted)]">
               No earnings yet. Install the Ateva VS Code extension to start tracking wait states.
             </div>
           ) : (
@@ -143,42 +142,30 @@ export default function DevEarningsPage() {
               role="region"
               aria-label="Earnings ledger table, scrolls horizontally"
             >
-              <table className="w-full min-w-[760px] text-sm">
-                <thead className="bg-surface-50/50 border-b border-surface-200/80">
+              <table className="min-w-[760px]">
+                <thead>
                   <tr>
-                    <th className="text-left px-5 py-3.5 text-surface-500 font-medium tracking-tight">
-                      Date
-                    </th>
-                    <th className="text-left px-5 py-3.5 text-surface-500 font-medium tracking-tight">
-                      Description
-                    </th>
-                    <th className="text-left px-5 py-3.5 text-surface-500 font-medium tracking-tight">
-                      Status
-                    </th>
-                    <th className="text-right px-5 py-3.5 text-surface-500 font-medium tracking-tight">
-                      Amount
-                    </th>
-                    <th className="text-right px-5 py-3.5 text-surface-500 font-medium tracking-tight">
-                      Available
-                    </th>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th className="text-right">Amount</th>
+                    <th className="text-right">Available</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-surface-100">
+                <tbody>
                   {data.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-surface-50/30 transition-colors">
-                      <td className="px-5 py-3.5 text-surface-500 font-normal">
-                        {formatRelativeTime(entry.createdAt)}
-                      </td>
-                      <td className="px-5 py-3.5 text-surface-900 font-medium">
+                    <tr key={entry.id}>
+                      <td>{formatRelativeTime(entry.createdAt)}</td>
+                      <td className="font-medium text-[var(--ink)]">
                         {entry.description || `${entry.entryType} entry`}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td>
                         <StatusBadge status={entry.status} />
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-surface-900 font-semibold">
+                      <td className="dash-mono text-right text-[var(--ink)]">
                         {formatCurrency(entry.amountMinor, entry.currency)}
                       </td>
-                      <td className="px-5 py-3.5 text-right text-surface-500 text-xs font-normal">
+                      <td className="text-right text-xs">
                         {entry.availableAt ? formatRelativeTime(entry.availableAt) : '—'}
                       </td>
                     </tr>
@@ -188,30 +175,30 @@ export default function DevEarningsPage() {
             </div>
           )}
           {data.totalPages > 1 && (
-            <div className="flex items-center justify-between gap-4 border-t border-surface-200/80 px-5 py-4">
+            <div className="flex items-center justify-between gap-4 border-t border-[var(--hair)] px-[22px] py-4">
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page <= 1 || loading}
-                className="rounded-lg border border-surface-200 bg-white px-3 py-2 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-50 disabled:opacity-40"
+                className="dash-btn dash-btn--glass dash-btn--sm"
               >
                 Previous
               </button>
-              <span className="text-xs text-surface-500">
+              <span className="text-xs text-[var(--muted)]">
                 Page {data.page} of {data.totalPages} · {data.total} entries
               </span>
               <button
                 type="button"
                 onClick={() => setPage((current) => Math.min(data.totalPages, current + 1))}
                 disabled={page >= data.totalPages || loading}
-                className="rounded-lg border border-surface-200 bg-white px-3 py-2 text-xs font-medium text-surface-700 transition-colors hover:bg-surface-50 disabled:opacity-40"
+                className="dash-btn dash-btn--glass dash-btn--sm"
               >
                 Next
               </button>
             </div>
           )}
-        </div>
+        </Panel>
       )}
-    </div>
+    </>
   );
 }

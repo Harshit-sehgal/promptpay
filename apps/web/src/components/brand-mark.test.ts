@@ -54,8 +54,12 @@ describe('brand mark residue guard', () => {
     expect(sidebar).not.toMatch(/brandLetter\s*=\s*['"`]/);
   });
 
-  it('the shared BrandMark component exists and is the rendered default', () => {
+  it('the dashboard rail shows the Ateva wordmark, not a letter badge', () => {
+    // The rail draws the same text wordmark as the site header; the shared
+    // BrandMark stays the default in the footer and auth shell.
     const sidebar = readFileSync(join(SRC_DIR, 'components', 'sidebar.tsx'), 'utf8');
-    expect(sidebar).toMatch(/import \{ BrandMark \} from '\.\/brand-mark'/);
+    expect(sidebar).toMatch(/className="dash-rail__brand">\s*ateva\s*</);
+    const footer = readFileSync(join(SRC_DIR, 'components', 'site-footer.tsx'), 'utf8');
+    expect(footer).toMatch(/import \{ BrandMark \} from '@\/components\/brand-mark'/);
   });
 });

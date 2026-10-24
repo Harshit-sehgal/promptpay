@@ -1,11 +1,12 @@
 import { type ReactNode } from 'react';
 
+/** The legacy stat signature, drawn as the dashboard Stat. `valueColor` and
+    `variant` are accepted for existing call sites but no longer tint: figures
+    stay ink, and status lives in Pills. */
 export function StatCard({
   label,
   value,
   subtitle,
-  valueColor,
-  variant = 'light',
   icon,
 }: {
   label: string;
@@ -15,30 +16,18 @@ export function StatCard({
   variant?: 'dark' | 'light';
   icon?: ReactNode;
 }) {
-  const isLight = variant === 'light';
-
-  const defaultValColor = valueColor || (isLight ? 'text-surface-900' : 'text-white');
-
   return (
-    <div className={`app-stat-card ${isLight ? 'app-stat-card--light' : 'app-stat-card--dark'}`}>
-      <div className="flex items-center justify-between mb-1">
-        <p className={`text-sm font-medium ${isLight ? 'text-surface-600' : 'text-ink-200'}`}>
-          {label}
-        </p>
-        {icon && <span className="shrink-0">{icon}</span>}
+    <div className="dash-stat app-stat-card">
+      <div className="dash-stat__top">
+        <p className="dash-stat__label">{label}</p>
+        {icon && (
+          <span className="dash-stat__icon" aria-hidden="true">
+            {icon}
+          </span>
+        )}
       </div>
-      <p
-        className={`app-stat-card__value text-3xl font-medium font-mono tabular-nums ${defaultValColor}`}
-      >
-        {value}
-      </p>
-      {subtitle && (
-        <p
-          className={`app-stat-card__subtitle text-xs mt-1.5 ${isLight ? 'text-surface-600' : 'text-ink-300'}`}
-        >
-          {subtitle}
-        </p>
-      )}
+      <p className="dash-stat__value app-stat-card__value">{value}</p>
+      {subtitle && <p className="dash-stat__detail">{subtitle}</p>}
     </div>
   );
 }

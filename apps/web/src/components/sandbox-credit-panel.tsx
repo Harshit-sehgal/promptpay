@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Notice, Pill } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { sandboxApi } from '@/lib/api/services';
 
@@ -125,54 +126,51 @@ export default function SandboxCreditPanel() {
   };
 
   return (
-    <section
-      aria-label="Sandbox test credits"
-      className="mb-6 rounded-lg border border-amber-300 bg-amber-50 shadow-sm"
-    >
-      <div className="border-b border-amber-200 px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-          Sandbox only
-        </p>
-        <h2 className="mt-1 text-lg font-semibold text-amber-950">
-          Test credits and payout simulation
-        </h2>
-        <p className="mt-1 text-sm leading-6 text-amber-900">
-          XTS only — no cash value, no external transfer.
-        </p>
-      </div>
-      <div className="grid gap-5 p-5 lg:grid-cols-[0.8fr_1.2fr]">
+    <section aria-label="Sandbox test credits" className="dash-panel dash-panel--flush">
+      <div className="dash-panel__head">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">Balance</p>
-          <p className="mt-2 font-mono text-3xl font-semibold text-amber-950">
+          <p className="dash-eyebrow mb-1">
+            <Pill tone="warn">Sandbox only</Pill>
+          </p>
+          <h2 className="dash-panel__title">Test credits and payout simulation</h2>
+          <p className="mt-1 text-sm leading-6 text-[var(--copy)]">
+            XTS only — no cash value, no external transfer.
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-5 p-[22px] lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="dash-stat__label">Balance</p>
+          <p className="dash-mono mt-2 text-3xl font-semibold text-[var(--ink)]">
             {credits ? formatXts(credits.balanceMinor) : '—'}
           </p>
           <button
             type="button"
             disabled={busy}
             onClick={() => void claimFaucet()}
-            className="mt-4 inline-flex h-10 items-center rounded-lg bg-amber-800 px-4 text-sm font-medium text-white transition-colors hover:bg-amber-900 disabled:cursor-not-allowed disabled:opacity-60"
+            className="dash-btn dash-btn--primary dash-btn--md mt-4"
           >
             Claim faucet grant
           </button>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-white p-4">
-          <p className="text-sm font-semibold text-surface-950">Simulate a payout outcome</p>
+        <div className="rounded-xl border border-[var(--hair)] p-4">
+          <p className="text-sm font-semibold text-[var(--ink)]">Simulate a payout outcome</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-xs font-medium text-surface-600">
+            <label className="text-xs font-medium">
               Amount (minor XTS)
               <input
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 inputMode="numeric"
-                className="mt-1 h-10 w-full rounded-lg border border-surface-200 px-3 text-sm text-surface-950"
+                className="mt-1 h-10 w-full px-3 text-sm"
               />
             </label>
-            <label className="text-xs font-medium text-surface-600">
+            <label className="text-xs font-medium">
               Requested outcome
               <select
                 value={outcome}
                 onChange={(event) => setOutcome(event.target.value as (typeof outcomes)[number])}
-                className="mt-1 h-10 w-full rounded-lg border border-surface-200 bg-white px-3 text-sm text-surface-950"
+                className="mt-1 h-10 w-full px-3 text-sm"
               >
                 {outcomes.map((value) => (
                   <option key={value}>{value}</option>
@@ -184,33 +182,29 @@ export default function SandboxCreditPanel() {
             type="button"
             disabled={busy}
             onClick={() => void simulatePayout()}
-            className="mt-3 inline-flex h-10 items-center rounded-lg border border-surface-300 px-4 text-sm font-medium text-surface-800 transition-colors hover:bg-surface-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="dash-btn dash-btn--glass dash-btn--md mt-3"
           >
             Record simulation
           </button>
         </div>
       </div>
       {(error || notice) && (
-        <p
-          className={`border-t px-5 py-3 text-sm ${error ? 'border-red-200 bg-red-50 text-red-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}
-        >
-          {error ?? notice}
-        </p>
+        <div className="border-t border-[var(--hair)] px-[22px] py-3">
+          <Notice tone={error ? 'bad' : 'ok'}>{error ?? notice}</Notice>
+        </div>
       )}
       {payouts.length > 0 && (
-        <div className="border-t border-amber-200 px-5 py-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-amber-800">
-            Recent simulations
-          </p>
-          <div className="mt-2 divide-y divide-surface-100">
+        <div className="border-t border-[var(--hair)] px-[22px] py-4">
+          <p className="dash-stat__label">Recent simulations</p>
+          <div className="mt-2 divide-y divide-[var(--hair)]">
             {payouts.slice(0, 5).map((payout) => (
               <div
                 key={payout.id}
                 className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
               >
-                <span className="font-mono text-surface-700">{formatXts(payout.amountMinor)}</span>
-                <span className="text-surface-600">{payout.status}</span>
-                <span className="text-xs text-surface-500">{payout.destinationAlias}</span>
+                <span className="dash-mono text-[var(--ink)]">{formatXts(payout.amountMinor)}</span>
+                <span className="text-[var(--copy)]">{payout.status}</span>
+                <span className="text-xs text-[var(--muted)]">{payout.destinationAlias}</span>
               </div>
             ))}
           </div>

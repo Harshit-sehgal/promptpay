@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
+import { ActionLink, Notice, PageHeader, Panel, Pill, Stat } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import {
@@ -147,50 +147,53 @@ export default function AdvertiserCampaignsPage() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Campaigns</h1>
-          <p className="text-ink-200 text-sm">Manage and review your ad campaigns</p>
-        </div>
-        <Link
-          href="/advertiser/campaigns/new"
-          className="bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          + New campaign
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Advertiser"
+        title="Campaigns"
+        lede="Manage and review your ad campaigns"
+        actions={
+          <ActionLink href="/advertiser/campaigns/new" variant="primary">
+            + New campaign
+          </ActionLink>
+        }
+      />
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard label="Total campaigns" value={data.total.toString()} />
-            <StatCard label="Total budget" value={formatCurrencyBreakdown(totalBudgetByCurrency)} />
-            <StatCard
-              label="Budget spent"
-              value={formatCurrencyBreakdown(totalSpentByCurrency)}
-              valueColor="text-brand-500"
-              subtitle={
-                singleCurrency && totalBudget > 0n
-                  ? `${bigintRatioPercent(totalSpent, totalBudget, 1).toFixed(1)}% used`
-                  : undefined
-              }
-            />
+          <div className="dash-grid dash-grid--3">
+            <Panel label="Total campaigns">
+              <Stat label="Total campaigns" value={data.total.toString()} />
+            </Panel>
+            <Panel label="Total budget">
+              <Stat label="Total budget" value={formatCurrencyBreakdown(totalBudgetByCurrency)} />
+            </Panel>
+            <Panel label="Budget spent">
+              <Stat
+                label="Budget spent"
+                value={formatCurrencyBreakdown(totalSpentByCurrency)}
+                detail={
+                  singleCurrency && totalBudget > 0n
+                    ? `${bigintRatioPercent(totalSpent, totalBudget, 1).toFixed(1)}% used`
+                    : undefined
+                }
+              />
+            </Panel>
           </div>
 
           {/* Filter */}
           <div
-            className="mb-6 flex flex-wrap items-center gap-2"
+            className="flex flex-wrap items-center gap-2"
             role="group"
             aria-label="Filter campaigns by status"
           >
-            <span className="text-ink-300 text-sm">Status:</span>
+            <span className="text-sm text-[var(--muted)]">Status:</span>
             {['', 'draft', 'submitted', 'approved', 'active', 'paused', 'rejected', 'archived'].map(
               (status) => (
                 <button
@@ -201,10 +204,8 @@ export default function AdvertiserCampaignsPage() {
                     setPage(1);
                   }}
                   aria-pressed={statusFilter === status}
-                  className={`px-3 py-1 rounded-lg text-xs transition-colors ${
-                    statusFilter === status
-                      ? 'bg-brand-500 text-white'
-                      : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
+                  className={`dash-btn dash-btn--sm ${
+                    statusFilter === status ? 'dash-btn--primary' : 'dash-btn--glass'
                   }`}
                 >
                   {status || 'All'}
@@ -215,67 +216,59 @@ export default function AdvertiserCampaignsPage() {
 
           {/* Campaign list */}
           {data.campaigns.length === 0 ? (
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-              <p className="text-ink-300 text-sm mb-4">No campaigns found.</p>
-              <Link
-                href="/advertiser/campaigns/new"
-                className="bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              >
+            <Panel className="text-center">
+              <p className="mb-4 text-sm text-[var(--muted)]">No campaigns found.</p>
+              <ActionLink href="/advertiser/campaigns/new" variant="primary">
                 Create your first campaign
-              </Link>
-            </div>
+              </ActionLink>
+            </Panel>
           ) : (
-            <div className="space-y-3">
+            <div className="grid gap-4">
               {data.campaigns.map((campaign) => (
-                <div
-                  key={campaign.id}
-                  className="bg-ink-800 border border-ink-600/30 rounded-xl p-5 hover:border-ink-600/60 transition-colors"
-                >
+                <Panel key={campaign.id}>
                   {(() => {
                     const rejectionMessage = getCampaignRejectionMessage(campaign);
                     return rejectionMessage ? (
-                      <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
-                        <p className="text-red-300 text-xs">Rejected: {rejectionMessage}</p>
+                      <div className="mb-4">
+                        <Notice tone="bad">Rejected: {rejectionMessage}</Notice>
                       </div>
                     ) : null;
                   })()}
-                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3 flex-wrap">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <StatusBadge status={campaign.status} />
-                      <h3 className="text-white font-medium">{campaign.name}</h3>
-                      <span className="text-ink-500 text-xs uppercase">{campaign.bidType}</span>
+                      <h3 className="font-medium text-[var(--ink)]">{campaign.name}</h3>
+                      <span className="dash-mono text-xs text-[var(--muted)] uppercase">
+                        {campaign.bidType}
+                      </span>
                       {campaign.status === 'approved' && !hasApprovedCreative(campaign) && (
-                        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
-                          Needs Approved Creative
-                        </span>
+                        <Pill tone="warn">Needs Approved Creative</Pill>
                       )}
                       {campaign.status === 'approved' &&
                         hasApprovedCreative(campaign) &&
                         campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
-                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
-                            Insufficient Budget
-                          </span>
+                          <Pill tone="warn">Insufficient Budget</Pill>
                         )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       {(() => {
                         const actions = getCampaignActions(campaign);
                         return (
                           <>
                             {actions.canEdit && (
-                              <Link
+                              <ActionLink
                                 href={`/advertiser/campaigns/${campaign.id}/edit`}
-                                className="text-brand-500 hover:text-brand-400 text-xs font-medium"
+                                variant="text"
                               >
                                 Edit
-                              </Link>
+                              </ActionLink>
                             )}
                             {actions.canPause && (
                               <button
                                 onClick={() => handlePause(campaign.id)}
                                 disabled={isCampaignBusy(campaign.id)}
-                                className="text-amber-400 hover:text-amber-300 text-xs font-medium disabled:opacity-50"
+                                className="dash-btn dash-btn--glass dash-btn--sm"
                               >
                                 {isActionLoading('pause', campaign.id) ? 'Pausing...' : 'Pause'}
                               </button>
@@ -284,7 +277,7 @@ export default function AdvertiserCampaignsPage() {
                               <button
                                 onClick={() => handleResume(campaign.id)}
                                 disabled={isCampaignBusy(campaign.id)}
-                                className="text-emerald-400 hover:text-emerald-300 text-xs font-medium disabled:opacity-50"
+                                className="dash-btn dash-btn--glass dash-btn--sm"
                               >
                                 {isActionLoading('resume', campaign.id) ? 'Resuming...' : 'Resume'}
                               </button>
@@ -293,7 +286,7 @@ export default function AdvertiserCampaignsPage() {
                               <button
                                 onClick={() => handleArchive(campaign)}
                                 disabled={isCampaignBusy(campaign.id)}
-                                className="text-red-400 hover:text-red-300 text-xs font-medium disabled:opacity-50"
+                                className="dash-btn dash-btn--danger dash-btn--sm"
                               >
                                 {isActionLoading('archive', campaign.id)
                                   ? 'Archiving...'
@@ -306,16 +299,16 @@ export default function AdvertiserCampaignsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                     <div>
-                      <p className="text-ink-500 text-xs">Budget</p>
-                      <p className="text-white font-mono">
+                      <p className="text-xs text-[var(--muted)]">Budget</p>
+                      <p className="dash-mono text-[var(--ink)]">
                         {formatCurrency(campaign.budgetSpentMinor, campaign.currency)} /{' '}
                         {formatCurrency(campaign.budgetTotalMinor, campaign.currency)}
                       </p>
-                      <div className="h-1.5 bg-ink-700 rounded-full mt-1.5 overflow-hidden">
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--hair)]">
                         <div
-                          className="h-full bg-brand-500 transition-all"
+                          className="h-full bg-[var(--ink)] transition-all"
                           style={{
                             width:
                               campaign.budgetTotalMinor > 0n
@@ -333,45 +326,47 @@ export default function AdvertiserCampaignsPage() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-ink-500 text-xs">Impressions</p>
-                      <p className="text-white font-mono">
+                      <p className="text-xs text-[var(--muted)]">Impressions</p>
+                      <p className="dash-mono text-[var(--ink)]">
                         {campaign.impressions.toLocaleString()}
                       </p>
                     </div>
                     <div>
-                      <p className="text-ink-500 text-xs">Clicks</p>
-                      <p className="text-white font-mono">{campaign.clicks.toLocaleString()}</p>
+                      <p className="text-xs text-[var(--muted)]">Clicks</p>
+                      <p className="dash-mono text-[var(--ink)]">
+                        {campaign.clicks.toLocaleString()}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-ink-500 text-xs">Created</p>
-                      <p className="text-ink-200 text-xs">
+                      <p className="text-xs text-[var(--muted)]">Created</p>
+                      <p className="text-xs text-[var(--copy)]">
                         {formatRelativeTime(campaign.createdAt)}
                       </p>
                     </div>
                   </div>
-                </div>
+                </Panel>
               ))}
             </div>
           )}
           {/* Pagination (A-074) */}
           {data.total > limit && (
-            <div className="mt-6 flex items-center justify-center gap-4">
+            <div className="flex items-center justify-center gap-4">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+                className="dash-btn dash-btn--glass dash-btn--md"
               >
                 Previous
               </button>
-              <span className="text-ink-300 text-sm">
+              <span className="text-sm text-[var(--copy)]">
                 Page {page} of {Math.max(1, Math.ceil(data.total / limit))}
               </span>
               <button
                 type="button"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page >= Math.ceil(data.total / limit)}
-                className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+                className="dash-btn dash-btn--glass dash-btn--md"
               >
                 Next
               </button>

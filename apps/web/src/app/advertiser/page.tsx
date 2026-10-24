@@ -1,10 +1,9 @@
 'use client';
 
-import { BarChart3, Megaphone, MousePointer, Users } from 'lucide-react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
+import { ActionLink, Notice, PageHeader, Panel, PanelHeader, Pill, Stat } from '@/components/dash';
 import SandboxDepositPanel from '@/components/sandbox-deposit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
@@ -83,85 +82,38 @@ export default function AdvertisersPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Advertiser overview</h1>
-        <p className="text-ink-200 text-sm">Your campaigns and performance</p>
-      </div>
+      <PageHeader
+        eyebrow="Advertiser"
+        title="Advertiser overview"
+        lede="Your campaigns and performance"
+      />
 
       {/* Hosted-checkout redirect banners */}
       {banner?.visible && (
-        <div
-          className={`mb-6 rounded-xl p-4 border ${
-            banner.type === 'success'
-              ? 'bg-emerald-500/10 border-emerald-500/20'
-              : 'bg-amber-500/10 border-amber-500/20'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {banner.type === 'success' ? (
-              <svg
-                className="w-5 h-5 text-emerald-400 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-5 h-5 text-amber-400 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
-                />
-              </svg>
-            )}
-            <div className="flex-1">
-              <p
-                className={`text-sm font-medium ${banner.type === 'success' ? 'text-emerald-300' : 'text-amber-300'}`}
-              >
-                {banner.type === 'success'
-                  ? 'Your payment was completed. Your account balance will be credited once the payment is confirmed by our payment processor — check the billing page in a moment.'
-                  : 'Deposit cancelled. No charges were made.'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
+        <Notice
+          tone={banner.type === 'success' ? 'ok' : 'warn'}
+          actions={
+            <>
               {banner.type === 'success' && (
-                <Link
-                  href="/advertiser/billing"
-                  className="text-xs text-emerald-300 hover:text-emerald-200 underline underline-offset-2 transition-colors"
-                >
+                <ActionLink href="/advertiser/billing" variant="text">
                   View billing
-                </Link>
+                </ActionLink>
               )}
               <button
+                type="button"
                 onClick={() => setBanner(null)}
-                className="text-ink-300 hover:text-white transition-colors"
+                className="dash-btn dash-btn--ghost dash-btn--sm"
                 aria-label="Dismiss"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                Dismiss
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          {banner.type === 'success'
+            ? 'Your payment was completed. Your account balance will be credited once the payment is confirmed by our payment processor — check the billing page in a moment.'
+            : 'Deposit cancelled. No charges were made.'}
+        </Notice>
       )}
 
       {loading && (
@@ -171,126 +123,122 @@ export default function AdvertisersPage() {
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 mb-6">
-          <p className="text-red-300 text-sm">{error}</p>
-          <button
-            onClick={loadDashboard}
-            className="text-red-300 text-xs underline mt-2 hover:text-red-200 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            <button
+              type="button"
+              onClick={loadDashboard}
+              className="dash-btn dash-btn--glass dash-btn--sm"
+            >
+              Retry
+            </button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
           <SandboxDepositPanel />
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <StatCard
-              label="Total spend"
-              value={formatCurrencyBreakdown(
-                data.totalSpendByCurrency ?? { USD: data.totalSpendMinor },
-              )}
-              subtitle="Across all campaigns"
-              variant="dark"
-              valueColor="text-white"
-              icon={<BarChart3 className="h-5 w-5 text-ink-300" />}
-            />
-            <StatCard
-              label="Impressions"
-              value={formatNumber(data.totalImpressions)}
-              subtitle="Ad views delivered"
-              variant="dark"
-              valueColor="text-white"
-              icon={<Users className="h-5 w-5 text-ink-300" />}
-            />
-            <StatCard
-              label="Clicks"
-              value={formatNumber(data.totalClicks)}
-              subtitle="Qualified clicks"
-              variant="dark"
-              valueColor="text-white"
-              icon={<MousePointer className="h-5 w-5 text-ink-300" />}
-            />
-            <StatCard
-              label="CTR"
-              value={formatPercent(data.ctr * 100, 2)}
-              subtitle="Click-through rate"
-              variant="dark"
-              valueColor="text-white"
-              icon={<Megaphone className="h-5 w-5 text-ink-300" />}
-            />
+          <div className="dash-grid dash-grid--4">
+            <Panel label="Total spend">
+              <Stat
+                label="Total spend"
+                value={formatCurrencyBreakdown(
+                  data.totalSpendByCurrency ?? { USD: data.totalSpendMinor },
+                )}
+                detail="Across all campaigns"
+                chip
+              />
+            </Panel>
+            <Panel label="Impressions">
+              <Stat
+                label="Impressions"
+                value={formatNumber(data.totalImpressions)}
+                detail="Ad views delivered"
+              />
+            </Panel>
+            <Panel label="Clicks">
+              <Stat
+                label="Clicks"
+                value={formatNumber(data.totalClicks)}
+                detail="Qualified clicks"
+              />
+            </Panel>
+            <Panel label="CTR">
+              <Stat
+                label="CTR"
+                value={formatPercent(data.ctr * 100, 2)}
+                detail="Click-through rate"
+              />
+            </Panel>
           </div>
 
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-white font-semibold">Campaigns ({data.totalCampaigns})</h2>
-              <Link
-                href="/advertiser/campaigns/new"
-                className="inline-flex h-9 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-900"
-              >
-                Create campaign
-              </Link>
-            </div>
+          <Panel label="Campaigns" flush>
+            <PanelHeader
+              title={`Campaigns (${data.totalCampaigns})`}
+              action={
+                <ActionLink href="/advertiser/campaigns/new" variant="primary">
+                  Create campaign
+                </ActionLink>
+              }
+            />
             {data.campaigns.length > 0 ? (
-              <div className="space-y-2">
+              <div className="dash-rows">
                 {data.campaigns.map((campaign) => (
                   <div
                     key={campaign.id}
-                    className="flex flex-col gap-3 bg-ink-700/50 rounded-lg p-4 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex flex-wrap items-center gap-3">
                       <StatusBadge status={campaign.status} />
-                      <p className="text-white font-medium">{campaign.name}</p>
+                      <p className="font-medium text-[var(--ink)]">{campaign.name}</p>
                       {campaign.status === 'approved' && !hasApprovedCreative(campaign) && (
-                        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2 py-0.5 rounded font-medium">
-                          Needs Approved Creative
-                        </span>
+                        <Pill tone="warn">Needs Approved Creative</Pill>
                       )}
                       {campaign.status === 'approved' &&
                         hasApprovedCreative(campaign) &&
                         campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
-                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs px-2 py-0.5 rounded font-medium">
-                            Insufficient Budget
-                          </span>
+                          <Pill tone="warn">Insufficient Budget</Pill>
                         )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 text-sm sm:gap-6">
-                      <span className="text-ink-200">
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--copy)] sm:gap-6">
+                      <span className="dash-mono">
                         Budget: {formatCurrency(campaign.budgetSpentMinor, campaign.currency)} /{' '}
                         {formatCurrency(campaign.budgetTotalMinor, campaign.currency)}
                       </span>
-                      <span className="text-ink-200 uppercase">{campaign.bidType}</span>
+                      <span className="uppercase">{campaign.bidType}</span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-ink-600/30 py-12 text-center">
-                <Megaphone className="h-8 w-8 text-ink-400 mb-3" />
-                <p className="text-ink-300 text-sm font-medium">No campaigns yet</p>
-                <p className="text-ink-400 text-xs mt-1">
+              <div className="flex flex-col items-center justify-center px-[22px] py-12 text-center">
+                <p className="text-sm font-medium text-[var(--ink)]">No campaigns yet</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
                   Create your first campaign to start reaching developers.
                 </p>
-                <Link
-                  href="/advertiser/campaigns/new"
-                  className="mt-4 inline-flex h-9 items-center rounded-lg bg-brand-500 px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-600"
-                >
-                  Create campaign
-                </Link>
+                <div className="mt-4">
+                  <ActionLink href="/advertiser/campaigns/new" variant="primary">
+                    Create campaign
+                  </ActionLink>
+                </div>
               </div>
             )}
-          </div>
+          </Panel>
 
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-            <h2 className="text-white font-semibold mb-4">Invalid traffic protection</h2>
-            <p className="text-ink-200 text-sm">
+          <Panel>
+            <PanelHeader title="Invalid traffic protection" />
+            <p className="text-sm text-[var(--copy)]">
               All impressions require a 5-second minimum visible duration, validated device
               fingerprint, and cleared fraud checks. Suspicious traffic is automatically flagged and
               excluded from billing.
             </p>
-          </div>
+          </Panel>
         </>
       )}
     </>

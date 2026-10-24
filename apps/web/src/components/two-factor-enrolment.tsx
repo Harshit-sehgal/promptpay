@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Notice } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -12,7 +13,7 @@ interface TwoFactorEnrolmentProps {
   accountEmail?: string;
   onChange?: (enabled: boolean) => void;
   onEnrollmentRequiresRelogin?: () => void;
-  /** `dark` matches the admin shell, `light` the account settings pages. */
+  /** Kept for existing call sites; the dashboard shell now styles every role the same. */
   tone?: 'light' | 'dark';
 }
 
@@ -31,7 +32,6 @@ export function TwoFactorEnrolment({
   accountEmail,
   onChange,
   onEnrollmentRequiresRelogin,
-  tone = 'light',
 }: TwoFactorEnrolmentProps) {
   const [enabled, setEnabled] = useState(initialEnabled);
   const [mode, setMode] = useState<Mode>('idle');
@@ -49,21 +49,9 @@ export function TwoFactorEnrolment({
 
   useEffect(() => setEnabled(initialEnabled), [initialEnabled]);
 
-  const dark = tone === 'dark';
-  const card = dark
-    ? 'rounded-xl border border-ink-700 bg-ink-800 p-6'
-    : 'rounded-2xl border border-surface-200/80 bg-white p-7 shadow-sm';
-  const heading = dark ? 'text-ink-100' : 'text-surface-900';
-  const body = dark ? 'text-ink-300' : 'text-surface-600';
-  const mutedPanel = dark
-    ? 'border-ink-600 bg-ink-900/60 text-ink-200'
-    : 'border-surface-200 bg-surface-50 text-surface-700';
-  const input = dark
-    ? 'rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-sm text-ink-100'
-    : 'rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm text-surface-900';
-  const primary = dark
-    ? 'rounded-lg bg-red-500 px-3.5 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-40'
-    : 'rounded-lg bg-surface-950 px-3.5 py-2 text-sm font-medium text-white hover:bg-surface-800 disabled:opacity-40';
+  const body = 'text-[var(--copy)]';
+  const input = 'px-3 py-2 text-sm';
+  const primary = 'dash-btn dash-btn--primary dash-btn--sm';
 
   const resetFlow = () => {
     setMode('idle');
@@ -204,89 +192,104 @@ export function TwoFactorEnrolment({
   };
 
   return (
-    <section className={card} aria-labelledby="two-factor-heading">
-      <h2 id="two-factor-heading" className={`text-sm font-semibold ${heading}`}>
-        Two-factor authentication
-      </h2>
-      <p className={`mt-1 text-xs leading-5 ${body}`}>
+    <section className="dash-panel" aria-labelledby="two-factor-heading">
+      <div className="dash-panel__head">
+        <h2 id="two-factor-heading" className="dash-panel__title">
+          Two-factor authentication
+        </h2>
+      </div>
+      <p className={`text-xs leading-5 ${body}`}>
         {enabled
           ? 'Enabled. Your authenticator or a one-time backup code is required at sign-in and for sensitive actions.'
           : 'Add an authenticator app to protect sign-in and sensitive account actions.'}
       </p>
 
       {error && (
-        <p role="alert" className="mt-3 text-xs text-red-500">
-          {error}
-        </p>
+        <div className="mt-3">
+          <Notice tone="bad" role="alert">
+            {error}
+          </Notice>
+        </div>
       )}
       {success && (
-        <p role="status" className="mt-3 text-xs text-emerald-500">
-          {success}
-        </p>
+        <div className="mt-3">
+          <Notice tone="ok" role="status">
+            {success}
+          </Notice>
+        </div>
       )}
 
       {backupCodes.length > 0 && (
-        <div className="mt-4 rounded-xl border border-amber-400/50 bg-amber-50 p-4 text-amber-950">
-          <p className="text-sm font-semibold">Save these one-time backup codes now</p>
-          <p className="mt-1 text-xs leading-5">
-            Each code works once. This is the only time Ateva will display this set.
-          </p>
-          <ul
-            aria-label="Two-factor backup codes"
-            className="mt-3 grid grid-cols-1 gap-1 rounded-lg bg-white p-3 font-mono text-sm sm:grid-cols-2"
-          >
-            {backupCodes.map((backupCode) => (
-              <li key={backupCode}>{backupCode}</li>
-            ))}
-          </ul>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={copyBackupCodes}
-              className="text-xs font-semibold underline"
+        <div className="mt-4">
+          <Notice tone="warn" title="Save these one-time backup codes now">
+            <p className="text-xs leading-5">
+              Each code works once. This is the only time Ateva will display this set.
+            </p>
+            <ul
+              aria-label="Two-factor backup codes"
+              className="dash-mono mt-3 grid grid-cols-1 gap-1 rounded-lg border border-[var(--hair)] bg-[var(--glass-strong)] p-3 text-sm text-[var(--ink)] sm:grid-cols-2"
             >
-              Copy codes
-            </button>
-            <button
-              type="button"
-              onClick={downloadBackupCodes}
-              className="text-xs font-semibold underline"
-            >
-              Download codes
-            </button>
-            <button
-              type="button"
-              disabled={!backupCodesSaved}
-              onClick={() => setBackupCodes([])}
-              className="text-xs font-semibold underline disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              I saved them; hide codes
-            </button>
-          </div>
+              {backupCodes.map((backupCode) => (
+                <li key={backupCode}>{backupCode}</li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={copyBackupCodes}
+                className="dash-btn dash-btn--glass dash-btn--sm"
+              >
+                Copy codes
+              </button>
+              <button
+                type="button"
+                onClick={downloadBackupCodes}
+                className="dash-btn dash-btn--glass dash-btn--sm"
+              >
+                Download codes
+              </button>
+              <button
+                type="button"
+                disabled={!backupCodesSaved}
+                onClick={() => setBackupCodes([])}
+                className="dash-btn dash-btn--ghost dash-btn--sm"
+              >
+                I saved them; hide codes
+              </button>
+            </div>
+          </Notice>
         </div>
       )}
 
       {!enabled && mode === 'idle' && !hasPassword && (
-        <div className={`mt-4 rounded-xl border p-4 ${mutedPanel}`}>
-          <p className="text-sm font-semibold">Set a password before enabling 2FA</p>
-          <p className="mt-1 text-xs leading-5">
-            We will email a signed, one-time password setup link to your account address. Completing
-            it revokes your current sessions; sign in again, then return here to enable 2FA.
-          </p>
-          {passwordEmailSent ? (
-            <p role="status" className="mt-3 text-xs font-semibold text-emerald-500">
-              If that account exists, the password setup email is on its way.
+        <div className="mt-4">
+          <Notice
+            tone="neutral"
+            title="Set a password before enabling 2FA"
+            actions={
+              passwordEmailSent ? undefined : (
+                <button
+                  type="button"
+                  onClick={sendPasswordSetupEmail}
+                  disabled={busy || !accountEmail}
+                  className={primary}
+                >
+                  {busy ? 'Sending…' : 'Email me a password setup link'}
+                </button>
+              )
+            }
+          >
+            <p className="text-xs leading-5">
+              We will email a signed, one-time password setup link to your account address.
+              Completing it revokes your current sessions; sign in again, then return here to enable
+              2FA.
             </p>
-          ) : (
-            <button
-              type="button"
-              onClick={sendPasswordSetupEmail}
-              disabled={busy || !accountEmail}
-              className={`${primary} mt-3`}
-            >
-              {busy ? 'Sending…' : 'Email me a password setup link'}
-            </button>
-          )}
+            {passwordEmailSent && (
+              <p role="status" className="mt-3 text-xs font-semibold text-[var(--ink)]">
+                If that account exists, the password setup email is on its way.
+              </p>
+            )}
+          </Notice>
         </div>
       )}
 
@@ -334,7 +337,7 @@ export function TwoFactorEnrolment({
                     setError(null);
                     setSuccess(null);
                   }}
-                  className={`text-xs font-medium underline ${body}`}
+                  className="dash-btn dash-btn--ghost dash-btn--sm"
                 >
                   Disable 2FA
                 </button>
@@ -351,14 +354,14 @@ export function TwoFactorEnrolment({
           </p>
           {qrDataUrl && (
             /* eslint-disable-next-line @next/next/no-img-element -- generated data URI */
-            <img src={qrDataUrl} alt="2FA QR code" className="h-40 w-40 rounded bg-white p-2" />
+            <img src={qrDataUrl} alt="2FA QR code" className="h-40 w-40 rounded bg-[#ffffff] p-2" />
           )}
           {otpauthUrl && !qrDataUrl && (
-            <p className={`break-all text-[11px] ${body}`}>{otpauthUrl}</p>
+            <p className={`text-[11px] break-all ${body}`}>{otpauthUrl}</p>
           )}
           {secret && (
             <p className={`text-xs ${body}`}>
-              Manual entry key: <code className="font-mono select-all">{secret}</code>
+              Manual entry key: <code className="select-all">{secret}</code>
             </p>
           )}
           <TotpInput code={code} setCode={setCode} inputClass={input} onEnter={confirmEnable} />
@@ -366,7 +369,6 @@ export function TwoFactorEnrolment({
             busy={busy}
             canConfirm={code.length === 6}
             primaryClass={primary}
-            bodyClass={body}
             label="Verify and enable"
             onConfirm={confirmEnable}
             onCancel={resetFlow}
@@ -384,7 +386,6 @@ export function TwoFactorEnrolment({
             busy={busy}
             canConfirm
             primaryClass={primary}
-            bodyClass={body}
             label={mode === 'disable' ? 'Confirm disable' : 'Generate new codes'}
             onConfirm={mode === 'disable' ? confirmDisable : regenerateBackupCodes}
             onCancel={resetFlow}
@@ -429,7 +430,6 @@ function FlowActions({
   busy,
   canConfirm,
   primaryClass,
-  bodyClass,
   label,
   onConfirm,
   onCancel,
@@ -437,7 +437,6 @@ function FlowActions({
   busy: boolean;
   canConfirm: boolean;
   primaryClass: string;
-  bodyClass: string;
   label: string;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
@@ -452,11 +451,7 @@ function FlowActions({
       >
         {busy ? 'Verifying…' : label}
       </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className={`text-xs font-medium underline ${bodyClass}`}
-      >
+      <button type="button" onClick={onCancel} className="dash-btn dash-btn--ghost dash-btn--sm">
         Cancel
       </button>
     </div>

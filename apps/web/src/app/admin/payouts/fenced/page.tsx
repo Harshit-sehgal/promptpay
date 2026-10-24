@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, Pill } from '@/components/dash';
 import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
@@ -128,92 +129,82 @@ export default function AdminFencedPayoutAccountsPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Fenced payout accounts</h1>
-        <p className="text-ink-300 text-sm">
-          Payout accounts locked by an in-flight provider-initiation fence. Release only after the
-          referenced payout reaches a terminal state (paid / failed / rejected / cancelled).
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Fenced payout accounts"
+        lede="Payout accounts locked by an in-flight provider-initiation fence. Release only after the referenced payout reaches a terminal state (paid / failed / rejected / cancelled)."
+      />
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {loading && <LoadingSpinner />}
 
       {!loading && accounts.length === 0 ? (
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">No fenced payout accounts. All clear.</p>
-        </div>
+        <Panel label="No fenced accounts">
+          <p className="py-6 text-center text-sm text-[var(--muted)]">
+            No fenced payout accounts. All clear.
+          </p>
+        </Panel>
       ) : (
         !loading && (
           <>
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
+            <Panel label="Fenced payout accounts" flush>
               <div
                 className="overflow-x-auto"
                 tabIndex={0}
                 role="region"
                 aria-label="Fenced payout accounts table, scrolls horizontally"
               >
-                <table className="w-full min-w-[960px] text-sm">
-                  <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                <table className="w-full min-w-[960px]">
+                  <thead>
                     <tr>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Owner</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Payout</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Currency</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Exposure</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Fraud flags</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">
-                        Ledger allocations
-                      </th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">
-                        Recon. attempts
-                      </th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Last recon.</th>
-                      <th className="text-left px-4 py-3 text-ink-300 font-medium">Escalated</th>
-                      <th className="text-right px-4 py-3 text-ink-300 font-medium">Action</th>
+                      <th className="text-left">Owner</th>
+                      <th className="text-left">Payout</th>
+                      <th className="text-left">Currency</th>
+                      <th className="text-left">Exposure</th>
+                      <th className="text-left">Fraud flags</th>
+                      <th className="text-left">Ledger allocations</th>
+                      <th className="text-left">Recon. attempts</th>
+                      <th className="text-left">Last recon.</th>
+                      <th className="text-left">Escalated</th>
+                      <th className="text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-ink-600/20">
+                  <tbody>
                     {accounts.map((a) => (
-                      <tr key={a.id} className="hover:bg-ink-700/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="text-white text-sm">
+                      <tr key={a.id}>
+                        <td>
+                          <div className="text-sm text-[var(--ink)]">
                             {a.user?.email ?? a.user?.id ?? a.userId}
                           </div>
-                          <div className="text-ink-500 text-xs font-mono mt-0.5">
+                          <div className="dash-mono mt-0.5 text-xs text-[var(--muted)]">
                             {a.provider} — {a.destination}
                           </div>
-                          {a.isFrozen && (
-                            <span className="text-red-300 text-xs font-semibold">· frozen</span>
-                          )}
+                          {a.isFrozen && <Pill tone="bad">frozen</Pill>}
                         </td>
-                        <td className="px-4 py-3 text-ink-300 text-xs font-mono">
-                          {a.initiationPayoutId ?? '—'}
-                        </td>
-                        <td className="px-4 py-3 text-ink-300 text-xs">{a.currency}</td>
-                        <td className="px-4 py-3 text-white text-sm font-mono">
+                        <td className="dash-mono text-xs">{a.initiationPayoutId ?? '—'}</td>
+                        <td className="text-xs">{a.currency}</td>
+                        <td className="dash-mono text-sm text-[var(--ink)]">
                           {a.ledgerAllocations
                             ? formatCurrency(a.ledgerAllocations.totalMinor, a.currency)
                             : '—'}
                         </td>
-                        <td className="px-4 py-3 text-sm">
+                        <td className="text-sm">
                           {a.activeFraudFlags > 0 ? (
-                            <span className="text-amber-400 font-semibold">
-                              {a.activeFraudFlags}
-                            </span>
+                            <Pill tone="warn">{a.activeFraudFlags}</Pill>
                           ) : (
-                            <span className="text-ink-400">0</span>
+                            <span className="text-[var(--muted)]">0</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-ink-300 text-xs">
+                        <td className="text-xs">
                           {a.ledgerAllocations ? (
                             <>
                               <div>{a.ledgerAllocations.count} allocations</div>
-                              <div className="text-ink-500 font-mono">
+                              <div className="dash-mono text-[var(--muted)]">
                                 {formatCurrency(
                                   a.ledgerAllocations.totalMinor,
                                   a.ledgerAllocations.currency,
@@ -224,23 +215,21 @@ export default function AdminFencedPayoutAccountsPage() {
                             '—'
                           )}
                         </td>
-                        <td className="px-4 py-3 text-ink-300 text-xs">
-                          {a.reconciliationAttempts}
-                        </td>
-                        <td className="px-4 py-3 text-ink-400 text-xs">
+                        <td className="text-xs">{a.reconciliationAttempts}</td>
+                        <td className="text-xs text-[var(--muted)]">
                           {a.lastReconciliationAt
                             ? formatRelativeTime(a.lastReconciliationAt)
                             : '—'}
                         </td>
-                        <td className="px-4 py-3 text-ink-400 text-xs">
+                        <td className="text-xs text-[var(--muted)]">
                           {a.escalatedAt ? formatRelativeTime(a.escalatedAt) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="text-right">
                           <button
                             type="button"
                             onClick={() => openRelease(a)}
                             disabled={processing === a.id}
-                            className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                            className="dash-btn dash-btn--primary dash-btn--sm"
                           >
                             {processing === a.id ? 'Working...' : 'Release fence'}
                           </button>
@@ -250,11 +239,11 @@ export default function AdminFencedPayoutAccountsPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Panel>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between mt-4 gap-4 flex-wrap">
-              <div className="flex items-center gap-2 text-ink-400 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
                 <span>{total === 0 ? 'No results' : `Showing ${start}–${end} of ${total}`}</span>
                 <select
                   value={limit}
@@ -262,7 +251,7 @@ export default function AdminFencedPayoutAccountsPage() {
                     setLimit(Number(e.target.value));
                     setPage(1);
                   }}
-                  className="bg-ink-700 border border-ink-600/50 rounded-lg px-2 py-1 text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="px-2 py-1 text-xs"
                 >
                   {PAGE_SIZE_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>
@@ -276,18 +265,18 @@ export default function AdminFencedPayoutAccountsPage() {
                   type="button"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                  className="dash-btn dash-btn--glass dash-btn--sm"
                 >
                   Previous
                 </button>
-                <span className="text-ink-400 text-xs">
+                <span className="text-xs text-[var(--muted)]">
                   Page {page} of {totalPages}
                 </span>
                 <button
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                  className="dash-btn dash-btn--glass dash-btn--sm"
                 >
                   Next
                 </button>
@@ -301,18 +290,18 @@ export default function AdminFencedPayoutAccountsPage() {
       <ModalDialog open={!!releaseFor} onClose={closeRelease} labelledBy="release-fence-title">
         {releaseFor && (
           <>
-            <h3 id="release-fence-title" className="text-white font-semibold mb-2">
+            <h3 id="release-fence-title" className="mb-2 font-semibold text-[var(--ink)]">
               Release payout-account fence
             </h3>
-            <p className="text-ink-400 text-sm mb-1">
+            <p className="mb-1 text-sm text-[var(--copy)]">
               {releaseFor.provider} — {releaseFor.destination}
             </p>
-            <p className="text-ink-500 text-xs font-mono mb-4">
+            <p className="dash-mono mb-4 text-xs text-[var(--muted)]">
               {releaseFor.id}
               {releaseFor.initiationPayoutId && <> · payout {releaseFor.initiationPayoutId}</>}
             </p>
 
-            <label htmlFor="release-reason" className="text-ink-300 text-xs block mb-1">
+            <label htmlFor="release-reason" className="mb-1 block text-xs">
               Release reason (required, ≥ {MIN_REASON_LENGTH} chars)
             </label>
             <textarea
@@ -324,12 +313,12 @@ export default function AdminFencedPayoutAccountsPage() {
               maxLength={500}
               required
               autoFocus
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+              className="mb-4 w-full px-4 py-3"
             />
 
-            <div className="space-y-3 mb-4">
+            <div className="mb-4 space-y-3">
               <div>
-                <label htmlFor="release-provider-tx" className="text-ink-300 text-xs block mb-1">
+                <label htmlFor="release-provider-tx" className="mb-1 block text-xs">
                   Provider transaction id (optional)
                 </label>
                 <input
@@ -338,11 +327,11 @@ export default function AdminFencedPayoutAccountsPage() {
                   onChange={(e) => setProviderTxId(e.target.value)}
                   maxLength={255}
                   placeholder="txn_..."
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
               </div>
               <div>
-                <label htmlFor="release-resolution" className="text-ink-300 text-xs block mb-1">
+                <label htmlFor="release-resolution" className="mb-1 block text-xs">
                   Resolution summary (optional)
                 </label>
                 <textarea
@@ -352,14 +341,11 @@ export default function AdminFencedPayoutAccountsPage() {
                   placeholder="e.g. paid, failed, cancelled"
                   rows={2}
                   maxLength={500}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
               </div>
               <div>
-                <label
-                  htmlFor="release-second-approver"
-                  className="text-ink-300 text-xs block mb-1"
-                >
+                <label htmlFor="release-second-approver" className="mb-1 block text-xs">
                   Second approver id (required for high-value releases)
                 </label>
                 <input
@@ -368,21 +354,21 @@ export default function AdminFencedPayoutAccountsPage() {
                   onChange={(e) => setSecondApproverId(e.target.value)}
                   maxLength={255}
                   placeholder="operator id"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
-                <p className="text-ink-500 text-xs mt-1">
+                <p className="mt-1 text-xs text-[var(--muted)]">
                   High-value releases (exposure ≥ per-currency threshold) require a distinct second
                   approver or the request is rejected by the API.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={closeRelease}
                 disabled={processing === releaseFor.id}
-                className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--glass dash-btn--md"
               >
                 Cancel
               </button>
@@ -390,7 +376,7 @@ export default function AdminFencedPayoutAccountsPage() {
                 type="button"
                 onClick={handleRelease}
                 disabled={reason.trim().length < MIN_REASON_LENGTH || processing === releaseFor.id}
-                className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--primary dash-btn--md"
               >
                 {processing === releaseFor.id ? 'Working...' : 'Confirm release'}
               </button>

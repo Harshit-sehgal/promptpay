@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Notice, PageHeader } from '@/components/dash';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { ADMIN_MFA_RELOGIN_REQUIRED_KEY } from '@/lib/admin-mfa';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -61,62 +62,63 @@ export default function AdminSecurityPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400">Admin</p>
-      <h1 className="text-3xl font-semibold tracking-tight text-ink-100">Account security</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-400">
-        Two-factor authentication is <strong className="text-ink-200">required</strong> for
-        administrator actions in production. Until it is enabled, every write — approving a
-        campaign, changing a platform switch, verifying or processing a payout — is rejected with
-        &ldquo;Recent two-factor authentication is required&rdquo;.
-      </p>
+    <>
+      <PageHeader
+        eyebrow="Admin"
+        title="Account security"
+        lede={
+          <>
+            Two-factor authentication is <strong className="text-[var(--ink)]">required</strong> for
+            administrator actions in production. Until it is enabled, every write — approving a
+            campaign, changing a platform switch, verifying or processing a payout — is rejected
+            with &ldquo;Recent two-factor authentication is required&rdquo;.
+          </>
+        }
+      />
 
       {(!enabled || needsRelogin) && (
-        <div
+        <Notice
+          tone="warn"
           role="status"
-          className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          title={
+            !enabled
+              ? 'This account cannot perform admin actions yet.'
+              : '2FA is enabled, but this session is not MFA-authenticated.'
+          }
         >
           {!enabled ? (
-            <>
-              <p className="font-semibold">This account cannot perform admin actions yet.</p>
-              <p className="mt-1 opacity-90">
-                Enrol an authenticator below. Re-authentication is also required periodically
-                (default 10 minutes) before sensitive actions.
-              </p>
-            </>
+            <p>
+              Enrol an authenticator below. Re-authentication is also required periodically (default
+              10 minutes) before sensitive actions.
+            </p>
           ) : (
             <>
-              <p className="font-semibold">
-                2FA is enabled, but this session is not MFA-authenticated.
-              </p>
-              <p className="mt-1 opacity-90">
+              <p>
                 Enabling 2FA does not rewrite the authentication time in your existing token. Sign
                 out and sign in with a current code before attempting any administrator write.
               </p>
-              {logoutError && <p className="mt-2 text-red-300">{logoutError}</p>}
+              {logoutError && <p className="mt-2 text-[var(--ink)]">{logoutError}</p>}
               <button
                 type="button"
                 onClick={signOutForFreshLogin}
                 disabled={logoutBusy}
-                className="mt-3 rounded-lg bg-amber-200 px-3.5 py-2 text-xs font-semibold text-amber-950 disabled:opacity-50"
+                className="dash-btn dash-btn--primary dash-btn--sm mt-3"
               >
                 {logoutBusy ? 'Signing out…' : 'Sign out and verify 2FA'}
               </button>
             </>
           )}
-        </div>
+        </Notice>
       )}
 
-      <div className="mt-6">
-        <TwoFactorEnrolment
-          initialEnabled={enabled}
-          hasPassword={user?.hasPassword === true}
-          accountEmail={user?.email}
-          onChange={handleSecurityChange}
-          onEnrollmentRequiresRelogin={requireFreshLogin}
-          tone="dark"
-        />
-      </div>
-    </div>
+      <TwoFactorEnrolment
+        initialEnabled={enabled}
+        hasPassword={user?.hasPassword === true}
+        accountEmail={user?.email}
+        onChange={handleSecurityChange}
+        onEnrollmentRequiresRelogin={requireFreshLogin}
+        tone="dark"
+      />
+    </>
   );
 }

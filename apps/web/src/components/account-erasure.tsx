@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Notice } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, authApi, developerApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
@@ -101,80 +102,88 @@ export function AccountErasure({
   const ready = hasPassword && twoFactorEnabled;
 
   return (
-    <section
-      aria-labelledby={`${role}-account-erasure-heading`}
-      className="rounded-2xl border border-rose-200/80 bg-white p-7 shadow-sm"
-    >
-      <h2 id={`${role}-account-erasure-heading`} className="text-base font-bold text-rose-700">
-        Delete account
-      </h2>
-      <p className="mt-2 text-xs leading-5 text-surface-600">
+    <section aria-labelledby={`${role}-account-erasure-heading`} className="dash-panel">
+      <div className="dash-panel__head">
+        <h2 id={`${role}-account-erasure-heading`} className="dash-panel__title">
+          Delete account
+        </h2>
+      </div>
+      <p className="text-xs leading-5 text-[var(--copy)]">
         Permanently erase your personal identity. Financial ledger and audit records that must be
         retained for fraud prevention, tax, or legal compliance are de-identified and retained. This
         action cannot be undone.
       </p>
 
       {error && (
-        <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-700">
-          {error}
-        </p>
+        <div className="mt-3">
+          <Notice tone="bad" role="alert">
+            {error}
+          </Notice>
+        </div>
       )}
 
       {!hasPassword && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
-          <p className="text-sm font-semibold">
-            First, establish a password re-authentication proof
-          </p>
-          <p className="mt-1 text-xs leading-5">
-            We will email a signed, one-time password setup link. Completing it revokes your current
-            sessions; sign in again before continuing.
-          </p>
-          {passwordEmailSent ? (
-            <p role="status" className="mt-3 text-xs font-semibold text-emerald-700">
-              If that account exists, the password setup email is on its way.
+        <div className="mt-4">
+          <Notice
+            tone="warn"
+            title="First, establish a password re-authentication proof"
+            actions={
+              passwordEmailSent ? undefined : (
+                <button
+                  type="button"
+                  onClick={sendPasswordSetupEmail}
+                  disabled={busy || !accountEmail}
+                  className="dash-btn dash-btn--glass dash-btn--sm"
+                >
+                  {busy ? 'Sending…' : 'Email me a password setup link'}
+                </button>
+              )
+            }
+          >
+            <p className="text-xs leading-5">
+              We will email a signed, one-time password setup link. Completing it revokes your
+              current sessions; sign in again before continuing.
             </p>
-          ) : (
-            <button
-              type="button"
-              onClick={sendPasswordSetupEmail}
-              disabled={busy || !accountEmail}
-              className="mt-3 rounded-lg bg-amber-900 px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50"
-            >
-              {busy ? 'Sending…' : 'Email me a password setup link'}
-            </button>
-          )}
+            {passwordEmailSent && (
+              <p role="status" className="mt-3 text-xs font-semibold text-[var(--ink)]">
+                If that account exists, the password setup email is on its way.
+              </p>
+            )}
+          </Notice>
         </div>
       )}
 
       {hasPassword && !twoFactorEnabled && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-5 text-amber-900">
-          Enable two-factor authentication above first. Deletion then requests a fresh 2FA step-up
-          code at the moment you submit it.
+        <div className="mt-4">
+          <Notice tone="warn">
+            Enable two-factor authentication above first. Deletion then requests a fresh 2FA step-up
+            code at the moment you submit it.
+          </Notice>
         </div>
       )}
 
       {ready && (
         <div className="mt-4 space-y-3">
-          <label className="block text-xs font-medium text-surface-700">
+          <label className="block text-xs font-medium">
             Current password
             <input
               type="password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
               autoComplete="current-password"
-              className="mt-1 block w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400/20"
+              className="mt-1 block w-full px-4 py-3 text-sm"
             />
           </label>
-          <label className="block text-xs font-medium text-surface-700">
+          <label className="block text-xs font-medium">
             Type DELETE_MY_ACCOUNT
             <input
               value={confirmation}
               onChange={(event) => setConfirmation(event.target.value)}
               autoComplete="off"
-              className="mt-1 block w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 focus:border-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400/20"
+              className="mt-1 block w-full px-4 py-3 text-sm"
             />
           </label>
-          <label className="flex items-start gap-2 text-xs leading-5 text-surface-600">
+          <label className="flex items-start gap-2 text-xs leading-5 font-normal text-[var(--copy)]">
             <input
               type="checkbox"
               checked={forfeitBalance}
@@ -188,11 +197,11 @@ export function AccountErasure({
             type="button"
             onClick={eraseAccount}
             disabled={busy || confirmation !== 'DELETE_MY_ACCOUNT' || !currentPassword}
-            className="rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
+            className="dash-btn dash-btn--danger dash-btn--md"
           >
             {busy ? 'Deleting…' : 'Permanently delete my account'}
           </button>
-          <p className="text-[11px] leading-4 text-surface-500">
+          <p className="text-[11px] leading-4 text-[var(--muted)]">
             On submit, Ateva asks for a fresh authenticator or backup code. The proof is scoped to
             account deletion and expires after five minutes.
           </p>

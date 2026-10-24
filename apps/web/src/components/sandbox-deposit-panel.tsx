@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Notice, Panel, PanelHeader, Pill } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { sandboxApi } from '@/lib/api/services';
 
@@ -95,31 +96,27 @@ export default function SandboxDepositPanel() {
   };
 
   return (
-    <section
-      aria-label="Sandbox advertiser deposits"
-      className="mb-8 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-5"
-    >
-      <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Sandbox only</p>
-      <h2 className="mt-1 text-lg font-semibold text-white">Test advertiser deposit</h2>
-      <p className="mt-1 text-sm leading-6 text-cyan-100">
+    <Panel label="Sandbox advertiser deposits">
+      <PanelHeader title="Test advertiser deposit" action={<Pill tone="warn">Sandbox only</Pill>} />
+      <p className="text-sm leading-6 text-[var(--copy)]">
         XTS only — simulated provider outcomes, no cash value or external transfer.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <label className="text-xs font-medium text-cyan-100">
+        <label>
           Amount (minor XTS)
           <input
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
             inputMode="numeric"
-            className="mt-1 h-10 w-full rounded-lg border border-cyan-500/30 bg-ink-900 px-3 text-sm text-white"
+            className="mt-1 w-full"
           />
         </label>
-        <label className="text-xs font-medium text-cyan-100">
+        <label>
           Provider outcome
           <select
             value={outcome}
             onChange={(event) => setOutcome(event.target.value as (typeof outcomes)[number])}
-            className="mt-1 h-10 w-full rounded-lg border border-cyan-500/30 bg-ink-900 px-3 text-sm text-white"
+            className="mt-1 w-full"
           >
             {outcomes.map((value) => (
               <option key={value}>{value}</option>
@@ -130,31 +127,29 @@ export default function SandboxDepositPanel() {
           type="button"
           disabled={busy}
           onClick={() => void simulate()}
-          className="h-10 rounded-lg bg-cyan-700 px-4 text-sm font-medium text-white hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="dash-btn dash-btn--primary dash-btn--md"
         >
           Record deposit
         </button>
       </div>
       {(error || notice) && (
-        <p className={`mt-3 text-sm ${error ? 'text-red-300' : 'text-emerald-300'}`}>
-          {error ?? notice}
-        </p>
+        <div className="mt-3">
+          <Notice tone={error ? 'bad' : 'ok'}>{error ?? notice}</Notice>
+        </div>
       )}
       {deposits.length > 0 && (
-        <div className="mt-4 border-t border-cyan-500/20 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">
-            Recent simulations
-          </p>
-          <div className="mt-2 space-y-1 text-sm text-cyan-50">
+        <div className="mt-4 border-t border-[var(--hair)] pt-3">
+          <p className="dash-eyebrow">Recent simulations</p>
+          <div className="mt-2 space-y-1 text-sm text-[var(--ink)]">
             {deposits.slice(0, 5).map((deposit) => (
               <div key={deposit.id} className="flex justify-between gap-3">
-                <span>{formatXts(deposit.amountMinor)}</span>
+                <span className="dash-mono">{formatXts(deposit.amountMinor)}</span>
                 <span>{deposit.status}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

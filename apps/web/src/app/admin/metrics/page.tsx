@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useEffect } from 'react';
-import { LoadingSpinner, StatCard } from '@/components';
+import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Stat } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { bigintRatioPercent, formatCurrency, formatNumber, formatPercent } from '@/lib/format';
@@ -66,11 +67,9 @@ const PERIOD_PRESETS = [
 function MiniBar({
   values,
   maxValue,
-  color,
 }: {
   values: Array<bigint | number>;
   maxValue: bigint | number;
-  color: string;
 }) {
   const max = BigInt(maxValue) > 0n ? BigInt(maxValue) : 1n;
   return (
@@ -78,7 +77,7 @@ function MiniBar({
       {values.map((v, i) => (
         <div
           key={i}
-          className={`w-[6px] rounded-t-sm transition-all duration-200 ${color}`}
+          className={`w-[6px] rounded-t-sm bg-[var(--ink)] transition-all duration-200`}
           style={{
             height: `${Math.min(100, bigintRatioPercent(v, max, 2))}%`,
             minHeight: BigInt(v) > 0n ? '2px' : '0',
@@ -144,246 +143,221 @@ export default function AdminMetricsPage() {
   const campaignTotal = data?.campaigns.total ?? 1;
   const reportingCurrency = data?.currency ?? 'USD';
 
+  // Status shades are ink at different strengths: the counts carry the meaning.
+  const statusShade = (status: string): string =>
+    status === 'active'
+      ? 'opacity-100'
+      : status === 'submitted'
+        ? 'opacity-70'
+        : status === 'paused'
+          ? 'opacity-50'
+          : status === 'draft'
+            ? 'opacity-35'
+            : 'opacity-20';
+
+  const chartPanels = data
+    ? [
+        {
+          title: 'Daily impressions',
+          total: `${formatNumber(data.totals.impressions)} total`,
+          values: data.daily.map((d) => d.impressions),
+          max: maxImpressions,
+        },
+        {
+          title: 'Daily signups',
+          total: `${formatNumber(data.totals.signups)} total`,
+          values: data.daily.map((d) => d.signups),
+          max: maxSignups,
+        },
+        {
+          title: 'Daily earnings (estimated)',
+          total: formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency),
+          values: data.daily.map((d) => d.estimatedRevenueMinor),
+          max: maxRevenue,
+        },
+        {
+          title: 'Daily advertiser spend',
+          total: formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency),
+          values: data.daily.map((d) => d.advertiserSpendMinor),
+          max: maxSpend,
+        },
+      ]
+    : [];
+
   return (
     <>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Operational Metrics</h1>
-        <p className="text-ink-200 text-sm">
-          Platform health, growth trends, and revenue breakdown
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Operational Metrics"
+        lede="Platform health, growth trends, and revenue breakdown"
+      />
 
-      {/* Period selector */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-300 text-sm mr-1">Period:</span>
-        {PERIOD_PRESETS.map((p) => (
-          <button
-            key={p.key}
-            onClick={() => setSelectedDays(p.days)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              selectedDays === p.days
-                ? 'bg-brand-500 text-white'
-                : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-        <span className="text-ink-500 text-xs ml-2">
-          {data ? `${formatDateShort(data.period.from)} – ${formatDateShort(data.period.to)}` : ''}
-        </span>
-      </div>
-
-      {/* Currency selector — the platform is multi-currency (A-081);
-          metrics were previously hard-filtered to USD. Selecting a
-          currency re-queries that currency's revenue/spend. */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-300 text-sm mr-1">Currency:</span>
-        <select
-          value={selectedCurrency}
-          onChange={(e) => setSelectedCurrency(e.target.value)}
-          className="bg-ink-700 text-ink-100 text-xs rounded-lg px-2 py-1.5 border border-ink-600 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-        >
-          {Object.keys(CURRENCY_POLICY).map((code) => (
-            <option key={code} value={code}>
-              {code}
-            </option>
+      {/* Period and currency selectors */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm text-[var(--muted)]">Period:</span>
+          {PERIOD_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setSelectedDays(p.days)}
+              className={`dash-btn dash-btn--sm ${
+                selectedDays === p.days ? 'dash-btn--primary' : 'dash-btn--glass'
+              }`}
+            >
+              {p.label}
+            </button>
           ))}
-        </select>
+          <span className="ml-2 text-xs text-[var(--muted)]">
+            {data
+              ? `${formatDateShort(data.period.from)} – ${formatDateShort(data.period.to)}`
+              : ''}
+          </span>
+        </div>
+
+        {/* Currency selector — the platform is multi-currency (A-081);
+            metrics were previously hard-filtered to USD. Selecting a
+            currency re-queries that currency's revenue/spend. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-sm text-[var(--muted)]">Currency:</span>
+          <select
+            value={selectedCurrency}
+            onChange={(e) => setSelectedCurrency(e.target.value)}
+            className="px-3 py-1.5 text-xs"
+          >
+            {Object.keys(CURRENCY_POLICY).map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Loading & error */}
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={fetchMetrics} className="text-red-300 text-xs underline mt-1">
-            Retry
-          </button>
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            <button onClick={fetchMetrics} className="dash-btn dash-btn--glass dash-btn--sm">
+              Retry
+            </button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
-          {/* ── Summary stat cards ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              label="Impressions"
-              value={formatNumber(data.totals.impressions)}
-              subtitle={
-                data.vsPreviousPeriod.impressionsChangePct !== null
-                  ? `${data.vsPreviousPeriod.impressionsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.impressionsChangePct).toFixed(1)}% vs prior period`
-                  : undefined
-              }
-            />
-            <StatCard
-              label="Billable %"
-              value={
-                data.totals.impressions > 0
-                  ? formatPercent((data.totals.billableImpressions / data.totals.impressions) * 100)
-                  : '—'
-              }
-            />
-            <StatCard
-              label="Signups"
-              value={formatNumber(data.totals.signups)}
-              subtitle={
-                data.vsPreviousPeriod.signupsChangePct !== null
-                  ? `${data.vsPreviousPeriod.signupsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.signupsChangePct).toFixed(1)}% vs prior period`
-                  : undefined
-              }
-            />
-            <StatCard label="Active users" value={formatNumber(data.activeUsers.total)} />
+          {/* ── Summary stats ── */}
+          <div className="dash-grid dash-grid--4">
+            <Panel label="Impressions">
+              <Stat
+                label="Impressions"
+                value={formatNumber(data.totals.impressions)}
+                detail={
+                  data.vsPreviousPeriod.impressionsChangePct !== null
+                    ? `${data.vsPreviousPeriod.impressionsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.impressionsChangePct).toFixed(1)}% vs prior period`
+                    : undefined
+                }
+              />
+            </Panel>
+            <Panel label="Billable %">
+              <Stat
+                label="Billable %"
+                value={
+                  data.totals.impressions > 0
+                    ? formatPercent(
+                        (data.totals.billableImpressions / data.totals.impressions) * 100,
+                      )
+                    : '—'
+                }
+              />
+            </Panel>
+            <Panel label="Signups">
+              <Stat
+                label="Signups"
+                value={formatNumber(data.totals.signups)}
+                detail={
+                  data.vsPreviousPeriod.signupsChangePct !== null
+                    ? `${data.vsPreviousPeriod.signupsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.signupsChangePct).toFixed(1)}% vs prior period`
+                    : undefined
+                }
+              />
+            </Panel>
+            <Panel label="Active users">
+              <Stat label="Active users" value={formatNumber(data.activeUsers.total)} />
+            </Panel>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              label={`Developer earnings (${reportingCurrency})`}
-              value={formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
-            />
-            <StatCard
-              label={`Advertiser spend (${reportingCurrency})`}
-              value={formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
-            />
-            <StatCard
-              label={`Paid out (${reportingCurrency})`}
-              value={formatCurrency(data.totals.paidRevenueMinor, reportingCurrency)}
-            />
-            <StatCard
-              label="Pending payouts"
-              value={formatNumber(data.payouts.pending)}
-              valueColor="text-amber-400"
-            />
+          <div className="dash-grid dash-grid--4">
+            <Panel label={`Developer earnings (${reportingCurrency})`}>
+              <Stat
+                label={`Developer earnings (${reportingCurrency})`}
+                value={formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
+              />
+            </Panel>
+            <Panel label={`Advertiser spend (${reportingCurrency})`}>
+              <Stat
+                label={`Advertiser spend (${reportingCurrency})`}
+                value={formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
+              />
+            </Panel>
+            <Panel label={`Paid out (${reportingCurrency})`}>
+              <Stat
+                label={`Paid out (${reportingCurrency})`}
+                value={formatCurrency(data.totals.paidRevenueMinor, reportingCurrency)}
+              />
+            </Panel>
+            <Panel label="Pending payouts">
+              <Stat label="Pending payouts" value={formatNumber(data.payouts.pending)} />
+            </Panel>
           </div>
 
           {/* ── Time-series charts ── */}
           {data.daily.length > 1 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              {/* Daily impressions */}
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white text-sm font-semibold">
-                    Daily impressions{' '}
-                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
-                  </h3>
-                  <span className="text-ink-300 text-xs">
-                    {formatNumber(data.totals.impressions)} total
-                  </span>
-                </div>
-                <div className="flex items-end gap-1 h-20 mb-2">
-                  <MiniBar
-                    values={data.daily.map((d) => d.impressions)}
-                    maxValue={maxImpressions}
-                    color="bg-brand-500"
+            <div className="dash-grid dash-grid--2">
+              {chartPanels.map((chart) => (
+                <Panel key={chart.title} label={chart.title}>
+                  <PanelHeader
+                    title={
+                      <>
+                        {chart.title}{' '}
+                        <span className="font-normal text-[var(--muted)]">
+                          ({data.daily.length} days)
+                        </span>
+                      </>
+                    }
+                    action={<span className="text-xs text-[var(--muted)]">{chart.total}</span>}
                   />
-                </div>
-                <div className="flex justify-between text-ink-500 text-xs">
-                  <span>{formatDateShort(data.daily[0].date)}</span>
-                  <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
-                </div>
-              </div>
-
-              {/* Daily signups */}
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white text-sm font-semibold">
-                    Daily signups{' '}
-                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
-                  </h3>
-                  <span className="text-ink-300 text-xs">
-                    {formatNumber(data.totals.signups)} total
-                  </span>
-                </div>
-                <div className="flex items-end gap-1 h-20 mb-2">
-                  <MiniBar
-                    values={data.daily.map((d) => d.signups)}
-                    maxValue={maxSignups}
-                    color="bg-emerald-500"
-                  />
-                </div>
-                <div className="flex justify-between text-ink-500 text-xs">
-                  <span>{formatDateShort(data.daily[0].date)}</span>
-                  <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
-                </div>
-              </div>
-
-              {/* Daily developer earnings */}
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white text-sm font-semibold">
-                    Daily earnings (estimated){' '}
-                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
-                  </h3>
-                  <span className="text-ink-300 text-xs">
-                    {formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
-                  </span>
-                </div>
-                <div className="flex items-end gap-1 h-20 mb-2">
-                  <MiniBar
-                    values={data.daily.map((d) => d.estimatedRevenueMinor)}
-                    maxValue={maxRevenue}
-                    color="bg-violet-500"
-                  />
-                </div>
-                <div className="flex justify-between text-ink-500 text-xs">
-                  <span>{formatDateShort(data.daily[0].date)}</span>
-                  <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
-                </div>
-              </div>
-
-              {/* Daily advertiser spend */}
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white text-sm font-semibold">
-                    Daily advertiser spend{' '}
-                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
-                  </h3>
-                  <span className="text-ink-300 text-xs">
-                    {formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
-                  </span>
-                </div>
-                <div className="flex items-end gap-1 h-20 mb-2">
-                  <MiniBar
-                    values={data.daily.map((d) => d.advertiserSpendMinor)}
-                    maxValue={maxSpend}
-                    color="bg-amber-500"
-                  />
-                </div>
-                <div className="flex justify-between text-ink-500 text-xs">
-                  <span>{formatDateShort(data.daily[0].date)}</span>
-                  <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
-                </div>
-              </div>
+                  <div className="mb-2 flex h-20 items-end gap-1">
+                    <MiniBar values={chart.values} maxValue={chart.max} />
+                  </div>
+                  <div className="flex justify-between text-xs text-[var(--muted)]">
+                    <span>{formatDateShort(data.daily[0].date)}</span>
+                    <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
+                  </div>
+                </Panel>
+              ))}
             </div>
           )}
 
           {/* ── Bottom row: campaign distribution + active users + platform revenue ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="dash-grid dash-grid--3">
             {/* Campaign status distribution */}
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <h3 className="text-white text-sm font-semibold mb-4">Campaigns by status</h3>
+            <Panel label="Campaigns by status">
+              <PanelHeader title="Campaigns by status" />
               <div className="space-y-3">
                 {/* Overall progress bar */}
-                <div className="h-2 bg-ink-700 rounded-full overflow-hidden flex">
+                <div className="flex h-2 gap-px overflow-hidden rounded-full bg-[var(--hair)]">
                   {data.campaigns.byStatus.map((s) => {
                     const pct = (s.count / campaignTotal) * 100;
-                    const color =
-                      s.status === 'active'
-                        ? 'bg-emerald-500'
-                        : s.status === 'draft'
-                          ? 'bg-ink-500'
-                          : s.status === 'submitted'
-                            ? 'bg-blue-500'
-                            : s.status === 'paused'
-                              ? 'bg-amber-500'
-                              : s.status === 'archived'
-                                ? 'bg-ink-600'
-                                : 'bg-ink-400';
                     return (
                       <div
                         key={s.status}
-                        className={`${color} h-full transition-all`}
+                        className={`h-full bg-[var(--ink)] transition-all ${statusShade(s.status)}`}
                         style={{ width: `${pct}%` }}
                       />
                     );
@@ -391,61 +365,43 @@ export default function AdminMetricsPage() {
                 </div>
                 {data.campaigns.byStatus.map((s) => {
                   const pct = Math.round((s.count / campaignTotal) * 100);
-                  const dot =
-                    s.status === 'active'
-                      ? 'bg-emerald-500'
-                      : s.status === 'draft'
-                        ? 'bg-ink-500'
-                        : s.status === 'submitted'
-                          ? 'bg-blue-500'
-                          : s.status === 'paused'
-                            ? 'bg-amber-500'
-                            : s.status === 'archived'
-                              ? 'bg-ink-600'
-                              : 'bg-ink-400';
                   return (
                     <div key={s.status} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${dot}`} />
-                        <span className="text-ink-200 capitalize">{s.status}</span>
+                        <span
+                          className={`h-2 w-2 rounded-full bg-[var(--ink)] ${statusShade(s.status)}`}
+                        />
+                        <span className="text-[var(--copy)] capitalize">{s.status}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-white font-mono">{formatNumber(s.count)}</span>
-                        <span className="text-ink-500 text-xs">{pct}%</span>
+                        <span className="dash-mono text-[var(--ink)]">{formatNumber(s.count)}</span>
+                        <span className="text-xs text-[var(--muted)]">{pct}%</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </Panel>
 
             {/* Active users breakdown */}
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <h3 className="text-white text-sm font-semibold mb-4">Active users</h3>
+            <Panel label="Active users breakdown">
+              <PanelHeader title="Active users" />
               <div className="space-y-4">
                 {(
                   [
-                    {
-                      label: 'Developers',
-                      count: data.activeUsers.developers,
-                      color: 'bg-brand-500',
-                    },
-                    {
-                      label: 'Advertisers',
-                      count: data.activeUsers.advertisers,
-                      color: 'bg-emerald-500',
-                    },
-                    { label: 'Admins', count: data.activeUsers.admins, color: 'bg-red-500' },
+                    { label: 'Developers', count: data.activeUsers.developers },
+                    { label: 'Advertisers', count: data.activeUsers.advertisers },
+                    { label: 'Admins', count: data.activeUsers.admins },
                   ] as const
-                ).map(({ label, count, color }) => (
+                ).map(({ label, count }) => (
                   <div key={label}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-ink-200">{label}</span>
-                      <span className="text-white font-mono">{formatNumber(count)}</span>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="text-[var(--copy)]">{label}</span>
+                      <span className="dash-mono text-[var(--ink)]">{formatNumber(count)}</span>
                     </div>
-                    <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--hair)]">
                       <div
-                        className={`h-full ${color} rounded-full transition-all`}
+                        className="h-full rounded-full bg-[var(--ink)] transition-all"
                         style={{
                           width: `${data.activeUsers.total > 0 ? (count / data.activeUsers.total) * 100 : 0}%`,
                         }}
@@ -454,112 +410,105 @@ export default function AdminMetricsPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 pt-4 border-t border-ink-600/20 flex items-center justify-between">
-                <span className="text-ink-300 text-sm">Total</span>
-                <span className="text-white font-mono text-lg font-semibold">
+              <div className="mt-4 flex items-center justify-between border-t border-[var(--hair)] pt-4">
+                <span className="text-sm text-[var(--muted)]">Total</span>
+                <span className="dash-mono text-lg font-semibold text-[var(--ink)]">
                   {formatNumber(data.activeUsers.total)}
                 </span>
               </div>
-            </div>
+            </Panel>
 
             {/* Platform revenue */}
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <h3 className="text-white text-sm font-semibold mb-4">Platform revenue</h3>
+            <Panel label="Platform revenue">
+              <PanelHeader title="Platform revenue" />
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
-                  <span className="text-ink-200">Platform fees</span>
-                  <span className="text-white font-mono">
+                <div className="flex items-center justify-between border-b border-[var(--hair)] py-2 text-sm">
+                  <span className="text-[var(--copy)]">Platform fees</span>
+                  <span className="dash-mono text-[var(--ink)]">
                     {formatCurrency(data.platformRevenue.platformFeeMinor, reportingCurrency)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
-                  <span className="text-ink-200">Fraud reserve</span>
-                  <span className="text-white font-mono">
+                <div className="flex items-center justify-between border-b border-[var(--hair)] py-2 text-sm">
+                  <span className="text-[var(--copy)]">Fraud reserve</span>
+                  <span className="dash-mono text-[var(--ink)]">
                     {formatCurrency(data.platformRevenue.fraudReserveMinor, reportingCurrency)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm py-2">
-                  <span className="text-ink-200 font-semibold">Total</span>
-                  <span className="text-brand-400 font-mono text-base font-semibold">
+                <div className="flex items-center justify-between py-2 text-sm">
+                  <span className="font-semibold text-[var(--ink)]">Total</span>
+                  <span className="dash-mono text-base font-semibold text-[var(--ink)]">
                     {formatCurrency(data.platformRevenue.totalMinor, reportingCurrency)}
                   </span>
                 </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-ink-600/20">
+              <div className="mt-4 border-t border-[var(--hair)] pt-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-300">Paid out to developers</span>
-                  <span className="text-white font-mono">
+                  <span className="text-[var(--muted)]">Paid out to developers</span>
+                  <span className="dash-mono text-[var(--ink)]">
                     {formatCurrency(data.payouts.totalPaidMinor, reportingCurrency)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm mt-2">
-                  <span className="text-ink-300">Total payouts processed</span>
-                  <span className="text-ink-200 font-mono">{formatNumber(data.payouts.total)}</span>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-[var(--muted)]">Total payouts processed</span>
+                  <span className="dash-mono text-[var(--copy)]">
+                    {formatNumber(data.payouts.total)}
+                  </span>
                 </div>
               </div>
-            </div>
+            </Panel>
           </div>
 
           {/* ── Daily data table (collapsible detail) ── */}
-          <details className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-            <summary className="px-6 py-4 text-white text-sm font-semibold cursor-pointer hover:bg-ink-700/30 transition-colors">
-              Daily breakdown table
-            </summary>
-            <div
-              className="overflow-x-auto"
-              tabIndex={0}
-              role="region"
-              aria-label="Metrics table, scrolls horizontally"
-            >
-              <table className="w-full min-w-[760px] text-xs">
-                <thead>
-                  <tr className="bg-ink-700/30 text-ink-300 font-medium uppercase tracking-wider">
-                    <th className="text-left px-4 py-2">Date</th>
-                    <th className="text-right px-4 py-2">Impressions</th>
-                    <th className="text-right px-4 py-2">Billable</th>
-                    <th className="text-right px-4 py-2">Signups</th>
-                    <th className="text-right px-4 py-2">Dev signups</th>
-                    <th className="text-right px-4 py-2">Adv signups</th>
-                    <th className="text-right px-4 py-2">Est. earnings ({reportingCurrency})</th>
-                    <th className="text-right px-4 py-2">Adv. spend ({reportingCurrency})</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.daily.map((d) => (
-                    <tr
-                      key={d.date}
-                      className="border-t border-ink-600/10 hover:bg-ink-700/20 transition-colors"
-                    >
-                      <td className="px-4 py-2 text-ink-200 font-medium">
-                        {formatDateShort(d.date)}
-                      </td>
-                      <td className="px-4 py-2 text-white font-mono text-right">
-                        {formatNumber(d.impressions)}
-                      </td>
-                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
-                        {formatNumber(d.billableImpressions)}
-                      </td>
-                      <td className="px-4 py-2 text-white font-mono text-right">
-                        {formatNumber(d.signups)}
-                      </td>
-                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
-                        {formatNumber(d.developerSignups)}
-                      </td>
-                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
-                        {formatNumber(d.advertiserSignups)}
-                      </td>
-                      <td className="px-4 py-2 text-violet-400 font-mono text-right">
-                        {formatCurrency(d.estimatedRevenueMinor, reportingCurrency)}
-                      </td>
-                      <td className="px-4 py-2 text-amber-400 font-mono text-right">
-                        {formatCurrency(d.advertiserSpendMinor, reportingCurrency)}
-                      </td>
+          <Panel label="Daily breakdown" flush>
+            <details>
+              <summary className="cursor-pointer px-[22px] py-4 text-sm font-semibold text-[var(--ink)]">
+                Daily breakdown table
+              </summary>
+              <div
+                className="overflow-x-auto"
+                tabIndex={0}
+                role="region"
+                aria-label="Metrics table, scrolls horizontally"
+              >
+                <table className="min-w-[760px] text-xs">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th className="text-right">Impressions</th>
+                      <th className="text-right">Billable</th>
+                      <th className="text-right">Signups</th>
+                      <th className="text-right">Dev signups</th>
+                      <th className="text-right">Adv signups</th>
+                      <th className="text-right">Est. earnings ({reportingCurrency})</th>
+                      <th className="text-right">Adv. spend ({reportingCurrency})</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </details>
+                  </thead>
+                  <tbody>
+                    {data.daily.map((d) => (
+                      <tr key={d.date}>
+                        <td className="font-medium">{formatDateShort(d.date)}</td>
+                        <td className="dash-mono text-right">{formatNumber(d.impressions)}</td>
+                        <td className="dash-mono text-right">
+                          {formatNumber(d.billableImpressions)}
+                        </td>
+                        <td className="dash-mono text-right">{formatNumber(d.signups)}</td>
+                        <td className="dash-mono text-right">{formatNumber(d.developerSignups)}</td>
+                        <td className="dash-mono text-right">
+                          {formatNumber(d.advertiserSignups)}
+                        </td>
+                        <td className="dash-mono text-right">
+                          {formatCurrency(d.estimatedRevenueMinor, reportingCurrency)}
+                        </td>
+                        <td className="dash-mono text-right">
+                          {formatCurrency(d.advertiserSpendMinor, reportingCurrency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </Panel>
         </>
       )}
     </>

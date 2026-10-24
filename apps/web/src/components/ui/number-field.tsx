@@ -62,16 +62,16 @@ export function NumberField({
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-sm font-medium text-surface-950">
+      <label htmlFor={id} className="text-sm font-medium text-[var(--ink)]">
         {label}
       </label>
       <div
-        className={`flex items-center rounded-[10px] border bg-white transition-colors focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 ${
-          outOfRange ? 'border-amber-400' : 'border-surface-300'
+        className={`flex items-center rounded-xl border bg-[var(--glass-strong)] transition-colors focus-within:border-[var(--ink)] focus-within:ring-2 focus-within:ring-[var(--hair)] ${
+          outOfRange ? 'border-[var(--ink)]' : 'border-[var(--hair)]'
         }`}
       >
         {prefix && (
-          <span aria-hidden="true" className="pl-3.5 font-mono text-sm text-surface-500">
+          <span aria-hidden="true" className="dash-mono pl-3.5 text-sm text-[var(--muted)]">
             {prefix}
           </span>
         )}
@@ -104,19 +104,19 @@ export function NumberField({
           // A scroll wheel over a focused number input silently changes it,
           // which is a real hazard on a page the visitor is scrolling through.
           onWheel={(e) => e.currentTarget.blur()}
-          className={`h-11 w-full bg-transparent px-3.5 font-mono text-[17px] font-medium text-surface-950 outline-none ${
+          className={`dash-mono h-11 w-full rounded-none! border-0! bg-transparent! px-3.5 text-[17px] font-medium text-[var(--ink)] outline-none! ${
             prefix ? 'pl-1.5' : ''
           }`}
         />
         {suffix && (
-          <span aria-hidden="true" className="pr-3.5 font-mono text-sm text-surface-500">
+          <span aria-hidden="true" className="dash-mono pr-3.5 text-sm text-[var(--muted)]">
             {suffix}
           </span>
         )}
       </div>
       <span
         id={hintId}
-        className={`font-mono text-xs ${outOfRange ? 'text-amber-700' : 'text-surface-500'}`}
+        className={`dash-mono text-xs ${outOfRange ? 'font-semibold text-[var(--ink)]' : 'text-[var(--muted)]'}`}
       >
         {outOfRange
           ? `Enter ${trimNumber(min, decimals)} – ${trimNumber(max, decimals)}; anything outside is set back to the nearest end.`

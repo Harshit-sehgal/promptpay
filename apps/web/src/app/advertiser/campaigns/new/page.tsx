@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { ActionLink, Notice, PageHeader, Panel, PanelHeader } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
@@ -172,42 +172,36 @@ export default function NewCampaignPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Create campaign</h1>
-        <p className="text-ink-300 text-sm">
-          Set up your ad campaign, creative, and targeting in one step
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Advertiser"
+        title="Create campaign"
+        lede="Set up your ad campaign, creative, and targeting in one step"
+      />
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-          {draftRecoveryId && (
-            <Link
-              href={`/advertiser/campaigns/${draftRecoveryId}/edit`}
-              className="mt-3 inline-block text-sm font-medium text-red-200 hover:text-white"
-            >
-              Open saved draft
-            </Link>
-          )}
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            draftRecoveryId ? (
+              <ActionLink href={`/advertiser/campaigns/${draftRecoveryId}/edit`} variant="text">
+                Open saved draft
+              </ActionLink>
+            ) : undefined
+          }
+        >
+          {error}
+        </Notice>
       )}
-      {success && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mb-6">
-          <p className="text-emerald-400 text-sm">Campaign created and submitted for review!</p>
-        </div>
-      )}
+      {success && <Notice tone="ok">Campaign created and submitted for review!</Notice>}
 
-      <form onSubmit={handleSubmit} className="space-y-8 max-w-3xl">
+      <form onSubmit={handleSubmit} className="grid max-w-3xl gap-5">
         {/* Campaign details */}
-        <div className="app-form-section p-6">
-          <h2 className="text-white font-semibold mb-4">Campaign details</h2>
+        <Panel>
+          <PanelHeader title="Campaign details" />
           <div className="space-y-4">
             <div>
-              <label
-                htmlFor="campaign-name"
-                className="text-ink-200 text-sm font-medium mb-1.5 block"
-              >
+              <label htmlFor="campaign-name" className="mb-1.5 block">
                 Campaign name
               </label>
               <input
@@ -220,14 +214,11 @@ export default function NewCampaignPage() {
                 required
                 placeholder="My developer tool campaign"
                 autoComplete="off"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="w-full"
               />
             </div>
             <div>
-              <label
-                htmlFor="campaign-currency"
-                className="text-ink-200 text-sm font-medium mb-1.5 block"
-              >
+              <label htmlFor="campaign-currency" className="mb-1.5 block">
                 Campaign currency
               </label>
               <select
@@ -235,7 +226,7 @@ export default function NewCampaignPage() {
                 data-testid="campaign-currency-select"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
+                className="w-full"
               >
                 {fundedCurrencies.map((c) => (
                   <option key={c} value={c}>
@@ -243,17 +234,14 @@ export default function NewCampaignPage() {
                   </option>
                 ))}
               </select>
-              <p className="text-ink-500 text-xs mt-1">
+              <p className="mt-1 text-xs text-[var(--muted)]">
                 Campaigns activate and spend in their own currency — pick a funded deposit balance.
               </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label
-                  htmlFor="campaign-bid-type"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-bid-type" className="mb-1.5 block">
                   Bid type
                 </label>
                 <select
@@ -262,7 +250,7 @@ export default function NewCampaignPage() {
                   aria-label="Bid type"
                   value={bidType}
                   onChange={(e) => setBidType(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
+                  className="w-full"
                 >
                   {BID_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -272,10 +260,7 @@ export default function NewCampaignPage() {
                 </select>
               </div>
               <div>
-                <label
-                  htmlFor="campaign-bid-amount"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-bid-amount" className="mb-1.5 block">
                   Bid amount ({currency})
                 </label>
                 <input
@@ -289,17 +274,14 @@ export default function NewCampaignPage() {
                   onChange={(e) => setBidAmount(e.target.value)}
                   required
                   inputMode="decimal"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label
-                  htmlFor="campaign-budget"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-budget" className="mb-1.5 block">
                   Total budget ({currency})
                 </label>
                 <input
@@ -314,17 +296,14 @@ export default function NewCampaignPage() {
                   onChange={(e) => setBudgetTotal(e.target.value)}
                   required
                   inputMode="decimal"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full"
                 />
-                <p className="text-ink-500 text-xs mt-1">
+                <p className="mt-1 text-xs text-[var(--muted)]">
                   {moneyPolicy.minimumBudgetLabel} – {moneyPolicy.maximumBudgetLabel}
                 </p>
               </div>
               <div>
-                <label
-                  htmlFor="campaign-category"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-category" className="mb-1.5 block">
                   Category
                 </label>
                 <select
@@ -332,7 +311,7 @@ export default function NewCampaignPage() {
                   data-testid="campaign-category-select"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
+                  className="w-full"
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
@@ -344,10 +323,7 @@ export default function NewCampaignPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="campaign-landing-url"
-                className="text-ink-200 text-sm font-medium mb-1.5 block"
-              >
+              <label htmlFor="campaign-landing-url" className="mb-1.5 block">
                 Landing URL
               </label>
               <input
@@ -360,21 +336,18 @@ export default function NewCampaignPage() {
                 placeholder="https://your-product.com"
                 autoComplete="url"
                 inputMode="url"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="w-full"
               />
             </div>
           </div>
-        </div>
+        </Panel>
 
         {/* Ad creative */}
-        <div className="app-form-section p-6">
-          <h2 className="text-white font-semibold mb-4">Ad creative</h2>
+        <Panel>
+          <PanelHeader title="Ad creative" />
           <div className="space-y-4">
             <div>
-              <label
-                htmlFor="campaign-headline"
-                className="text-ink-200 text-sm font-medium mb-1.5 block"
-              >
+              <label htmlFor="campaign-headline" className="mb-1.5 block">
                 Headline
               </label>{' '}
               <input
@@ -387,16 +360,13 @@ export default function NewCampaignPage() {
                 required
                 maxLength={50}
                 placeholder="Short, attention-grabbing headline"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="w-full"
               />
-              <p className="text-ink-500 text-xs mt-1">{headline.length}/50 characters</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{headline.length}/50 characters</p>
             </div>
 
             <div>
-              <label
-                htmlFor="campaign-message"
-                className="text-ink-200 text-sm font-medium mb-1.5 block"
-              >
+              <label htmlFor="campaign-message" className="mb-1.5 block">
                 Message
               </label>{' '}
               <textarea
@@ -409,17 +379,14 @@ export default function NewCampaignPage() {
                 maxLength={80}
                 rows={2}
                 placeholder="Max 80 chars — shown during wait states"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="w-full"
               />
-              <p className="text-ink-500 text-xs mt-1">{message.length}/80 characters</p>
+              <p className="mt-1 text-xs text-[var(--muted)]">{message.length}/80 characters</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label
-                  htmlFor="campaign-cta-text"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-cta-text" className="mb-1.5 block">
                   CTA text
                 </label>
                 <input
@@ -431,14 +398,11 @@ export default function NewCampaignPage() {
                   required
                   maxLength={25}
                   placeholder="Learn more"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full"
                 />
               </div>
               <div>
-                <label
-                  htmlFor="campaign-cta-url"
-                  className="text-ink-200 text-sm font-medium mb-1.5 block"
-                >
+                <label htmlFor="campaign-cta-url" className="mb-1.5 block">
                   CTA URL
                 </label>
                 <input
@@ -448,35 +412,32 @@ export default function NewCampaignPage() {
                   value={ctaUrl}
                   onChange={(e) => setCtaUrl(e.target.value)}
                   placeholder="Defaults to landing URL"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full"
                 />
               </div>
             </div>
 
             {/* Preview */}
-            <div className="app-form-preview p-4">
-              <p className="text-ink-400 text-xs uppercase mb-2">Preview</p>
+            <div className="rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-4">
+              <p className="dash-eyebrow mb-2">Preview</p>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-white font-medium text-sm">{headline || 'Headline'}</p>
-                  <p className="text-ink-300 text-sm">{message || 'Ad message text'}</p>
+                  <p className="text-sm font-medium text-[var(--ink)]">{headline || 'Headline'}</p>
+                  <p className="text-sm text-[var(--copy)]">{message || 'Ad message text'}</p>
                 </div>
-                <span className="bg-brand-500/20 text-brand-500 px-3 py-1.5 rounded-lg text-xs font-medium">
+                <span className="rounded-full bg-[var(--ink)] px-3 py-1.5 text-xs font-medium text-[var(--on-ink)]">
                   {ctaText || 'Learn more'}
                 </span>
               </div>
             </div>
           </div>
-        </div>
+        </Panel>
 
         {/* Targeting */}
-        <div className="app-form-section p-6">
-          <h2 className="text-white font-semibold mb-4">Targeting</h2>
+        <Panel>
+          <PanelHeader title="Targeting" />
           <div>
-            <label
-              htmlFor="campaign-target-countries"
-              className="text-ink-200 text-sm font-medium mb-1.5 block"
-            >
+            <label htmlFor="campaign-target-countries" className="mb-1.5 block">
               Country targeting (comma-separated ISO codes)
             </label>
             <input
@@ -487,19 +448,19 @@ export default function NewCampaignPage() {
               value={targetCountries}
               onChange={(e) => setTargetCountries(e.target.value)}
               placeholder="US, GB, DE (leave empty for all)"
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+              className="w-full"
             />
-            <p className="text-ink-500 text-xs mt-1">
+            <p className="mt-1 text-xs text-[var(--muted)]">
               Empty = worldwide. Use 2-letter ISO codes (US, GB, DE, IN, etc.)
             </p>
           </div>
-        </div>
+        </Panel>
 
         <div className="flex items-center gap-4">
           <button
             type="submit"
             disabled={submitting}
-            className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+            className="dash-btn dash-btn--primary dash-btn--lg"
           >
             {submitting ? 'Creating...' : 'Create & submit campaign'}
           </button>

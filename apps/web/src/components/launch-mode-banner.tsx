@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { type Tone } from '@/components/dash';
 import { getPlatformHealth } from '@/lib/platform-health';
 
 /**
@@ -79,7 +80,7 @@ export function earningsAreLive(mode: WaitLaunchMode): boolean {
 
 const COPY: Record<
   Exclude<WaitLaunchMode, 'earnings_enabled'>,
-  { title: string; body: string; tone: string }
+  { title: string; body: string; tone: Tone }
 > = {
   telemetry_only: {
     title: 'Private beta — wait detection only, no earnings',
@@ -87,21 +88,21 @@ const COPY: Record<
       'Your wait states are being verified, but settlement is switched off, so no earnings ' +
       'accrue and advertisers are not billed. Rewards stay disabled until an independently ' +
       'verifiable wait attestation is deployed and reviewed.',
-    tone: 'border-sky-300 bg-sky-50 text-sky-950',
+    tone: 'neutral',
   },
   paused: {
     title: 'Ad serving is paused',
     body:
       'The platform operator has paused ad serving. Wait detection may continue, but no ' +
       'placements are served and nothing accrues while this is in effect.',
-    tone: 'border-amber-300 bg-amber-50 text-amber-950',
+    tone: 'warn',
   },
   unknown: {
     title: 'Platform status unavailable',
     body:
       'We could not confirm whether settlement is enabled. Treat earnings figures as ' +
       'unverified until this resolves.',
-    tone: 'border-surface-300 bg-surface-100 text-surface-900',
+    tone: 'warn',
   },
 };
 
@@ -117,16 +118,21 @@ export function LaunchModeBanner({ override }: { override?: WaitLaunchMode } = {
     <div
       role="status"
       aria-label={copy.title}
-      className={`launch-mode-banner mb-6 rounded-xl border px-4 py-3 text-sm ${copy.tone}`}
+      className="launch-mode-banner dash-notice"
+      data-tone={copy.tone}
     >
-      <p className="font-semibold">{copy.title}</p>
-      <p className="mt-1 leading-relaxed opacity-90">{copy.body}</p>
-      <Link
-        href="/payout-policy"
-        className="mt-2 inline-block text-xs font-medium underline underline-offset-2"
-      >
-        Read the payout policy →
-      </Link>
+      <div className="dash-notice__body">
+        <p className="dash-notice__title">{copy.title}</p>
+        <p className="dash-notice__text">{copy.body}</p>
+      </div>
+      <div className="dash-notice__actions">
+        <Link href="/payout-policy" className="dash-action dash-action--text">
+          Payout policy
+          <span className="dash-action__arrow" aria-hidden="true">
+            →
+          </span>
+        </Link>
+      </div>
     </div>
   );
 }

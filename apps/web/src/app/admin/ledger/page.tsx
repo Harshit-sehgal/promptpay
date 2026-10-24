@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Pill, type Tone } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { ledgerApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
@@ -58,25 +59,30 @@ export default function AdminLedgerPage() {
       .finally(() => setLoading(false));
   }, [ledgerKind]);
 
+  const kindTone: Record<LedgerEntry['ledgerKind'], Tone> = {
+    earnings: 'ok',
+    advertiser: 'neutral',
+    platform: 'neutral',
+  };
+
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Ledger & revenue</h1>
-        <p className="text-ink-200 text-sm">
-          All three ledgers — earnings, advertiser balance, platform revenue
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Ledger & revenue"
+        lede="All three ledgers — earnings, advertiser balance, platform revenue"
+      />
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {breakdown && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="dash-grid dash-grid--4">
             <StatCard
               label="Confirmed earnings (payable)"
               value={formatCurrencyBreakdown(
@@ -84,7 +90,6 @@ export default function AdminLedgerPage() {
                   USD: breakdown.earningsLedger.confirmedMinor,
                 },
               )}
-              valueColor="text-emerald-400"
             />
             <StatCard
               label="Pending earnings"
@@ -109,7 +114,6 @@ export default function AdminLedgerPage() {
                   USD: breakdown.platformLedger.revenueMinor,
                 },
               )}
-              valueColor="text-brand-500"
               subtitle={`Reserve: ${formatCurrencyBreakdown(
                 breakdown.platformLedger.reserveByCurrency ?? {
                   USD: breakdown.platformLedger.reserveMinor,
@@ -118,12 +122,12 @@ export default function AdminLedgerPage() {
             />
           </div>
 
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-6">
-            <h2 className="text-white font-semibold mb-4">Revenue split</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Panel label="Revenue split">
+            <PanelHeader title="Revenue split" />
+            <div className="dash-grid dash-grid--3">
               <div>
-                <p className="text-ink-300 text-xs uppercase">User share (60-80%)</p>
-                <p className="text-emerald-400 font-mono text-lg">
+                <p className="dash-eyebrow">User share (60-80%)</p>
+                <p className="dash-mono text-lg text-[var(--ink)]">
                   {formatCurrencyBreakdown(
                     breakdown.earningsLedger.byCurrency ?? {
                       USD: breakdown.earningsLedger.confirmedMinor,
@@ -132,8 +136,8 @@ export default function AdminLedgerPage() {
                 </p>
               </div>
               <div>
-                <p className="text-ink-300 text-xs uppercase">Platform (30-10%)</p>
-                <p className="text-brand-500 font-mono text-lg">
+                <p className="dash-eyebrow">Platform (30-10%)</p>
+                <p className="dash-mono text-lg text-[var(--ink)]">
                   {formatCurrencyBreakdown(
                     breakdown.platformLedger.revenueByCurrency ?? {
                       USD: breakdown.platformLedger.revenueMinor,
@@ -142,8 +146,8 @@ export default function AdminLedgerPage() {
                 </p>
               </div>
               <div>
-                <p className="text-ink-300 text-xs uppercase">Reserve (10%)</p>
-                <p className="text-amber-400 font-mono text-lg">
+                <p className="dash-eyebrow">Reserve (10%)</p>
+                <p className="dash-mono text-lg text-[var(--ink)]">
                   {formatCurrencyBreakdown(
                     breakdown.platformLedger.reserveByCurrency ?? {
                       USD: breakdown.platformLedger.reserveMinor,
@@ -152,19 +156,17 @@ export default function AdminLedgerPage() {
                 </p>
               </div>
             </div>
-          </div>
+          </Panel>
 
           {/* Filter */}
-          <div className="mb-6 flex items-center gap-2">
-            <span className="text-ink-300 text-sm">Ledger:</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--muted)]">Ledger:</span>
             {['', 'earnings', 'advertiser', 'platform'].map((k) => (
               <button
                 key={k || 'all'}
                 onClick={() => setLedgerKind(k)}
-                className={`px-3 py-1 rounded-lg text-xs transition-colors ${
-                  ledgerKind === k
-                    ? 'bg-brand-500 text-white'
-                    : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
+                className={`dash-btn dash-btn--sm ${
+                  ledgerKind === k ? 'dash-btn--primary' : 'dash-btn--glass'
                 }`}
               >
                 {k || 'All'}
@@ -173,9 +175,11 @@ export default function AdminLedgerPage() {
           </div>
 
           {/* Entries */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
+          <Panel label="Ledger entries" flush>
             {entries.length === 0 ? (
-              <div className="text-ink-300 text-sm py-12 text-center">No ledger entries.</div>
+              <div className="py-12 text-center text-sm text-[var(--muted)]">
+                No ledger entries.
+              </div>
             ) : (
               <div
                 className="overflow-x-auto"
@@ -183,38 +187,24 @@ export default function AdminLedgerPage() {
                 role="region"
                 aria-label="Ledger entries table, scrolls horizontally"
               >
-                <table className="w-full min-w-[820px] text-sm">
-                  <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                <table className="w-full min-w-[820px]">
+                  <thead>
                     <tr>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Ledger</th>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
-                      <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
+                      <th className="text-left">When</th>
+                      <th className="text-left">Ledger</th>
+                      <th className="text-left">Type</th>
+                      <th className="text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-ink-600/20">
+                  <tbody>
                     {entries.map((e) => (
-                      <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
-                        <td className="px-4 py-3 text-ink-200 text-xs">
-                          {formatRelativeTime(e.createdAt)}
+                      <tr key={e.id}>
+                        <td>{formatRelativeTime(e.createdAt)}</td>
+                        <td>
+                          <Pill tone={kindTone[e.ledgerKind]}>{e.ledgerKind}</Pill>
                         </td>
-                        <td className="px-4 py-3 text-xs">
-                          <span
-                            className={`px-2 py-0.5 rounded ${
-                              e.ledgerKind === 'earnings'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : e.ledgerKind === 'advertiser'
-                                  ? 'bg-purple-500/20 text-purple-400'
-                                  : 'bg-brand-500/20 text-brand-500'
-                            }`}
-                          >
-                            {e.ledgerKind}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-white text-xs capitalize">
-                          {e.entryType.replace('_', ' ')}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-white">
+                        <td className="capitalize">{e.entryType.replace('_', ' ')}</td>
+                        <td className="dash-mono text-right">
                           {formatCurrency(e.amountMinor, e.currency)}
                         </td>
                       </tr>
@@ -223,7 +213,7 @@ export default function AdminLedgerPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
     </>

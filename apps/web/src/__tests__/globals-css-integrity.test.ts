@@ -87,26 +87,20 @@ describe('globals.css integrity', () => {
     expect(css).not.toMatch(/\.landing-|data-landing-theme/);
   });
 
-  it('keeps light-mode dashboard overrides at their original specificity', () => {
-    // These selectors were `html:not(.dark):not([data-landing-theme='dark'])`.
-    // Dropping the second :not() lost a class-level unit, and the light-mode
-    // status colours (`.text-emerald-400` stat values) then lost to
-    // `.app-shell .app-stat-card p:last-child` on source order and turned grey.
-    const bare = css.match(/html:not\(\.dark\)(?!:not\(\[data-palette='midnight'\]\))/g) ?? [];
-    expect(bare).toEqual([]);
-    expect(css).toMatch(
-      /html:not\(\.dark\):not\(\[data-palette='midnight'\]\) \.app-shell \.text-emerald-400/,
-    );
+  it('styles dashboards through dash components, not utility overrides', () => {
+    // The three earlier passes restyled dashboard pages from outside with
+    // ~390 `.app-shell [class~=...]` rules. The redesign replaced them with
+    // src/components/dash; this keeps that sediment from growing back.
+    expect(css).not.toMatch(/\.app-shell[^{,]*\[class~=/);
+    expect(css).not.toMatch(/\.app-shell[^{,]*\.(?:text|bg|border)-[a-z]+-\d/);
   });
 
-  it('keeps the final component language quiet and two-tone', () => {
-    // The final layer reads the plain dashboard tokens (dashboard-tokens.test.ts).
+  it('keeps status as a tone dot beside ink text', () => {
+    expect(css).toMatch(/\.dash-pill,\n\.status-badge \{/);
+    expect(css).toMatch(/\.dash-pill__dot,\n\.status-badge__dot \{/);
+    expect(css).toMatch(/\.dash-stat__value \{/);
+    expect(css).toMatch(/\.dash-notice \{/);
     expect(css).toMatch(/--ateva-canvas-final:\s*var\(--app-canvas\)/);
-    expect(css).toMatch(/--ateva-action-final:\s*var\(--app-ink\)/);
-    expect(css).toMatch(/\.status-badge\s*\{/);
-    expect(css).toMatch(/\.status-badge__dot\s*\{/);
-    expect(css).toMatch(/\.app-stat-card__value\s*\{/);
-    expect(css).toMatch(/\.app-shell \.launch-mode-banner\s*\{/);
   });
 
   describe('palette token layer', () => {

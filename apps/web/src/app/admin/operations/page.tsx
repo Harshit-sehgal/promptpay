@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Pill, type Tone } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
@@ -95,11 +96,10 @@ interface ArchiveRefundObligation {
   } | null;
 }
 
-function statusClass(status: string): string {
-  if (status === 'healthy' || status === 'processed' || status === 'active')
-    return 'text-emerald-400';
-  if (status === 'pending' || status === 'processing') return 'text-amber-400';
-  return 'text-red-400';
+function statusTone(status: string): Tone {
+  if (status === 'healthy' || status === 'processed' || status === 'active') return 'ok';
+  if (status === 'pending' || status === 'processing') return 'warn';
+  return 'bad';
 }
 
 export default function AdminOperationsPage() {
@@ -176,180 +176,168 @@ export default function AdminOperationsPage() {
 
   return (
     <>
-      <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Operations</h1>
-          <p className="text-ink-200 text-sm">
-            Money integrity, integrations, and webhook processing
-          </p>
-        </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
-        >
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Admin"
+        title="Operations"
+        lede="Money integrity, integrations, and webhook processing"
+        actions={
+          <button
+            onClick={load}
+            disabled={loading}
+            className="dash-btn dash-btn--glass dash-btn--md"
+          >
+            Refresh
+          </button>
+        }
+      />
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {integrity && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6 mb-8">
+          <div className="dash-grid dash-grid--4">
             <StatCard
               label="Money integrity"
               value={integrity.status}
-              valueColor={integrity.status === 'healthy' ? 'text-emerald-400' : 'text-red-400'}
               subtitle={`Checked ${formatRelativeTime(integrity.timestamp)}`}
             />
             <StatCard
               label="Global discrepancy"
               value={formatCurrencyBreakdown(globalDiscrepancyByCurrency)}
-              valueColor={
-                Object.values(globalDiscrepancyByCurrency).every(
-                  (amountMinor) => amountMinor === 0n,
-                )
-                  ? 'text-emerald-400'
-                  : 'text-red-400'
-              }
             />
-            <StatCard
-              label="Campaign mismatches"
-              value={String(campaignDiscrepancies.length)}
-              valueColor={campaignDiscrepancies.length === 0 ? 'text-emerald-400' : 'text-red-400'}
-            />
-            <StatCard
-              label="Negative balances"
-              value={String(negativeBalances.length)}
-              valueColor={negativeBalances.length === 0 ? 'text-emerald-400' : 'text-red-400'}
-            />
+            <StatCard label="Campaign mismatches" value={String(campaignDiscrepancies.length)} />
+            <StatCard label="Negative balances" value={String(negativeBalances.length)} />
             <StatCard
               label="Legacy refund rows"
               value={String(refunds.length)}
-              valueColor={refunds.length === 0 ? 'text-emerald-400' : 'text-amber-400'}
               subtitle="Reconciliation required"
             />
           </div>
 
           {(campaignDiscrepancies.length > 0 || negativeBalances.length > 0) && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-8">
-              <h2 className="text-red-300 font-semibold mb-4">Integrity exceptions</h2>
+            <Notice tone="bad" title="Integrity exceptions">
               <div className="space-y-3">
                 {campaignDiscrepancies.map((d) => (
-                  <div key={d.campaignId} className="text-sm text-ink-200">
-                    <span className="text-white">{d.campaignName}</span>
-                    <span className="text-ink-300">
+                  <div key={d.campaignId} className="text-sm text-[var(--copy)]">
+                    <span className="text-[var(--ink)]">{d.campaignName}</span>
+                    <span className="text-[var(--muted)]">
                       {' '}
                       · budget spent {formatCurrency(d.budgetSpentMinor, d.currency)} · ledger{' '}
                       {formatCurrency(d.ledgerDebits, d.currency)} · diff{' '}
                     </span>
-                    <span className="text-red-300">{formatCurrency(d.diff, d.currency)}</span>
+                    <span className="dash-mono text-[var(--ink)]">
+                      {formatCurrency(d.diff, d.currency)}
+                    </span>
                   </div>
                 ))}
                 {negativeBalances.map((b) => (
-                  <div key={b.userId} className="text-sm text-ink-200">
-                    <span className="text-white">{b.email}</span>
-                    <span className="text-ink-300"> · negative confirmed balance </span>
-                    <span className="text-red-300">
+                  <div key={b.userId} className="text-sm text-[var(--copy)]">
+                    <span className="text-[var(--ink)]">{b.email}</span>
+                    <span className="text-[var(--muted)]"> · negative confirmed balance </span>
+                    <span className="dash-mono text-[var(--ink)]">
                       {formatCurrency(b.balanceMinor, b.currency || 'USD')}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </Notice>
           )}
         </>
       )}
 
-      <section className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-white font-semibold">Legacy archive refund rows</h2>
-            <p className="text-ink-300 text-xs">
-              Read-only anomalies; reconcile against Stripe and webhook ledgers
-            </p>
-          </div>
-          <span className="text-ink-300 text-xs">{refunds.length} pending</span>
-        </div>
+      <Panel label="Legacy archive refund rows" flush>
+        <PanelHeader
+          title={
+            <>
+              Legacy archive refund rows
+              <span className="mt-1 block text-xs font-normal text-[var(--muted)]">
+                Read-only anomalies; reconcile against Stripe and webhook ledgers
+              </span>
+            </>
+          }
+          action={<span className="text-xs text-[var(--muted)]">{refunds.length} pending</span>}
+        />
 
         {refunds.length === 0 ? (
-          <p className="text-ink-300 text-sm">No legacy archive refund rows require review.</p>
+          <p className="px-[22px] py-5 text-sm text-[var(--muted)]">
+            No legacy archive refund rows require review.
+          </p>
         ) : (
-          <div className="space-y-3">
+          <div className="dash-rows">
             {refunds.map((refund) => (
-              <div key={refund.id} className="border border-ink-700 rounded-lg p-4">
-                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+              <div key={refund.id}>
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <p className="text-white text-sm font-medium truncate">
+                      <p className="truncate text-sm font-medium text-[var(--ink)]">
                         {refund.campaign?.name || 'Archived campaign'}
                       </p>
-                      <span className="text-amber-300 text-sm font-mono">
+                      <span className="dash-mono text-sm text-[var(--ink)]">
                         {formatCurrency(refund.amountMinor, refund.currency)}
                       </span>
                     </div>
-                    <p className="text-ink-300 text-xs mt-1 truncate">
+                    <p className="mt-1 truncate text-xs text-[var(--copy)]">
                       {refund.advertiser?.companyName || refund.advertiserId}
                       {refund.advertiser?.billingEmail
                         ? ` · ${refund.advertiser.billingEmail}`
                         : ''}
                     </p>
-                    <p className="text-ink-500 text-xs mt-1">
+                    <p className="mt-1 text-xs text-[var(--muted)]">
                       Created {formatRelativeTime(refund.createdAt)}
                       {refund.campaign?.archivedAt
                         ? ` · archived ${formatRelativeTime(refund.campaign.archivedAt)}`
                         : ''}
                     </p>
                     {refund.description && (
-                      <p className="text-ink-300 text-xs mt-2 line-clamp-2">{refund.description}</p>
+                      <p className="mt-2 line-clamp-2 text-xs text-[var(--copy)]">
+                        {refund.description}
+                      </p>
                     )}
                   </div>
 
-                  <p className="max-w-md text-xs text-amber-300">
-                    Do not post this row. Verify the real Stripe refund and its signed webhook
-                    ledger entries before manual reconciliation.
-                  </p>
+                  <div className="max-w-md">
+                    <Notice tone="warn">
+                      Do not post this row. Verify the real Stripe refund and its signed webhook
+                      ledger entries before manual reconciliation.
+                    </Notice>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </section>
+      </Panel>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-white font-semibold">Tool integrations</h2>
-            <span className="text-ink-300 text-xs">{tools.length} configured</span>
-          </div>
+      <div className="dash-grid dash-grid--2">
+        <Panel label="Tool integrations" flush>
+          <PanelHeader
+            title="Tool integrations"
+            action={<span className="text-xs text-[var(--muted)]">{tools.length} configured</span>}
+          />
           {tools.length === 0 ? (
-            <p className="text-ink-300 text-sm">No tool integrations configured.</p>
+            <p className="px-[22px] py-5 text-sm text-[var(--muted)]">
+              No tool integrations configured.
+            </p>
           ) : (
-            <div className="space-y-3">
+            <div className="dash-rows">
               {tools.map((tool) => (
-                <div
-                  key={tool.id}
-                  className="flex items-center justify-between gap-4 border border-ink-700 rounded-lg p-3"
-                >
+                <div key={tool.id} className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <p className="text-white text-sm font-medium truncate">
+                    <p className="truncate text-sm font-medium text-[var(--ink)]">
                       {tool.name || tool.slug}
                     </p>
-                    <p className="text-ink-300 text-xs truncate">{tool.type || tool.slug}</p>
+                    <p className="truncate text-xs text-[var(--muted)]">{tool.type || tool.slug}</p>
                   </div>
                   <button
                     onClick={() => toggleTool(tool)}
                     disabled={busyTool === tool.slug}
-                    className={`text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 ${
-                      tool.isActive
-                        ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                        : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
+                    className={`dash-btn dash-btn--sm ${
+                      tool.isActive ? 'dash-btn--primary' : 'dash-btn--glass'
                     }`}
                   >
                     {busyTool === tool.slug ? 'Saving...' : tool.isActive ? 'Active' : 'Inactive'}
@@ -358,55 +346,63 @@ export default function AdminOperationsPage() {
               ))}
             </div>
           )}
-        </section>
+        </Panel>
 
-        <section className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-white font-semibold">Webhook events</h2>
-              <p className="text-ink-300 text-xs">{webhooks?.total ?? 0} total matching events</p>
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={webhookProvider}
-                onChange={(e) => setWebhookProvider(e.target.value)}
-                placeholder="provider"
-                className="w-28 bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-              />
-              <select
-                value={webhookStatus}
-                onChange={(e) => setWebhookStatus(e.target.value)}
-                className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-              >
-                <option value="">All</option>
-                <option value="pending">Pending</option>
-                <option value="processed">Processed</option>
-                <option value="failed">Failed</option>
-              </select>
-            </div>
-          </div>
+        <Panel label="Webhook events" flush>
+          <PanelHeader
+            title={
+              <>
+                Webhook events
+                <span className="mt-1 block text-xs font-normal text-[var(--muted)]">
+                  {webhooks?.total ?? 0} total matching events
+                </span>
+              </>
+            }
+            action={
+              <div className="flex gap-2">
+                <input
+                  value={webhookProvider}
+                  onChange={(e) => setWebhookProvider(e.target.value)}
+                  placeholder="provider"
+                  className="w-28 px-3 py-2 text-xs"
+                />
+                <select
+                  value={webhookStatus}
+                  onChange={(e) => setWebhookStatus(e.target.value)}
+                  className="px-3 py-2 text-xs"
+                >
+                  <option value="">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="processed">Processed</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </div>
+            }
+          />
 
           {webhookEvents.length === 0 ? (
-            <p className="text-ink-300 text-sm">No webhook events match the current filters.</p>
+            <p className="px-[22px] py-5 text-sm text-[var(--muted)]">
+              No webhook events match the current filters.
+            </p>
           ) : (
-            <div className="space-y-3">
+            <div className="dash-rows">
               {webhookEvents.map((event) => (
-                <div key={event.id} className="border border-ink-700 rounded-lg p-3">
+                <div key={event.id}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-white text-sm font-medium truncate">{event.eventType}</p>
-                      <p className="text-ink-300 text-xs truncate">
+                      <p className="truncate text-sm font-medium text-[var(--ink)]">
+                        {event.eventType}
+                      </p>
+                      <p className="dash-mono truncate text-xs text-[var(--muted)]">
                         {event.provider} · {event.eventId}
                       </p>
                     </div>
-                    <span className={`text-xs font-medium ${statusClass(event.processingStatus)}`}>
-                      {event.processingStatus}
-                    </span>
+                    <Pill tone={statusTone(event.processingStatus)}>{event.processingStatus}</Pill>
                   </div>
                   {event.error && (
-                    <p className="text-red-300 text-xs mt-2 line-clamp-2">{event.error}</p>
+                    <p className="mt-2 line-clamp-2 text-xs text-[var(--copy)]">{event.error}</p>
                   )}
-                  <p className="text-ink-500 text-xs mt-2">
+                  <p className="mt-2 text-xs text-[var(--muted)]">
                     Received {formatRelativeTime(event.createdAt)}
                     {event.processedAt
                       ? ` · processed ${formatRelativeTime(event.processedAt)}`
@@ -416,7 +412,7 @@ export default function AdminOperationsPage() {
               ))}
             </div>
           )}
-        </section>
+        </Panel>
       </div>
     </>
   );

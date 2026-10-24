@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+import { DashboardShell } from '@/components/dash';
 import { ProtectedRoute } from '@/components/protected-route';
-import { Sidebar } from '@/components/sidebar';
 import { StepUpProvider } from '@/components/step-up-provider';
 
 const ADVERTISER_NAV = [
@@ -37,16 +37,9 @@ export default function AdvertiserLayout({ children }: { children: React.ReactNo
   return (
     <ProtectedRoute allowedRoles={['advertiser']}>
       <StepUpProvider>
-        <div className="app-shell app-shell--advertiser min-h-screen bg-ink-900 flex flex-col lg:flex-row">
-          <Sidebar brand="Ateva" navItems={ADVERTISER_NAV} />
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="app-shell__main flex-1 min-w-0 overflow-auto p-4 sm:p-6 lg:p-8"
-          >
-            {children}
-          </main>
-        </div>
+        <DashboardShell workspace="Advertiser" navItems={ADVERTISER_NAV} modifier="advertiser">
+          {children}
+        </DashboardShell>
       </StepUpProvider>
     </ProtectedRoute>
   );
