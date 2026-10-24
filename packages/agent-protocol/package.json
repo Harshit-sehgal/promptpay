@@ -17,9 +17,9 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
     "@ateva/eslint-config": "workspace:*",
+    "@types/node": "^26.6.5",
     "typescript": "^5.9.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

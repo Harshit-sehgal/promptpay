@@ -113,7 +113,7 @@
         "ateva.quietMode.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable quiet hours \u2014 no ads shown during specified times"
+          "description": "Enable quiet hours — no ads shown during specified times"
         },
         "ateva.quietMode.start": {
           "type": "string",
@@ -199,14 +199,14 @@
   "main": "./out/extension.js",
   "devDependencies": {
     "@ateva/agent-protocol": "workspace:*",
+    "@ateva/eslint-config": "workspace:*",
+    "@ateva/shared": "workspace:*",
     "@types/node": "^26.6.5",
     "@types/vscode": "^1.140.0",
     "@vscode/vsce": "^3.9.2",
-    "@ateva/eslint-config": "workspace:*",
-    "@ateva/shared": "workspace:*",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "capabilities": {
     "untrustedWorkspaces": {
