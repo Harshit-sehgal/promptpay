@@ -54,7 +54,6 @@ export default function ReferralPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Developer"
         title="Referrals"
         lede="Invite developers now; referral rewards begin only after the independently attested earnings launch."
       />
@@ -103,7 +102,7 @@ export default function ReferralPage() {
             <Panel label="Your referral link">
               <PanelHeader title="Your referral link" />
               <div className="flex items-center gap-3">
-                <code className="min-w-0 flex-1 rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] px-4 py-3 text-sm break-all text-[var(--ink)]">
+                <code className="min-w-0 flex-1 rounded-xl border border-[var(--hair)] bg-[var(--page)] px-4 py-3 text-sm break-all text-[var(--ink)]">
                   {data.referralLink}
                 </code>
                 <button onClick={handleCopy} className="dash-btn dash-btn--primary dash-btn--md">

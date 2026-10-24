@@ -82,11 +82,7 @@ export default function AdvertisersPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Advertiser"
-        title="Advertiser overview"
-        lede="Your campaigns and performance"
-      />
+      <PageHeader title="Advertiser overview" />
 
       {/* Hosted-checkout redirect banners */}
       {banner?.visible && (
@@ -111,7 +107,7 @@ export default function AdvertisersPage() {
           }
         >
           {banner.type === 'success'
-            ? 'Your payment was completed. Your account balance will be credited once the payment is confirmed by our payment processor — check the billing page in a moment.'
+            ? 'Your payment was completed. Your account balance will be credited once the payment is confirmed by our payment processor. Check the billing page in a moment.'
             : 'Deposit cancelled. No charges were made.'}
         </Notice>
       )}
@@ -130,7 +126,7 @@ export default function AdvertisersPage() {
             <button
               type="button"
               onClick={loadDashboard}
-              className="dash-btn dash-btn--glass dash-btn--sm"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Retry
             </button>

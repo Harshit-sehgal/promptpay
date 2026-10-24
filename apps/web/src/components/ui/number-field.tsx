@@ -66,7 +66,7 @@ export function NumberField({
         {label}
       </label>
       <div
-        className={`flex items-center rounded-xl border bg-[var(--glass-strong)] transition-colors focus-within:border-[var(--ink)] focus-within:ring-2 focus-within:ring-[var(--hair)] ${
+        className={`flex items-center rounded-xl border bg-[var(--page)] transition-colors focus-within:border-[var(--ink)] focus-within:ring-2 focus-within:ring-[var(--hair)] ${
           outOfRange ? 'border-[var(--ink)]' : 'border-[var(--hair)]'
         }`}
       >

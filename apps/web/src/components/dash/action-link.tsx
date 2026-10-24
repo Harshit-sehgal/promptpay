@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
-export type ActionVariant = 'primary' | 'glass' | 'text';
+export type ActionVariant = 'primary' | 'secondary' | 'text';
 
-/** Navigation styled as an action: ink pill, glass pill, or text with an arrow. */
+/** Navigation styled as an action: ink button, outlined button, or underlined text. */
 export function ActionLink({
   href,
-  variant = 'glass',
+  variant = 'secondary',
   children,
 }: {
   href: string;
@@ -16,11 +16,6 @@ export function ActionLink({
   return (
     <Link href={href} className={`dash-action dash-action--${variant}`}>
       {children}
-      {variant === 'text' && (
-        <span className="dash-action__arrow" aria-hidden="true">
-          →
-        </span>
-      )}
     </Link>
   );
 }

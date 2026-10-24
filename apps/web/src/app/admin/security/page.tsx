@@ -64,14 +64,13 @@ export default function AdminSecurityPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Account security"
         lede={
           <>
             Two-factor authentication is <strong className="text-[var(--ink)]">required</strong> for
-            administrator actions in production. Until it is enabled, every write — approving a
-            campaign, changing a platform switch, verifying or processing a payout — is rejected
-            with &ldquo;Recent two-factor authentication is required&rdquo;.
+            administrator actions in production. Until it is enabled, every write (approving a
+            campaign, changing a platform switch, verifying or processing a payout) is rejected with
+            &ldquo;Recent two-factor authentication is required&rdquo;.
           </>
         }
       />

@@ -277,7 +277,7 @@ export default function DevSettingsPage() {
 
   const switchClass = (on: boolean) =>
     `relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-[var(--hair)] transition-colors motion-reduce:transition-none ${
-      on ? 'bg-[var(--ink)]' : 'bg-[var(--glass-strong)]'
+      on ? 'bg-[var(--ink)]' : 'bg-[var(--page)]'
     }`;
   const thumbClass = (on: boolean) =>
     `absolute top-1 h-4 w-4 rounded-full transition-[left] motion-reduce:transition-none ${
@@ -288,11 +288,7 @@ export default function DevSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Developer"
-        title="Settings"
-        lede="Control ad display, quiet hours, and data export"
-      />
+      <PageHeader title="Settings" />
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -318,7 +314,7 @@ export default function DevSettingsPage() {
                 <div>
                   <p className="text-sm font-semibold text-[var(--ink)]">Show ads while waiting</p>
                   <p className="mt-0.5 text-xs text-[var(--muted)]">
-                    Turn off to stop earning — no ads will appear in your IDE
+                    Turn off to stop earning. No ads will appear in your IDE.
                   </p>
                 </div>
                 <button
@@ -474,7 +470,7 @@ export default function DevSettingsPage() {
                         type="button"
                         onClick={handleRequestVerification}
                         disabled={verifyBusy}
-                        className="dash-btn dash-btn--glass dash-btn--sm"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         {verifyBusy ? 'Sending…' : 'Resend verification email'}
                       </button>
@@ -551,7 +547,7 @@ export default function DevSettingsPage() {
               <div className="mb-5">
                 <Notice tone="ok" title="New ledger API key">
                   <div className="mt-2 flex items-center gap-2">
-                    <code className="min-w-0 flex-1 rounded-md border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2 text-xs break-all text-[var(--ink)]">
+                    <code className="min-w-0 flex-1 rounded-md border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs break-all text-[var(--ink)]">
                       {newApiKey}
                     </code>
                     <button
@@ -618,7 +614,7 @@ export default function DevSettingsPage() {
             )}
             <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
               Ledger keys can read earnings and payout ledger data with the
-              <code className="mx-1 rounded bg-[var(--glass-strong)] px-1 py-0.5 text-[11px]">
+              <code className="mx-1 rounded bg-[var(--page)] px-1 py-0.5 text-[11px]">
                 x-api-key
               </code>
               header. They cannot register extension devices, change settings, export data, delete
@@ -650,7 +646,7 @@ export default function DevSettingsPage() {
             <button
               type="button"
               onClick={handleExport}
-              className="dash-btn dash-btn--glass dash-btn--md"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Export my data
             </button>

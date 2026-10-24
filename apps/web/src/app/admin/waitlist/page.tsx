@@ -80,12 +80,11 @@ export default function AdminWaitlistPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Advertiser waitlist"
         lede="Review sponsor-interest signups captured while advertiser billing is closed."
       />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="dash-bar flex flex-wrap items-end justify-between gap-3">
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">Status</span>
           <select
@@ -115,7 +114,7 @@ export default function AdminWaitlistPage() {
             <button
               type="button"
               onClick={loadWaitlist}
-              className="dash-btn dash-btn--glass dash-btn--sm"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Retry
             </button>
@@ -176,7 +175,7 @@ export default function AdminWaitlistPage() {
         )}
       </Panel>
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="dash-bar flex items-center justify-between text-sm">
         <span className="text-[var(--muted)]">
           Page {page} of {totalPages}
         </span>
@@ -185,7 +184,7 @@ export default function AdminWaitlistPage() {
             type="button"
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             disabled={page <= 1 || loading}
-            className="dash-btn dash-btn--glass dash-btn--sm"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Previous
           </button>
@@ -193,7 +192,7 @@ export default function AdminWaitlistPage() {
             type="button"
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             disabled={page >= totalPages || loading}
-            className="dash-btn dash-btn--glass dash-btn--sm"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Next
           </button>

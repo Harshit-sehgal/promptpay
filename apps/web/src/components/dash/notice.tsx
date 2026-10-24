@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 
 import { type Tone } from './pill';
 
-/** A glass strip with a tone bar, for errors, holds and beta disclosures. */
+/** A tone-tinted strip for errors, holds and beta disclosures. */
 export function Notice({
   tone = 'neutral',
   title,

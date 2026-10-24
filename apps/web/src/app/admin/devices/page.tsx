@@ -124,7 +124,6 @@ export default function AdminDevicesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Device recovery"
         lede="Find a developer device and issue a one-time recovery token for a lost per-device event secret."
       />
@@ -137,7 +136,7 @@ export default function AdminDevicesPage() {
 
       {recoveryToken && (
         <Notice tone="ok" title="Recovery token">
-          <code className="block rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2 text-xs break-all text-[var(--ink)]">
+          <code className="block rounded-xl border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs break-all text-[var(--ink)]">
             {recoveryToken}
           </code>
           <p className="mt-2 text-xs">
@@ -221,7 +220,7 @@ export default function AdminDevicesPage() {
                       type="button"
                       onClick={() => selectDevice(device)}
                       disabled={!device.hasEventSecret || device.user.role !== 'developer'}
-                      className="dash-btn dash-btn--glass dash-btn--sm shrink-0"
+                      className="dash-btn dash-btn--secondary dash-btn--sm shrink-0"
                     >
                       Use
                     </button>
@@ -240,7 +239,7 @@ export default function AdminDevicesPage() {
                   type="button"
                   onClick={() => setDevicePage((p) => Math.max(1, p - 1))}
                   disabled={devicePage <= 1}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Previous
                 </button>
@@ -252,7 +251,7 @@ export default function AdminDevicesPage() {
                     )
                   }
                   disabled={devicePage >= Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE))}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Next
                 </button>

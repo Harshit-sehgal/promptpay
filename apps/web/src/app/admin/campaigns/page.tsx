@@ -134,7 +134,6 @@ export default function AdminCampaignsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Campaign approvals"
         lede="Review campaigns and their creatives before activation"
       />
@@ -180,7 +179,7 @@ export default function AdminCampaignsPage() {
                   <button
                     onClick={() => setRejectModalFor(c)}
                     disabled={processing === c.id}
-                    className="dash-btn dash-btn--glass dash-btn--sm"
+                    className="dash-btn dash-btn--secondary dash-btn--sm"
                   >
                     Reject
                   </button>
@@ -244,7 +243,7 @@ export default function AdminCampaignsPage() {
                       {c.creatives.map((cr) => (
                         <div
                           key={cr.id}
-                          className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-3"
+                          className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--page)] p-3"
                         >
                           <div className="mr-4 min-w-0 flex-1">
                             <div className="mb-1 flex items-center gap-2">
@@ -277,7 +276,7 @@ export default function AdminCampaignsPage() {
                                   setCreativeRejectReason('');
                                 }}
                                 disabled={processing === cr.id}
-                                className="dash-btn dash-btn--glass dash-btn--sm"
+                                className="dash-btn dash-btn--secondary dash-btn--sm"
                               >
                                 Reject
                               </button>
@@ -321,7 +320,7 @@ export default function AdminCampaignsPage() {
           <textarea
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Reason (required) — visible to advertiser"
+            placeholder="Reason (required, shown to the advertiser)"
             rows={3}
             required
             className="mb-4 w-full px-4 py-3"
@@ -332,7 +331,7 @@ export default function AdminCampaignsPage() {
                 setRejectModalFor(null);
                 setRejectReason('');
               }}
-              className="dash-btn dash-btn--glass dash-btn--md"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Cancel
             </button>
@@ -369,7 +368,7 @@ export default function AdminCampaignsPage() {
           <textarea
             value={creativeRejectReason}
             onChange={(e) => setCreativeRejectReason(e.target.value)}
-            placeholder="Reason (required) — visible to advertiser"
+            placeholder="Reason (required, shown to the advertiser)"
             rows={3}
             required
             className="mb-4 w-full px-4 py-3"
@@ -380,7 +379,7 @@ export default function AdminCampaignsPage() {
                 setCreativeRejectFor(null);
                 setCreativeRejectReason('');
               }}
-              className="dash-btn dash-btn--glass dash-btn--md"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Cancel
             </button>
@@ -402,7 +401,7 @@ export default function AdminCampaignsPage() {
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Previous
           </button>
@@ -413,7 +412,7 @@ export default function AdminCampaignsPage() {
             type="button"
             onClick={() => setPage((p) => p + 1)}
             disabled={page >= Math.ceil(total / limit)}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Next
           </button>

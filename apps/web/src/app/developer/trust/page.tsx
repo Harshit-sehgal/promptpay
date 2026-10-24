@@ -63,7 +63,6 @@ export default function DevTrustPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Developer"
         title="Trust & fraud"
         lede="How your account is scored for fraud-risk. Higher trust leads to faster payouts."
       />

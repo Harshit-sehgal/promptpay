@@ -170,9 +170,7 @@ export default function DeveloperDashboard() {
   return (
     <>
       <PageHeader
-        eyebrow="Developer"
         title="Dashboard"
-        lede="Earnings, payout readiness, trust status, and integration controls for your developer account."
         actions={
           <>
             <ActionLink href="/developer/settings">Settings</ActionLink>
@@ -203,7 +201,7 @@ export default function DeveloperDashboard() {
               <button
                 type="button"
                 onClick={() => void loadDashboard()}
-                className="dash-btn dash-btn--glass dash-btn--sm"
+                className="dash-btn dash-btn--secondary dash-btn--sm"
               >
                 Retry
               </button>
@@ -384,7 +382,7 @@ export default function DeveloperDashboard() {
               </div>
               {referral.referralLink && (
                 <div className="flex flex-col gap-3 border-t border-[var(--hair)] px-[22px] py-4 md:flex-row md:items-center">
-                  <code className="min-w-0 flex-1 rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2.5 text-sm text-[var(--ink)] break-all">
+                  <code className="min-w-0 flex-1 rounded-xl border border-[var(--hair)] bg-[var(--page)] px-3 py-2.5 text-sm text-[var(--ink)] break-all">
                     {referral.referralLink}
                   </code>
                   <button

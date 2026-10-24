@@ -12,15 +12,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
 }
 
-/* Every variant is a pill in the counter language (dash-btn in globals.css):
-   primary and brand are the ink pill, secondary and outline the glass pill,
-   ghost a text button, danger the ink pill with a danger dot. `rounded` is
-   kept so existing call sites compile; the shape is no longer per-call. */
+/* Every variant maps onto dash-btn in globals.css: primary and brand are the
+   ink button, secondary and outline the outlined button, ghost a text button,
+   danger the danger fill. `rounded` is kept so existing call sites compile;
+   the shape is no longer per-call. */
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'dash-btn--primary',
   brand: 'dash-btn--primary',
-  secondary: 'dash-btn--glass',
-  outline: 'dash-btn--glass',
+  secondary: 'dash-btn--secondary',
+  outline: 'dash-btn--secondary',
   ghost: 'dash-btn--ghost',
   danger: 'dash-btn--danger',
 };

@@ -1,13 +1,11 @@
 import { type ReactNode } from 'react';
 
-/** The top of every dashboard page: mono eyebrow, display title, lede, actions. */
+/** The top of every dashboard page: title, optional lede, actions. */
 export function PageHeader({
-  eyebrow,
   title,
   lede,
   actions,
 }: {
-  eyebrow?: string;
   title: ReactNode;
   lede?: ReactNode;
   actions?: ReactNode;
@@ -15,7 +13,6 @@ export function PageHeader({
   return (
     <header className="dash-head">
       <div className="dash-head__text">
-        {eyebrow && <p className="dash-eyebrow">{eyebrow}</p>}
         <h1 className="dash-title">{title}</h1>
         {lede && <p className="dash-lede">{lede}</p>}
       </div>

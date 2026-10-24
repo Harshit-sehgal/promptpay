@@ -67,11 +67,7 @@ export default function AdminLedgerPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Admin"
-        title="Ledger & revenue"
-        lede="All three ledgers — earnings, advertiser balance, platform revenue"
-      />
+      <PageHeader title="Ledger & revenue" />
 
       {loading && <LoadingSpinner />}
       {error && (
@@ -166,7 +162,7 @@ export default function AdminLedgerPage() {
                 key={k || 'all'}
                 onClick={() => setLedgerKind(k)}
                 className={`dash-btn dash-btn--sm ${
-                  ledgerKind === k ? 'dash-btn--primary' : 'dash-btn--glass'
+                  ledgerKind === k ? 'dash-btn--primary' : 'dash-btn--secondary'
                 }`}
               >
                 {k || 'All'}

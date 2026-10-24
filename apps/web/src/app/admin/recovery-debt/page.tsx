@@ -182,7 +182,6 @@ export default function AdminRecoveryDebtPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Recovery debt"
         lede="Track paid-fraud recovery debt that has not been netted from future earnings."
       />
@@ -311,7 +310,7 @@ export default function AdminRecoveryDebtPage() {
                               : 'open',
                           })
                         }
-                        className="dash-btn dash-btn--glass dash-btn--sm"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         {activeCase ? 'Update case' : 'Open case'}
                       </button>
@@ -345,7 +344,7 @@ export default function AdminRecoveryDebtPage() {
                                 status: 'written_off',
                               })
                             }
-                            className="dash-btn dash-btn--glass dash-btn--sm"
+                            className="dash-btn dash-btn--secondary dash-btn--sm"
                           >
                             Write off
                           </button>
@@ -361,11 +360,11 @@ export default function AdminRecoveryDebtPage() {
       )}
 
       {data && data.total > data.limit && (
-        <div className="flex items-center justify-between">
+        <div className="dash-bar flex items-center justify-between">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Previous
           </button>
@@ -375,7 +374,7 @@ export default function AdminRecoveryDebtPage() {
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Next
           </button>
@@ -423,7 +422,7 @@ export default function AdminRecoveryDebtPage() {
           <div className="flex items-center justify-end gap-3">
             <button
               onClick={() => setAction(null)}
-              className="dash-btn dash-btn--glass dash-btn--md"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Cancel
             </button>

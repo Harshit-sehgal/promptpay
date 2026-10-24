@@ -172,11 +172,7 @@ export default function NewCampaignPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Advertiser"
-        title="Create campaign"
-        lede="Set up your ad campaign, creative, and targeting in one step"
-      />
+      <PageHeader title="Create campaign" />
 
       {error && (
         <Notice
@@ -235,7 +231,8 @@ export default function NewCampaignPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-[var(--muted)]">
-                Campaigns activate and spend in their own currency — pick a funded deposit balance.
+                Campaigns activate and spend in their own currency, so pick a funded deposit
+                balance.
               </p>
             </div>
 
@@ -378,7 +375,7 @@ export default function NewCampaignPage() {
                 required
                 maxLength={80}
                 rows={2}
-                placeholder="Max 80 chars — shown during wait states"
+                placeholder="Up to 80 characters, shown during wait states"
                 className="w-full"
               />
               <p className="mt-1 text-xs text-[var(--muted)]">{message.length}/80 characters</p>
@@ -418,7 +415,7 @@ export default function NewCampaignPage() {
             </div>
 
             {/* Preview */}
-            <div className="rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-4">
+            <div className="rounded-xl border border-[var(--hair)] bg-[var(--page)] p-4">
               <p className="dash-eyebrow mb-2">Preview</p>
               <div className="flex items-center justify-between">
                 <div>

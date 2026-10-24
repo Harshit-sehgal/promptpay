@@ -48,7 +48,7 @@ export default function AdminDashboard() {
 
   return (
     <>
-      <PageHeader eyebrow="Admin" title="Platform overview" lede="System health and key metrics" />
+      <PageHeader title="Platform overview" />
 
       {loading && (
         <div className="flex items-center justify-center">
@@ -64,7 +64,7 @@ export default function AdminDashboard() {
             <button
               type="button"
               onClick={() => void loadOverview()}
-              className="dash-btn dash-btn--glass dash-btn--sm"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Retry
             </button>
@@ -123,9 +123,9 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => router.push(item.href)}
-                    className="dash-btn dash-btn--glass dash-btn--sm"
+                    className="dash-btn dash-btn--secondary dash-btn--sm"
                   >
-                    Review →
+                    Review
                   </button>
                 </div>
               ))}

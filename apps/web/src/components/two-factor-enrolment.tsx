@@ -227,7 +227,7 @@ export function TwoFactorEnrolment({
             </p>
             <ul
               aria-label="Two-factor backup codes"
-              className="dash-mono mt-3 grid grid-cols-1 gap-1 rounded-lg border border-[var(--hair)] bg-[var(--glass-strong)] p-3 text-sm text-[var(--ink)] sm:grid-cols-2"
+              className="dash-mono mt-3 grid grid-cols-1 gap-1 rounded-lg border border-[var(--hair)] bg-[var(--page)] p-3 text-sm text-[var(--ink)] sm:grid-cols-2"
             >
               {backupCodes.map((backupCode) => (
                 <li key={backupCode}>{backupCode}</li>
@@ -237,14 +237,14 @@ export function TwoFactorEnrolment({
               <button
                 type="button"
                 onClick={copyBackupCodes}
-                className="dash-btn dash-btn--glass dash-btn--sm"
+                className="dash-btn dash-btn--secondary dash-btn--sm"
               >
                 Copy codes
               </button>
               <button
                 type="button"
                 onClick={downloadBackupCodes}
-                className="dash-btn dash-btn--glass dash-btn--sm"
+                className="dash-btn dash-btn--secondary dash-btn--sm"
               >
                 Download codes
               </button>

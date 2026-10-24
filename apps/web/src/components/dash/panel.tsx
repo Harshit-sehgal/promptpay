@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 
-/** A glass panel: the one container every dashboard section sits in. */
+/** A ruled panel: the one container every dashboard section sits in. */
 export function Panel({
   children,
   label,

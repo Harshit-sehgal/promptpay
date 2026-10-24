@@ -134,7 +134,7 @@ export default function SandboxCreditPanel() {
           </p>
           <h2 className="dash-panel__title">Test credits and payout simulation</h2>
           <p className="mt-1 text-sm leading-6 text-[var(--copy)]">
-            XTS only — no cash value, no external transfer.
+            XTS only. No cash value, no external transfer.
           </p>
         </div>
       </div>
@@ -182,7 +182,7 @@ export default function SandboxCreditPanel() {
             type="button"
             disabled={busy}
             onClick={() => void simulatePayout()}
-            className="dash-btn dash-btn--glass dash-btn--md mt-3"
+            className="dash-btn dash-btn--secondary dash-btn--md mt-3"
           >
             Record simulation
           </button>

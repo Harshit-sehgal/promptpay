@@ -72,13 +72,9 @@ export default function AdminAuditPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Admin"
-        title="Audit log"
-        lede="Append-only record of admin and system actions"
-      />
+      <PageHeader title="Audit log" lede="Append-only record of admin and system actions" />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="dash-bar flex flex-wrap items-end gap-3">
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">Actor role</span>
           <select
@@ -163,7 +159,7 @@ export default function AdminAuditPage() {
         )}
       </Panel>
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="dash-bar flex items-center justify-between text-sm">
         <span className="text-[var(--muted)]">
           {total.toLocaleString()} entries · page {page} of {totalPages}
         </span>
@@ -172,7 +168,7 @@ export default function AdminAuditPage() {
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1 || loading}
-            className="dash-btn dash-btn--glass dash-btn--sm"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Previous
           </button>
@@ -180,7 +176,7 @@ export default function AdminAuditPage() {
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages || loading}
-            className="dash-btn dash-btn--glass dash-btn--sm"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Next
           </button>

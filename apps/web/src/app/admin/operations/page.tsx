@@ -177,14 +177,12 @@ export default function AdminOperationsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Operations"
-        lede="Money integrity, integrations, and webhook processing"
         actions={
           <button
             onClick={load}
             disabled={loading}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Refresh
           </button>
@@ -337,7 +335,7 @@ export default function AdminOperationsPage() {
                     onClick={() => toggleTool(tool)}
                     disabled={busyTool === tool.slug}
                     className={`dash-btn dash-btn--sm ${
-                      tool.isActive ? 'dash-btn--primary' : 'dash-btn--glass'
+                      tool.isActive ? 'dash-btn--primary' : 'dash-btn--secondary'
                     }`}
                   >
                     {busyTool === tool.slug ? 'Saving...' : tool.isActive ? 'Active' : 'Inactive'}

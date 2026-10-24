@@ -98,10 +98,10 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Admin" title="Users" lede="Search and review account holders" />
+      <PageHeader title="Users" />
 
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="dash-bar flex flex-wrap items-end gap-3">
         <label className="block">
           <span className="dash-eyebrow mb-1.5 block">Search users</span>
           <input
@@ -255,7 +255,7 @@ export default function AdminUsersPage() {
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
-              className="dash-btn dash-btn--glass dash-btn--sm"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Previous
             </button>
@@ -266,7 +266,7 @@ export default function AdminUsersPage() {
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
-              className="dash-btn dash-btn--glass dash-btn--sm"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Next
             </button>

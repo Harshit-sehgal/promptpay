@@ -151,11 +151,7 @@ export default function AdvertiserBillingPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Advertiser"
-        title="Billing"
-        lede="Deposit history, charges, and account balance"
-      />
+      <PageHeader title="Billing" />
 
       {loading && !data && <LoadingSpinner />}
       {error && (
@@ -200,7 +196,7 @@ export default function AdvertiserBillingPage() {
                 {data.balances.map((balance) => (
                   <div
                     key={balance.currency}
-                    className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2"
+                    className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--page)] px-3 py-2"
                   >
                     <span className="text-sm text-[var(--copy)]">{balance.currency}</span>
                     <span className="dash-mono text-sm text-[var(--ink)]">
@@ -258,7 +254,7 @@ export default function AdvertiserBillingPage() {
                   className={`dash-btn dash-btn--md ${
                     !showCustom && selectedMinor === amount
                       ? 'dash-btn--primary'
-                      : 'dash-btn--glass'
+                      : 'dash-btn--secondary'
                   }`}
                 >
                   {formatCurrency(amount, displayDepositCurrency)}
@@ -272,7 +268,7 @@ export default function AdvertiserBillingPage() {
                   setDepositError(null);
                 }}
                 className={`dash-btn dash-btn--md ${
-                  showCustom ? 'dash-btn--primary' : 'dash-btn--glass'
+                  showCustom ? 'dash-btn--primary' : 'dash-btn--secondary'
                 }`}
               >
                 Custom

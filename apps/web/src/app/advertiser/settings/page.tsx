@@ -54,11 +54,7 @@ export default function AdvertiserSettingsPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Advertiser"
-        title="Settings"
-        lede="Manage your advertiser data and account security"
-      />
+      <PageHeader title="Settings" />
 
       {exportError && (
         <Notice tone="bad" role="alert">
@@ -79,7 +75,7 @@ export default function AdvertiserSettingsPage() {
             type="button"
             onClick={handleExport}
             disabled={exportBusy}
-            className="dash-btn dash-btn--glass dash-btn--md"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             {exportBusy ? 'Preparing…' : 'Export my data'}
           </button>

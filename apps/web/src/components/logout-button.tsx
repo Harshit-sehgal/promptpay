@@ -50,7 +50,7 @@ export function LogoutButton({
         disabled={busy}
         className={`rounded px-1 py-1 text-sm font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
           light
-            ? 'text-[var(--copy)] hover:text-[var(--ink)] hover:underline'
+            ? 'text-[var(--ink)] underline-offset-[3px] hover:underline'
             : 'text-ink-300 hover:text-red-300'
         }`}
       >

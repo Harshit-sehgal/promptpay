@@ -58,7 +58,6 @@ export default function DevEarningsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Developer"
         title="Earnings ledger"
         lede="Every earning entry with status and availability date"
       />
@@ -99,7 +98,7 @@ export default function DevEarningsPage() {
       </p>
 
       {/* Filter */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="dash-bar flex flex-wrap items-center gap-2">
         <span className="mr-1.5 text-sm font-medium text-[var(--muted)]">Filter:</span>
         {['', 'estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'].map((status) => (
           <button
@@ -109,7 +108,7 @@ export default function DevEarningsPage() {
               setPage(1);
             }}
             className={`dash-btn dash-btn--sm ${
-              statusFilter === status ? 'dash-btn--primary' : 'dash-btn--glass'
+              statusFilter === status ? 'dash-btn--primary' : 'dash-btn--secondary'
             }`}
           >
             {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
@@ -180,7 +179,7 @@ export default function DevEarningsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.max(1, current - 1))}
                 disabled={page <= 1 || loading}
-                className="dash-btn dash-btn--glass dash-btn--sm"
+                className="dash-btn dash-btn--secondary dash-btn--sm"
               >
                 Previous
               </button>
@@ -191,7 +190,7 @@ export default function DevEarningsPage() {
                 type="button"
                 onClick={() => setPage((current) => Math.min(data.totalPages, current + 1))}
                 disabled={page >= data.totalPages || loading}
-                className="dash-btn dash-btn--glass dash-btn--sm"
+                className="dash-btn dash-btn--secondary dash-btn--sm"
               >
                 Next
               </button>

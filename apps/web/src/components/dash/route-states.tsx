@@ -66,7 +66,7 @@ function Bar({ className }: { className: string }) {
   );
 }
 
-/** Segment loading placeholder: a header and a few glass panels of pulse bars. */
+/** Segment loading placeholder: a header and a few panels of pulse bars. */
 export function RouteSkeleton({ panels = 3, columns = 1 }: { panels?: number; columns?: 1 | 3 }) {
   return (
     <div aria-busy="true" aria-label="Loading" className="grid gap-5">

@@ -25,11 +25,10 @@ interface SidebarProps {
   variant?: 'dark' | 'light';
 }
 
-/* The dashboard rail: wordmark and workspace, text navigation with the
-   current page as the ink pill, and the palette picker, sign out and the
-   way home at the foot. Below lg it collapses to a bar with a menu toggle.
-   The glass is its own layer, as in the site header, so the picker menu keeps
-   its fixed phone layout. */
+/* The dashboard rail: wordmark and workspace on the palette colour, text
+   navigation with the current page in ink, and the palette picker, sign out
+   and the way home at the foot. Below lg it collapses to a bar with a menu
+   toggle. */
 export function Sidebar({
   brand = 'Ateva',
   navItems,
@@ -55,7 +54,6 @@ export function Sidebar({
 
   return (
     <aside className="app-sidebar dash-rail" data-open={mobileOpen || undefined}>
-      <span aria-hidden="true" className="dash-rail__glass" />
       <div className="dash-rail__head">
         <Link href="/" aria-label="Ateva home" className="dash-rail__brand">
           ateva

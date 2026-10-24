@@ -148,9 +148,7 @@ export default function AdvertiserCampaignsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Advertiser"
         title="Campaigns"
-        lede="Manage and review your ad campaigns"
         actions={
           <ActionLink href="/advertiser/campaigns/new" variant="primary">
             + New campaign
@@ -189,7 +187,7 @@ export default function AdvertiserCampaignsPage() {
 
           {/* Filter */}
           <div
-            className="flex flex-wrap items-center gap-2"
+            className="dash-bar flex flex-wrap items-center gap-2"
             role="group"
             aria-label="Filter campaigns by status"
           >
@@ -205,7 +203,7 @@ export default function AdvertiserCampaignsPage() {
                   }}
                   aria-pressed={statusFilter === status}
                   className={`dash-btn dash-btn--sm ${
-                    statusFilter === status ? 'dash-btn--primary' : 'dash-btn--glass'
+                    statusFilter === status ? 'dash-btn--primary' : 'dash-btn--secondary'
                   }`}
                 >
                   {status || 'All'}
@@ -268,7 +266,7 @@ export default function AdvertiserCampaignsPage() {
                               <button
                                 onClick={() => handlePause(campaign.id)}
                                 disabled={isCampaignBusy(campaign.id)}
-                                className="dash-btn dash-btn--glass dash-btn--sm"
+                                className="dash-btn dash-btn--secondary dash-btn--sm"
                               >
                                 {isActionLoading('pause', campaign.id) ? 'Pausing...' : 'Pause'}
                               </button>
@@ -277,7 +275,7 @@ export default function AdvertiserCampaignsPage() {
                               <button
                                 onClick={() => handleResume(campaign.id)}
                                 disabled={isCampaignBusy(campaign.id)}
-                                className="dash-btn dash-btn--glass dash-btn--sm"
+                                className="dash-btn dash-btn--secondary dash-btn--sm"
                               >
                                 {isActionLoading('resume', campaign.id) ? 'Resuming...' : 'Resume'}
                               </button>
@@ -350,12 +348,12 @@ export default function AdvertiserCampaignsPage() {
           )}
           {/* Pagination (A-074) */}
           {data.total > limit && (
-            <div className="flex items-center justify-center gap-4">
+            <div className="dash-bar flex items-center justify-center gap-4">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Previous
               </button>
@@ -366,7 +364,7 @@ export default function AdvertiserCampaignsPage() {
                 type="button"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page >= Math.ceil(data.total / limit)}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Next
               </button>

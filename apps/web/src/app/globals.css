@@ -2640,15 +2640,17 @@ body:has(.site-header):not(:has(.home-page)) main .font-serif,
 }
 
 /* -------------------------------------------------------------------------
-   Dashboards (counter language)
+   Dashboards (the ledger)
 
-   The developer, advertiser and admin workspaces, drawn with the homepage
-   system: palette tokens, glass panels over faint colour fields, display type
-   for titles and Geist Mono for figures. Components live in
-   src/components/dash; tables and form controls inside the main column get a
-   default treatment here so every page reads the same. Status is a tone dot
-   or bar beside ink text, never coloured text, so labels keep AA in every
-   palette. Spec: docs/superpowers/specs/2026-10-24-dashboard-redesign-design.md
+   The developer, advertiser and admin workspaces. Flat paper surfaces with
+   hairline rules, the palette colour on the rail, sentence-case labels, and
+   Geist Mono for figures. The ink clock chip from the homepage hero marks the
+   one headline figure on each overview. No blur, no colour fields, no glass:
+   these pages are read and compared, so the colour stays out from under the
+   text. Components live in src/components/dash; tables and form controls in
+   the main column get a default treatment here. Status is a tone dot or tint
+   beside ink text, never coloured text, so labels keep AA in every palette.
+   Spec: docs/superpowers/specs/2026-10-24-dashboard-redesign-design.md
    ------------------------------------------------------------------------- */
 :root {
   --warn: #c98a12;
@@ -2656,6 +2658,7 @@ body:has(.site-header):not(:has(.home-page)) main .font-serif,
   --danger-fill: #b42318;
   --on-danger: #ffffff;
   --hair: color-mix(in srgb, var(--ink) 12%, transparent);
+  --rule: color-mix(in srgb, var(--ink) 24%, transparent);
 }
 
 html[data-palette='midnight'] {
@@ -2675,8 +2678,6 @@ html[data-palette='midnight'] {
 }
 
 .dash-main {
-  position: relative;
-  z-index: 1;
   min-width: 0;
   flex: 1;
   padding: 24px 16px 56px;
@@ -2689,23 +2690,13 @@ html[data-palette='midnight'] {
   gap: 20px;
 }
 
-/* Rail */
+/* Rail: the palette colour as a solid spine, everything on it in ink */
 .dash-rail {
-  position: relative;
-  z-index: 2;
   display: flex;
   flex-direction: column;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--glass-edge);
-}
-
-.dash-rail__glass {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  background: var(--glass-strong);
-  backdrop-filter: blur(22px) saturate(1.4);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  background: var(--c1);
+  color: var(--ink);
 }
 
 .dash-rail__head {
@@ -2715,7 +2706,7 @@ html[data-palette='midnight'] {
 }
 
 .dash-rail__brand {
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--ink);
   font:
     800 22px var(--font-display),
@@ -2724,12 +2715,10 @@ html[data-palette='midnight'] {
 }
 
 .dash-rail__workspace {
-  color: var(--muted);
+  color: var(--ink);
   font:
-    500 11px var(--font-utility),
-    monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+    500 14px var(--font-ui),
+    sans-serif;
 }
 
 .dash-rail__menu {
@@ -2740,9 +2729,9 @@ html[data-palette='midnight'] {
   justify-content: center;
   align-self: center;
   margin-left: auto;
-  border: 1px solid var(--glass-edge);
-  border-radius: 999px;
-  background: var(--glass);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
   color: var(--ink);
   font-size: 18px;
 }
@@ -2751,6 +2740,9 @@ html[data-palette='midnight'] {
    home link stay in reach with the menu closed, as in every earlier shell. */
 .dash-rail__nav {
   display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 14px;
 }
 
 .dash-rail[data-open] .dash-rail__nav {
@@ -2761,38 +2753,27 @@ html[data-palette='midnight'] {
   display: none;
 }
 
-.dash-rail__nav {
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 14px;
-}
-
 .dash-rail__group {
-  margin: 18px 14px 6px;
-  color: var(--muted);
+  margin: 20px 12px 6px;
+  color: var(--ink);
   font:
-    500 10.5px var(--font-utility),
-    monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+    600 12.5px var(--font-ui),
+    sans-serif;
 }
 
 .dash-rail__item {
   display: block;
-  padding: 9px 14px;
-  border-radius: 999px;
-  color: var(--copy);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--ink);
   font:
     500 14.5px var(--font-ui),
     sans-serif;
-  transition:
-    background-color 0.15s,
-    color 0.15s;
+  transition: background-color 0.15s;
 }
 
 .dash-rail__item:hover {
-  background: var(--mini-bg);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
 .dash-rail__item[aria-current='page'] {
@@ -2804,9 +2785,9 @@ html[data-palette='midnight'] {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--hair);
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
 }
 
 .dash-rail__foot-links {
@@ -2818,11 +2799,12 @@ html[data-palette='midnight'] {
 }
 
 .dash-rail__back {
-  color: var(--muted);
+  color: var(--ink);
 }
 
 .dash-rail__back:hover {
-  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 @media (min-width: 1024px) {
@@ -2831,18 +2813,20 @@ html[data-palette='midnight'] {
   }
 
   .dash-main {
-    padding: 44px 48px 72px;
+    padding: 48px 56px 80px;
   }
 
   .dash-rail {
     position: sticky;
     top: 0;
-    width: 260px;
+    width: 240px;
     height: 100vh;
     flex-shrink: 0;
-    padding: 30px 20px 22px;
-    border-right: 1px solid var(--glass-edge);
-    border-bottom: 0;
+    padding: 28px 16px 20px;
+  }
+
+  .dash-rail__head {
+    padding-inline: 12px;
   }
 
   .dash-rail__menu {
@@ -2853,21 +2837,23 @@ html[data-palette='midnight'] {
     display: flex;
     flex: 1;
     min-height: 0;
-    margin-top: 34px;
+    margin-top: 28px;
     overflow-y: auto;
   }
 
   .dash-rail__foot {
     display: flex;
+    padding-inline: 12px;
   }
 }
 
-/* Page header */
+/* Page header: a big title over a heavy rule, like the top of a ledger page */
 .dash-head {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  margin-bottom: 6px;
+  padding-bottom: 22px;
+  border-bottom: 2px solid var(--ink);
 }
 
 @media (min-width: 1024px) {
@@ -2878,29 +2864,19 @@ html[data-palette='midnight'] {
   }
 }
 
-.dash-eyebrow {
-  margin-bottom: 12px;
-  color: var(--muted);
-  font:
-    500 12px var(--font-utility),
-    monospace;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
 .dash-title {
   color: var(--ink);
   font:
-    800 clamp(30px, 3.6vw, 44px) / 1 var(--font-display),
+    800 clamp(36px, 4.4vw, 56px) / 0.98 var(--font-display),
     sans-serif;
   letter-spacing: -0.045em;
 }
 
 .dash-lede {
-  max-width: 58ch;
+  max-width: 60ch;
   margin-top: 12px;
   color: var(--copy);
-  font-size: 15.5px;
+  font-size: 16px;
   line-height: 1.55;
 }
 
@@ -2910,17 +2886,14 @@ html[data-palette='midnight'] {
   gap: 10px;
 }
 
-/* Panels */
+/* Panels: paper with a hairline edge */
 .dash-panel {
   min-width: 0;
   padding: 22px;
-  border: 1px solid var(--glass-edge);
-  border-radius: 20px;
-  background: var(--glass);
-  box-shadow: var(--glass-shadow);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--solid);
   color: var(--copy);
-  backdrop-filter: blur(22px) saturate(1.4);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
 }
 
 .dash-panel--flush {
@@ -2934,19 +2907,19 @@ html[data-palette='midnight'] {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .dash-panel--flush .dash-panel__head {
   margin: 0;
-  padding: 18px 22px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--hair);
 }
 
 .dash-panel__title {
   color: var(--ink);
   font:
-    600 16px var(--font-ui),
+    650 16px / 1.3 var(--font-ui),
     sans-serif;
   letter-spacing: -0.01em;
 }
@@ -2978,6 +2951,26 @@ html[data-palette='midnight'] {
   .dash-grid--wide-left {
     grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
   }
+
+  /* The overview headline gets the wide first column */
+  .dash-grid--4:has(.dash-stat__value--chip) {
+    grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* A row of figures reads as one ruled strip, not a row of separate cards:
+   the gap shows the hairline behind the cells. */
+.dash-grid:has(> .dash-panel > .dash-stat) {
+  overflow: hidden;
+  gap: 1px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--hair);
+}
+
+.dash-grid:has(> .dash-panel > .dash-stat) > .dash-panel {
+  border: 0;
+  border-radius: 0;
 }
 
 /* Divided rows inside a flush panel */
@@ -3006,17 +2999,15 @@ html[data-palette='midnight'] {
 }
 
 .dash-stat__label {
-  color: var(--muted);
+  color: var(--copy);
   font:
-    500 11.5px var(--font-utility),
-    monospace;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+    500 13.5px var(--font-ui),
+    sans-serif;
 }
 
 .dash-stat__icon {
   display: inline-flex;
-  color: var(--muted);
+  color: var(--copy);
 }
 
 .dash-stat__icon svg {
@@ -3027,23 +3018,25 @@ html[data-palette='midnight'] {
 .dash-stat__value {
   color: var(--ink);
   font:
-    500 clamp(26px, 2.6vw, 34px) / 1.05 var(--font-utility),
+    500 clamp(24px, 2.2vw, 30px) / 1.05 var(--font-utility),
     monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
+/* The homepage clock chip, on the one figure each overview leads with */
 .dash-stat__value--chip {
   align-self: flex-start;
-  padding: 0.04em 0.16em;
-  border-radius: 0.12em;
+  padding: 0.05em 0.16em;
+  border-radius: 0.1em;
   background: var(--ink);
   color: var(--page);
+  font-size: clamp(36px, 3.4vw, 52px);
 }
 
 .dash-stat__detail {
-  color: var(--muted);
+  color: var(--copy);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -3053,19 +3046,15 @@ html[data-palette='midnight'] {
   font-variant-numeric: tabular-nums;
 }
 
-/* Status chips: dash Pill and the shared StatusBadge */
+/* Status: a dot beside ink text. The dash Pill and the shared StatusBadge. */
 .dash-pill,
 .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 11px;
-  border: 1px solid var(--glass-edge);
-  border-radius: 999px;
-  background: var(--mini-bg);
   color: var(--ink);
   font:
-    500 12.5px / 1.4 var(--font-ui),
+    500 13px / 1.4 var(--font-ui),
     sans-serif;
   white-space: nowrap;
 }
@@ -3081,11 +3070,11 @@ html[data-palette='midnight'] {
 
 .dash-pill__dot,
 .status-badge__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: var(--tone, var(--muted));
+  background: var(--tone, var(--rule));
 }
 
 [data-tone='ok'],
@@ -3103,21 +3092,18 @@ html[data-palette='midnight'] {
   --tone: var(--bad);
 }
 
-/* Notices: errors, holds and beta disclosures */
+/* Notices: errors, holds and beta disclosures, tinted by their tone */
 .dash-notice {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px 24px;
-  padding: 16px 20px 16px 22px;
-  border: 1px solid var(--glass-edge);
-  border-radius: 16px;
-  background: var(--glass);
-  box-shadow: inset 4px 0 0 var(--tone, var(--muted));
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 32%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone, var(--ink)) 8%, var(--solid));
   color: var(--copy);
-  backdrop-filter: blur(22px) saturate(1.4);
-  -webkit-backdrop-filter: blur(22px) saturate(1.4);
 }
 
 .dash-notice__body {
@@ -3132,7 +3118,8 @@ html[data-palette='midnight'] {
 }
 
 .dash-notice__text {
-  margin-top: 4px;
+  margin-top: 3px;
+  color: var(--ink);
   font-size: 14px;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -3145,69 +3132,72 @@ html[data-palette='midnight'] {
   gap: 10px;
 }
 
-/* Actions: links and buttons share one pill system */
+/* Actions: links and buttons share one system */
 .dash-action,
 .dash-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border-radius: 999px;
+  border-radius: 8px;
   font:
     600 14px var(--font-ui),
     sans-serif;
   white-space: nowrap;
   transition:
-    transform 0.2s ease,
     background-color 0.15s,
+    border-color 0.15s,
     color 0.15s;
 }
 
 .dash-action--primary,
 .dash-btn--primary {
-  padding: 10px 18px;
+  padding: 9px 16px;
   border: 1px solid var(--ink);
   background: var(--ink);
   color: var(--on-ink);
 }
 
-.dash-action--glass,
-.dash-btn--glass {
-  padding: 9px 17px;
-  border: 1px solid var(--glass-edge);
-  background: var(--glass-strong);
+.dash-action--primary:hover,
+.dash-btn--primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ink) 86%, var(--page));
+}
+
+.dash-action--secondary,
+.dash-btn--secondary {
+  padding: 9px 16px;
+  border: 1px solid var(--rule);
+  background: var(--solid);
   color: var(--ink);
 }
 
-.dash-action--primary:hover,
-.dash-action--glass:hover,
-.dash-btn--primary:not(:disabled):hover,
-.dash-btn--glass:not(:disabled):hover {
-  transform: translateY(-1px);
+.dash-action--secondary:hover,
+.dash-btn--secondary:not(:disabled):hover {
+  border-color: var(--ink);
 }
 
 .dash-action--text {
   padding: 2px 0;
+  border-radius: 2px;
   color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
 }
 
-.dash-action__arrow {
-  transition: transform 0.2s ease;
-}
-
-.dash-action--text:hover .dash-action__arrow {
-  transform: translateX(3px);
+.dash-action--text:hover {
+  text-decoration-color: var(--ink);
 }
 
 .dash-btn--ghost {
   border: 1px solid transparent;
   background: transparent;
-  color: var(--copy);
+  color: var(--ink);
 }
 
 .dash-btn--ghost:not(:disabled):hover {
-  background: var(--mini-bg);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
 .dash-btn--danger {
@@ -3218,18 +3208,18 @@ html[data-palette='midnight'] {
 
 .dash-btn--sm {
   min-height: 32px;
-  padding-inline: 14px;
+  padding-inline: 12px;
   font-size: 13px;
 }
 
 .dash-btn--md {
   min-height: 40px;
-  padding-inline: 18px;
+  padding-inline: 16px;
 }
 
 .dash-btn--lg {
-  min-height: 48px;
-  padding-inline: 22px;
+  min-height: 46px;
+  padding-inline: 20px;
   font-size: 15px;
 }
 
@@ -3245,10 +3235,37 @@ html[data-palette='midnight'] {
 
 @media (prefers-reduced-motion: reduce) {
   .dash-action,
-  .dash-btn,
-  .dash-action__arrow {
+  .dash-btn {
     transition: none;
   }
+}
+
+/* Toolbars: filters, search and pagination sit on a ruled line */
+.dash-bar {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--copy);
+}
+
+/* Filter toggles inside a toolbar read as tabs, the active one underlined */
+.dash-bar .dash-btn[aria-pressed] {
+  min-height: 30px;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--copy);
+  font-weight: 500;
+}
+
+.dash-bar .dash-btn[aria-pressed]:hover {
+  color: var(--ink);
+}
+
+.dash-bar .dash-btn[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 /* Defaults inside the main column: tables and form controls */
@@ -3259,20 +3276,18 @@ html[data-palette='midnight'] {
 }
 
 .dash-main th {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--hair);
-  color: var(--muted);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--copy);
   font:
-    500 11px var(--font-utility),
-    monospace;
-  letter-spacing: 0.1em;
+    500 13px var(--font-ui),
+    sans-serif;
   text-align: left;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .dash-main td {
-  padding: 14px 16px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--hair);
   color: var(--copy);
   vertical-align: middle;
@@ -3292,9 +3307,9 @@ html[data-palette='midnight'] {
     select,
     textarea
   ) {
-  border: 1px solid var(--hair);
-  border-radius: 12px;
-  background: var(--glass-strong);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--solid);
   color: var(--ink);
 }
 

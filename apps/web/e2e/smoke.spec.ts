@@ -212,11 +212,11 @@ test.describe('Developer dashboard (authenticated)', () => {
     await expect(page.getByRole('status', { name: /private beta.*no earnings/i })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole('heading', { name: 'Get started — connect a client' })).toBeVisible(
-      {
-        timeout: 15_000,
-      },
-    );
+    await expect(
+      page.getByRole('heading', { name: 'Connect a client to get started' }),
+    ).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page.getByText(/install one below, sign in/i)).toBeVisible();
     await expect(page.getByText(/Not yet published to npm/i)).toBeVisible();
   });

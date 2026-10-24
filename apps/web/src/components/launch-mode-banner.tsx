@@ -83,7 +83,7 @@ const COPY: Record<
   { title: string; body: string; tone: Tone }
 > = {
   telemetry_only: {
-    title: 'Private beta — wait detection only, no earnings',
+    title: 'Private beta: wait detection only, no earnings',
     body:
       'Your wait states are being verified, but settlement is switched off, so no earnings ' +
       'accrue and advertisers are not billed. Rewards stay disabled until an independently ' +
@@ -128,9 +128,6 @@ export function LaunchModeBanner({ override }: { override?: WaitLaunchMode } = {
       <div className="dash-notice__actions">
         <Link href="/payout-policy" className="dash-action dash-action--text">
           Payout policy
-          <span className="dash-action__arrow" aria-hidden="true">
-            →
-          </span>
         </Link>
       </div>
     </div>

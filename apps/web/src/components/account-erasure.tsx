@@ -133,7 +133,7 @@ export function AccountErasure({
                   type="button"
                   onClick={sendPasswordSetupEmail}
                   disabled={busy || !accountEmail}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   {busy ? 'Sending…' : 'Email me a password setup link'}
                 </button>

@@ -35,7 +35,7 @@ describe('SandboxCreditPanel (WL-013/WL-070)', () => {
     render(<SandboxCreditPanel />);
 
     expect(screen.queryByRole('heading', { name: /test credits/i })).toBeNull();
-    expect(await screen.findByText('XTS only — no cash value, no external transfer.')).toBeTruthy();
+    expect(await screen.findByText('XTS only. No cash value, no external transfer.')).toBeTruthy();
     expect(screen.getByText('12.50 XTS')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Claim faucet grant' })).toBeTruthy();
   });

@@ -99,7 +99,7 @@ export default function SandboxDepositPanel() {
     <Panel label="Sandbox advertiser deposits">
       <PanelHeader title="Test advertiser deposit" action={<Pill tone="warn">Sandbox only</Pill>} />
       <p className="text-sm leading-6 text-[var(--copy)]">
-        XTS only — simulated provider outcomes, no cash value or external transfer.
+        XTS only. Simulated provider outcomes, no cash value or external transfer.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label>

@@ -206,21 +206,17 @@ export default function AdvertiserReportsPage() {
   return (
     <>
       {/* Header */}
-      <PageHeader
-        eyebrow="Advertiser"
-        title="Reports"
-        lede="Campaign performance, daily trends, and spend breakdown"
-      />
+      <PageHeader title="Reports" />
 
       {/* Period selector */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="dash-bar flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm text-[var(--muted)]">Period:</span>
         {PRESETS.map((p) => (
           <button
             key={p.key}
             onClick={() => setPeriod(p.key)}
             className={`dash-btn dash-btn--sm ${
-              period === p.key ? 'dash-btn--primary' : 'dash-btn--glass'
+              period === p.key ? 'dash-btn--primary' : 'dash-btn--secondary'
             }`}
           >
             {p.label}
@@ -229,7 +225,7 @@ export default function AdvertiserReportsPage() {
         <button
           onClick={() => setPeriod('custom')}
           className={`dash-btn dash-btn--sm ${
-            period === 'custom' ? 'dash-btn--primary' : 'dash-btn--glass'
+            period === 'custom' ? 'dash-btn--primary' : 'dash-btn--secondary'
           }`}
         >
           Custom
@@ -255,7 +251,7 @@ export default function AdvertiserReportsPage() {
       </div>
 
       {/* Campaign filter */}
-      <div className="flex items-center gap-2">
+      <div className="dash-bar flex items-center gap-2">
         <span className="text-xs text-[var(--muted)]">Campaign:</span>
         <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)}>
           <option value="">All campaigns</option>
@@ -269,7 +265,7 @@ export default function AdvertiserReportsPage() {
           type="button"
           onClick={handleExportCsv}
           disabled={!dateRange}
-          className="dash-btn dash-btn--glass dash-btn--sm ml-auto"
+          className="dash-btn dash-btn--secondary dash-btn--sm ml-auto"
         >
           Export CSV
         </button>
@@ -282,7 +278,7 @@ export default function AdvertiserReportsPage() {
           tone="bad"
           role="alert"
           actions={
-            <button onClick={fetchReports} className="dash-btn dash-btn--glass dash-btn--sm">
+            <button onClick={fetchReports} className="dash-btn dash-btn--secondary dash-btn--sm">
               Retry
             </button>
           }

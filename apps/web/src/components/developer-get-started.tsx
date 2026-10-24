@@ -118,12 +118,12 @@ export function DeveloperGetStarted() {
     <section aria-labelledby="get-started-heading" className="dash-panel">
       <div className="dash-panel__head">
         <h2 id="get-started-heading" className="dash-panel__title">
-          Get started — connect a client
+          Connect a client to get started
         </h2>
       </div>
       <p className="text-sm leading-6 text-[var(--copy)]">
         Your account is ready, but nothing is reporting yet. Ateva detects AI wait states from a
-        client running on your machine — install one below, sign in, and this dashboard will start
+        client running on your machine. Install one below, sign in, and this dashboard will start
         showing verified activity.
       </p>
 
@@ -140,10 +140,10 @@ export function DeveloperGetStarted() {
               rel="noreferrer noopener"
               className="dash-btn dash-btn--primary dash-btn--sm mt-3"
             >
-              Install from Marketplace →
+              Install from Marketplace
             </a>
           ) : (
-            <p className="mt-3 rounded-lg border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2 text-xs leading-5 text-[var(--copy)]">
+            <p className="mt-3 rounded-lg border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs leading-5 text-[var(--copy)]">
               Not yet published to the Marketplace. Build it locally with{' '}
               <code className="text-[11px]">pnpm --filter ateva-vscode package</code> and install
               the resulting <code className="text-[11px]">.vsix</code> via{' '}
@@ -155,13 +155,13 @@ export function DeveloperGetStarted() {
         <div className="rounded-xl border border-[var(--hair)] p-4">
           <h3 className="text-sm font-semibold text-[var(--ink)]">Command-line tool</h3>
           <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
-            Supervises any terminal AI tool — Claude Code, Aider, Codex CLI.
+            Supervises any terminal AI tool: Claude Code, Aider, Codex CLI.
           </p>
           <div className="mt-3 space-y-2">
             {CLIENTS_PUBLISHED ? (
               <CodeLine>{CLI_INSTALL}</CodeLine>
             ) : (
-              <p className="rounded-lg border border-[var(--hair)] bg-[var(--glass-strong)] px-3 py-2 text-xs leading-5 text-[var(--copy)]">
+              <p className="rounded-lg border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs leading-5 text-[var(--copy)]">
                 Not yet published to npm. Build locally with{' '}
                 <code className="text-[11px]">pnpm --filter ateva-cli build</code>.
               </p>
@@ -173,7 +173,7 @@ export function DeveloperGetStarted() {
       </div>
 
       <p className="mt-5 text-xs leading-5 text-[var(--muted)]">
-        Clients send a normalized tool type and lifecycle timing only — never your prompts, command
+        Clients send a normalized tool type and lifecycle timing only. Never your prompts, command
         arguments, source code, or terminal output.
       </p>
     </section>

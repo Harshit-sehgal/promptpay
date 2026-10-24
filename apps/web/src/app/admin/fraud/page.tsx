@@ -164,7 +164,7 @@ export default function AdminFraudPage() {
       await adminApi.resolveFraudFlag(
         id,
         decision,
-        decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive — released',
+        decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive, released',
       );
       fetchData();
     } catch (err: unknown) {
@@ -233,11 +233,7 @@ export default function AdminFraudPage() {
   return (
     <>
       {/* Header */}
-      <PageHeader
-        eyebrow="Admin"
-        title="Fraud review dashboard"
-        lede="Investigate flagged activity, resolve cases, and monitor trust scores"
-      />
+      <PageHeader title="Fraud review" />
 
       {/* Stats overview */}
       {statsSummary && (
@@ -346,7 +342,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('open')}
             className={`dash-btn dash-btn--sm ${
-              tab === 'open' ? 'dash-btn--primary' : 'dash-btn--glass'
+              tab === 'open' ? 'dash-btn--primary' : 'dash-btn--secondary'
             }`}
           >
             Active flags {activeCount > 0 && `(${activeCount})`}
@@ -354,7 +350,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('resolved')}
             className={`dash-btn dash-btn--sm ${
-              tab === 'resolved' ? 'dash-btn--primary' : 'dash-btn--glass'
+              tab === 'resolved' ? 'dash-btn--primary' : 'dash-btn--secondary'
             }`}
           >
             Resolved history
@@ -371,7 +367,7 @@ export default function AdminFraudPage() {
                 key={s || 'all'}
                 onClick={() => setSeverityFilter(severityFilter === s ? '' : s)}
                 className={`dash-btn dash-btn--sm ${
-                  severityFilter === s ? 'dash-btn--primary' : 'dash-btn--glass'
+                  severityFilter === s ? 'dash-btn--primary' : 'dash-btn--secondary'
                 }`}
               >
                 {s || 'All'}
@@ -516,7 +512,7 @@ export default function AdminFraudPage() {
                         {flag.evidence && Object.keys(flag.evidence).length > 0 && (
                           <div>
                             <p className="dash-eyebrow mb-1">Evidence</p>
-                            <pre className="dash-mono max-h-40 overflow-x-auto overflow-y-auto rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-3 text-xs text-[var(--ink)]">
+                            <pre className="dash-mono max-h-40 overflow-x-auto overflow-y-auto rounded-xl border border-[var(--hair)] bg-[var(--page)] p-3 text-xs text-[var(--ink)]">
                               {JSON.stringify(flag.evidence, null, 2)}
                             </pre>
                           </div>
@@ -556,7 +552,7 @@ export default function AdminFraudPage() {
                         {flag.reviewNote && (
                           <div>
                             <p className="dash-eyebrow mb-1">Review note</p>
-                            <p className="rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-2 text-xs text-[var(--ink)]">
+                            <p className="rounded-xl border border-[var(--hair)] bg-[var(--page)] p-2 text-xs text-[var(--ink)]">
                               {flag.reviewNote}
                             </p>
                           </div>
@@ -569,7 +565,7 @@ export default function AdminFraudPage() {
                               <button
                                 onClick={() => setNoteModal({ id: flag.id, decision: 'invalid' })}
                                 disabled={resolving === flag.id}
-                                className="dash-btn dash-btn--glass dash-btn--sm"
+                                className="dash-btn dash-btn--secondary dash-btn--sm"
                               >
                                 Mark invalid
                               </button>
@@ -577,7 +573,7 @@ export default function AdminFraudPage() {
                                 <button
                                   onClick={() => handleEscalate(flag.id)}
                                   disabled={resolving === flag.id}
-                                  className="dash-btn dash-btn--glass dash-btn--sm"
+                                  className="dash-btn dash-btn--secondary dash-btn--sm"
                                 >
                                   {resolving === flag.id ? 'Escalating...' : 'Escalate'}
                                 </button>
@@ -617,9 +613,9 @@ export default function AdminFraudPage() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
-                  ← Prev
+                  Previous
                 </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
@@ -630,7 +626,7 @@ export default function AdminFraudPage() {
                       key={p}
                       onClick={() => setPage(p)}
                       className={`dash-btn dash-btn--sm ${
-                        p === page ? 'dash-btn--primary' : 'dash-btn--glass'
+                        p === page ? 'dash-btn--primary' : 'dash-btn--secondary'
                       }`}
                     >
                       {p}
@@ -640,9 +636,9 @@ export default function AdminFraudPage() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
-                  Next →
+                  Next
                 </button>
               </div>
             </div>
@@ -671,7 +667,7 @@ export default function AdminFraudPage() {
           <textarea
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            placeholder="Optional note — internal review notes (not visible to user)"
+            placeholder="Optional internal note (the user never sees it)"
             rows={3}
             maxLength={500}
             className="mb-4 w-full px-4 py-3 text-sm"
@@ -682,7 +678,7 @@ export default function AdminFraudPage() {
                 setNoteModal(null);
                 setNoteText('');
               }}
-              className="dash-btn dash-btn--glass dash-btn--md"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Cancel
             </button>

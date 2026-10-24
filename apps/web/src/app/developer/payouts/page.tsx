@@ -340,11 +340,7 @@ export default function DevPayoutsPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Developer"
-        title="Payouts"
-        lede="Available earnings, payout methods, and history"
-      />
+      <PageHeader title="Payouts" />
 
       {isAuthenticated && !user?.emailVerified && (
         <Notice
@@ -541,7 +537,7 @@ export default function DevPayoutsPage() {
                         ? 'No payout provider is currently ready'
                         : undefined
                   }
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   {showMethodForm ? 'Cancel' : '+ Add method'}
                 </button>
@@ -562,7 +558,7 @@ export default function DevPayoutsPage() {
                         type="button"
                         onClick={fetchData}
                         disabled={loading}
-                        className="dash-btn dash-btn--glass dash-btn--sm"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         Retry readiness check
                       </button>

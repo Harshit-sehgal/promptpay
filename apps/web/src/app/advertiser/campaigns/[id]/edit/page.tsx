@@ -249,7 +249,7 @@ export default function EditCampaignPage() {
 
   if (notFound) {
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+      <div className="dash-bar flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <p className="text-[var(--copy)]">Campaign not found.</p>
         <ActionLink href="/advertiser/campaigns" variant="text">
           Back to campaigns
@@ -266,7 +266,6 @@ export default function EditCampaignPage() {
         </ActionLink>
       </div>
       <PageHeader
-        eyebrow="Advertiser"
         title="Edit campaign"
         lede={
           status === 'rejected'
@@ -320,7 +319,7 @@ export default function EditCampaignPage() {
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-[var(--muted)]">
-                  Must match a funded deposit balance — campaigns activate and spend in their own
+                  Must match a funded deposit balance. Campaigns activate and spend in their own
                   currency.
                 </p>
               </div>
@@ -434,7 +433,7 @@ export default function EditCampaignPage() {
                 required
                 maxLength={80}
                 rows={2}
-                placeholder="Max 80 chars — shown during wait states"
+                placeholder="Up to 80 characters, shown during wait states"
                 className="w-full"
               />
               <p className="mt-1 text-xs text-[var(--muted)]">{message.length}/80 characters</p>
@@ -465,7 +464,7 @@ export default function EditCampaignPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-[var(--hair)] bg-[var(--glass-strong)] p-4">
+            <div className="rounded-xl border border-[var(--hair)] bg-[var(--page)] p-4">
               <p className="dash-eyebrow mb-2">Preview</p>
               <div className="flex items-center justify-between">
                 <div>

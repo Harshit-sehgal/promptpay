@@ -1,11 +1,10 @@
 import { type ReactNode } from 'react';
-import { PageBackdrop } from '@/components/motion/page-backdrop';
 import { Sidebar } from '@/components/sidebar';
 
 type NavItem = { label: string; href: string; section?: string };
 
-/** The frame every dashboard shares: faint colour fields, the glass rail, and
-    the main column. Layouts keep their own guards and providers around it. */
+/** The frame every dashboard shares: the palette-coloured rail and the main
+    column. Layouts keep their own guards and providers around it. */
 export function DashboardShell({
   workspace,
   navItems,
@@ -20,7 +19,6 @@ export function DashboardShell({
 }) {
   return (
     <div className={`app-shell app-shell--${modifier} dash-shell`}>
-      <PageBackdrop />
       <Sidebar brand={workspace} navItems={navItems} />
       <main id="main-content" tabIndex={-1} className="app-shell__main dash-main">
         <div className="dash-main__inner">{children}</div>

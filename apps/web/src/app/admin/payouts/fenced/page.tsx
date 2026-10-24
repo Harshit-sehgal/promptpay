@@ -130,7 +130,6 @@ export default function AdminFencedPayoutAccountsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Admin"
         title="Fenced payout accounts"
         lede="Payout accounts locked by an in-flight provider-initiation fence. Release only after the referenced payout reaches a terminal state (paid / failed / rejected / cancelled)."
       />
@@ -265,7 +264,7 @@ export default function AdminFencedPayoutAccountsPage() {
                   type="button"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Previous
                 </button>
@@ -276,7 +275,7 @@ export default function AdminFencedPayoutAccountsPage() {
                   type="button"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="dash-btn dash-btn--glass dash-btn--sm"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Next
                 </button>
@@ -368,7 +367,7 @@ export default function AdminFencedPayoutAccountsPage() {
                 type="button"
                 onClick={closeRelease}
                 disabled={processing === releaseFor.id}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>

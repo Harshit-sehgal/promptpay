@@ -11,6 +11,7 @@ import { useToast } from '@ateva/ui';
 
 const VISITOR_ID_KEY = 'wl_visitor_id';
 const OPEN_EVENT = 'wl:open-cookie-settings';
+const SESSION_DECLINE_KEY = 'wl_cookie_declined_session';
 
 type Choice = 'accepted' | 'declined';
 
@@ -27,6 +28,28 @@ function getVisitorId(): string {
     window.localStorage.setItem(VISITOR_ID_KEY, id);
   }
   return id;
+}
+
+/**
+ * A decline made while the policy version could not be loaded. Declining turns
+ * nothing on, so it can close the banner without a version to record, but only
+ * for this browser session: the versioned choice is asked for again once the
+ * version loads on a later visit.
+ */
+function declinedThisSession(): boolean {
+  try {
+    return window.sessionStorage.getItem(SESSION_DECLINE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberSessionDecline() {
+  try {
+    window.sessionStorage.setItem(SESSION_DECLINE_KEY, '1');
+  } catch {
+    // Storage blocked: the banner closes for this page only.
+  }
 }
 
 export default function CookieConsent() {
@@ -53,7 +76,7 @@ export default function CookieConsent() {
     } catch {
       setMarketingVersion(null);
       setSyncError('Cookie preferences are temporarily unavailable.');
-      setVisible(true);
+      setVisible(!declinedThisSession());
     } finally {
       setVersionLoading(false);
     }
@@ -111,6 +134,12 @@ export default function CookieConsent() {
   const choose = async (choice: Choice) => {
     setSyncError(null);
     if (!marketingVersion) {
+      if (choice === 'declined') {
+        disableClientMonitoring();
+        rememberSessionDecline();
+        setVisible(false);
+        return;
+      }
       setSyncError('Cookie preferences are temporarily unavailable. Please try again.');
       return;
     }
@@ -171,7 +200,7 @@ export default function CookieConsent() {
           <button
             type="button"
             onClick={decline}
-            disabled={!marketingVersion || versionLoading}
+            disabled={versionLoading}
             className="rounded-full px-4 py-2.5 text-[13px] font-medium text-surface-700 transition-colors hover:bg-surface-100 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             Decline

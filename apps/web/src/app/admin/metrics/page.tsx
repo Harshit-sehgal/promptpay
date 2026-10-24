@@ -186,14 +186,10 @@ export default function AdminMetricsPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Admin"
-        title="Operational Metrics"
-        lede="Platform health, growth trends, and revenue breakdown"
-      />
+      <PageHeader title="Operational metrics" />
 
       {/* Period and currency selectors */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="dash-bar flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-sm text-[var(--muted)]">Period:</span>
           {PERIOD_PRESETS.map((p) => (
@@ -201,7 +197,7 @@ export default function AdminMetricsPage() {
               key={p.key}
               onClick={() => setSelectedDays(p.days)}
               className={`dash-btn dash-btn--sm ${
-                selectedDays === p.days ? 'dash-btn--primary' : 'dash-btn--glass'
+                selectedDays === p.days ? 'dash-btn--primary' : 'dash-btn--secondary'
               }`}
             >
               {p.label}
@@ -240,7 +236,7 @@ export default function AdminMetricsPage() {
           tone="bad"
           role="alert"
           actions={
-            <button onClick={fetchMetrics} className="dash-btn dash-btn--glass dash-btn--sm">
+            <button onClick={fetchMetrics} className="dash-btn dash-btn--secondary dash-btn--sm">
               Retry
             </button>
           }

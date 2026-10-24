@@ -256,11 +256,7 @@ export default function AdminPayoutsPage() {
 
   return (
     <>
-      <PageHeader
-        eyebrow="Admin"
-        title="Payout requests"
-        lede="Approve or reject pending developer payouts"
-      />
+      <PageHeader title="Payout requests" lede="Approve or reject pending developer payouts" />
 
       {/* Summary */}
       <Panel label="Payout summary">
@@ -324,7 +320,7 @@ export default function AdminPayoutsPage() {
                       onClick={() => openAccountAction(p)}
                       disabled={processing === p.id}
                       className={`dash-btn dash-btn--sm ${
-                        p.payoutAccount.isFrozen ? 'dash-btn--glass' : 'dash-btn--danger'
+                        p.payoutAccount.isFrozen ? 'dash-btn--secondary' : 'dash-btn--danger'
                       }`}
                     >
                       {p.payoutAccount.isFrozen ? 'Unfreeze account' : 'Freeze account'}
@@ -333,7 +329,7 @@ export default function AdminPayoutsPage() {
                       <button
                         onClick={() => setRejectModalFor(p)}
                         disabled={processing === p.id}
-                        className="dash-btn dash-btn--glass dash-btn--sm"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         Reject
                       </button>
@@ -383,7 +379,7 @@ export default function AdminPayoutsPage() {
                       <button
                         onClick={() => openReconcileModal(p)}
                         disabled={processing === p.id}
-                        className="dash-btn dash-btn--glass dash-btn--sm"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         Reconcile
                       </button>
@@ -453,7 +449,7 @@ export default function AdminPayoutsPage() {
                 type="button"
                 onClick={closeAccountAction}
                 disabled={processing === accountAction.payout.id}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
@@ -497,7 +493,7 @@ export default function AdminPayoutsPage() {
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Reason — visible to developer"
+              placeholder="Reason (shown to the developer)"
               rows={3}
               required
               className="mb-4 w-full px-4 py-3"
@@ -508,7 +504,7 @@ export default function AdminPayoutsPage() {
                   setRejectModalFor(null);
                   setRejectReason('');
                 }}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
@@ -564,7 +560,7 @@ export default function AdminPayoutsPage() {
                   setApproveModalFor(null);
                   setApproveAmount('');
                 }}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
@@ -645,7 +641,7 @@ export default function AdminPayoutsPage() {
                   setReconcileAmount('');
                   setReconcilePaidAt('');
                 }}
-                className="dash-btn dash-btn--glass dash-btn--md"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>

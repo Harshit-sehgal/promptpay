@@ -17,17 +17,19 @@ export function StatCard({
   icon?: ReactNode;
 }) {
   return (
-    <div className="dash-stat app-stat-card">
-      <div className="dash-stat__top">
-        <p className="dash-stat__label">{label}</p>
-        {icon && (
-          <span className="dash-stat__icon" aria-hidden="true">
-            {icon}
-          </span>
-        )}
+    <div className="dash-panel app-stat-card">
+      <div className="dash-stat">
+        <div className="dash-stat__top">
+          <p className="dash-stat__label">{label}</p>
+          {icon && (
+            <span className="dash-stat__icon" aria-hidden="true">
+              {icon}
+            </span>
+          )}
+        </div>
+        <p className="dash-stat__value app-stat-card__value">{value}</p>
+        {subtitle && <p className="dash-stat__detail">{subtitle}</p>}
       </div>
-      <p className="dash-stat__value app-stat-card__value">{value}</p>
-      {subtitle && <p className="dash-stat__detail">{subtitle}</p>}
     </div>
   );
 }
