@@ -61,10 +61,13 @@ export class PeopleNotesService {
     if (body.length < 1 || body.length > NOTE_MAX_LENGTH) {
       throw new BadRequestException(`Note must be 1 to ${NOTE_MAX_LENGTH} characters`);
     }
-    await this.assertSubjectExists(subject, id);
-    const note = await this.prisma.personNote.create({
-      data: { subjectType: subject, subjectId: id, authorId: actorId, body },
-      select: NOTE_SELECT,
+    const note = await this.prisma.$transaction(async (tx) => {
+      await lockSubject(tx, subject, id);
+      await assertWritableSubject(tx, subject, id);
+      return tx.personNote.create({
+        data: { subjectType: subject, subjectId: id, authorId: actorId, body },
+        select: NOTE_SELECT,
+      });
     });
     await this.audit.log({
       actorId,
@@ -106,12 +109,12 @@ export class PeopleNotesService {
     input: readonly string[],
   ) {
     const next = normalizeTags(input);
-    await this.assertSubjectExists(subject, id);
 
     const before = await this.prisma.$transaction(async (tx) => {
-      // Serialise concurrent replacements for one person so the 10-tag limit
-      // cannot be exceeded by two interleaved delete+insert sequences.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`person-tags:${subject}:${id}`}))`;
+      // The subject lock serialises concurrent replacements (so the 10-tag
+      // limit holds) and orders this write against erasure of the person.
+      await lockSubject(tx, subject, id);
+      await assertWritableSubject(tx, subject, id);
       const existing = await tx.personTag.findMany({
         where: { subjectType: subject, subjectId: id },
         select: { tag: true },
@@ -204,4 +207,36 @@ function toNoteRow(n: {
     createdAt: n.createdAt.toISOString(),
     author: n.author ? { id: n.author.id, email: n.author.email } : null,
   };
+}
+
+type SubjectTx = Pick<PrismaService, '$executeRaw' | 'user' | 'advertiserWaitlist'>;
+
+/**
+ * Transaction-scoped lock shared with every erasure path
+ * (`eraseAccountIdentity`, `scripts/erase-waitlist-signup.mjs`). There is no
+ * foreign key from notes or tags to their subject, so without it a write
+ * that passed its existence check could commit after the erasure and leave
+ * personal data about someone who was erased.
+ */
+export function personSubjectLockKey(subject: PersonSubject, id: string): string {
+  return `person-subject:${subject}:${id}`;
+}
+
+async function lockSubject(tx: SubjectTx, subject: PersonSubject, id: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${personSubjectLockKey(subject, id)}))`;
+}
+
+/** Re-checked under the lock. An erased user keeps a de-identified row, so `deleted` counts as gone. */
+async function assertWritableSubject(
+  tx: SubjectTx,
+  subject: PersonSubject,
+  id: string,
+): Promise<void> {
+  if (subject === 'user') {
+    const user = await tx.user.findUnique({ where: { id }, select: { status: true } });
+    if (!user || user.status === 'deleted') throw new NotFoundException('User not found');
+    return;
+  }
+  const entry = await tx.advertiserWaitlist.findUnique({ where: { id }, select: { id: true } });
+  if (!entry) throw new NotFoundException('Waitlist entry not found');
 }

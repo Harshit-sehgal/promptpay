@@ -18,9 +18,15 @@ function makeService() {
     createMany: vi.fn().mockResolvedValue({ count: 0 }),
     groupBy: vi.fn().mockResolvedValue([]),
   };
-  const user = { findUnique: vi.fn().mockResolvedValue({ id: 'u1' }) };
+  const user = { findUnique: vi.fn().mockResolvedValue({ id: 'u1', status: 'active' }) };
   const advertiserWaitlist = { findUnique: vi.fn().mockResolvedValue({ id: 'wl-1' }) };
-  const tx = { $executeRaw: vi.fn().mockResolvedValue(1), personTag };
+  const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    personNote,
+    personTag,
+    user,
+    advertiserWaitlist,
+  };
   const prisma = {
     personNote,
     personTag,
@@ -83,8 +89,11 @@ describe('PeopleNotesService notes', () => {
     await expect(m.service.setTags('a', 'admin', 'user', 'x', ['vip'])).rejects.toBeInstanceOf(
       NotFoundException,
     );
+    // The existence check now runs inside the locked transaction, so a
+    // missing subject aborts it before any write.
     expect(m.personNote.create).not.toHaveBeenCalled();
-    expect(m.prisma.$transaction).not.toHaveBeenCalled();
+    expect(m.personTag.createMany).not.toHaveBeenCalled();
+    expect(m.personTag.deleteMany).not.toHaveBeenCalled();
     expect(m.auditLog).not.toHaveBeenCalled();
   });
 
@@ -296,5 +305,29 @@ describe('PeopleNotesService tags', () => {
       orderBy: [{ _count: { tag: 'desc' } }, { tag: 'asc' }],
       take: 200,
     });
+  });
+});
+
+describe('PeopleNotesService ordering against erasure', () => {
+  it('takes the shared subject lock and re-checks the subject before writing', async () => {
+    const { service, tx, personNote } = makeService();
+    personNote.create.mockResolvedValue(NOTE);
+    await service.addNote('admin-1', 'admin', 'waitlist', 'wl-1', 'hi');
+    await service.setTags('admin-1', 'admin', 'user', 'u1', ['vip']);
+    const keys = tx.$executeRaw.mock.calls.map((call) => call.slice(1).join(''));
+    expect(keys).toEqual(['person-subject:waitlist:wl-1', 'person-subject:user:u1']);
+  });
+
+  it('treats an erased (de-identified) user as gone for notes and tags', async () => {
+    const { service, user, personNote, personTag } = makeService();
+    user.findUnique.mockResolvedValue({ id: 'u1', status: 'deleted' });
+    await expect(service.addNote('a', 'admin', 'user', 'u1', 'hi')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.setTags('a', 'admin', 'user', 'u1', ['vip'])).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(personNote.create).not.toHaveBeenCalled();
+    expect(personTag.createMany).not.toHaveBeenCalled();
   });
 });

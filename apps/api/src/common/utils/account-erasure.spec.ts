@@ -175,7 +175,12 @@ describe('eraseAccountIdentity', () => {
       where: { subjectType: 'user', subjectId: 'user-1' },
     });
     // Advisory lock + device pseudonymization + payout erasure + consent metadata minimization.
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(4);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(5);
+    expect(
+      tx.$executeRaw.mock.calls.some(
+        (call) => call.slice(1).join('') === 'person-subject:user:user-1',
+      ),
+    ).toBe(true);
   });
 
   it('does not delete CRM notes or tags when the preflight blocks erasure', async () => {

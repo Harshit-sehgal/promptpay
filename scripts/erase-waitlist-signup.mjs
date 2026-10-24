@@ -78,6 +78,9 @@ async function main() {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // Same lock the admin CRM note/tag writers take (person-subject:<type>:<id>),
+      // so a note or tag cannot commit after this erasure and survive it.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`person-subject:waitlist:${existing.id}`}))`;
       const deleted = await tx.advertiserWaitlist.deleteMany({
         where: { email: normalized },
       });

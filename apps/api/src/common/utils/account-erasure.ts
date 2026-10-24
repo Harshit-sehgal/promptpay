@@ -212,6 +212,8 @@ function eraseAccountIdentityOnce(
       // deleted here with the rest of the erasure. Notes this user AUTHORED as
       // an admin are not touched: they are about other people, and the
       // retained user row is already de-identified.
+      // Same lock the CRM note/tag writers take, so none can commit after this.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`person-subject:user:${userId}`}))`;
       await tx.personNote.deleteMany({ where: { subjectType: 'user', subjectId: userId } });
       await tx.personTag.deleteMany({ where: { subjectType: 'user', subjectId: userId } });
 
