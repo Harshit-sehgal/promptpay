@@ -709,8 +709,14 @@ fields (`src/components/motion/`), a glass header with the palette picker
 `html[data-motion]`: reveals, parallax on the fields only, and under
 `prefers-reduced-motion` everything renders in its final state while the timer
 still ticks. The landing-era `landing-*` CSS and the light/dark toggle on public
-pages are gone; dashboards keep the sidebar toggle and `.dark` until PR 2. The
-original record follows.
+pages are gone. The dashboards keep the sidebar toggle and `.dark` and get a
+plain light/dark version: no fields, no picker, no glass. Their `--app-*` tokens
+are fixed Warm literals, with Midnight values under `html.dark`, so a public
+light palette never tints the app shell. The older `--ateva-refine-*` and
+`--ateva-*-final` layers are now references to `--app-*`, not colours of their
+own. `src/__tests__/dashboard-tokens.test.ts` checks that every text level,
+including `--app-danger`, reaches AA on every shell surface. The original
+record follows.
 
 The web product then used one deliberate visual system across its public,
 authentication, and dashboard surfaces, informed by the Refero Steep reference

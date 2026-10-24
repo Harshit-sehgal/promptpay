@@ -76,19 +76,10 @@ body {
    grammar without forcing working pages through a new component hierarchy.
    ------------------------------------------------------------------------- */
 :root {
-  --ateva-ink: #17191c;
-  --ateva-paper: #ffffff;
-  --ateva-mist: #f2f2f3;
-  --ateva-fog: #fafafb;
-  --ateva-muted: #777b86;
-  --ateva-tertiary: #979799;
-  --ateva-disabled: #a3a6af;
   /* Brand aliases stay neutral so the primary interface reads as a two-tone
      system. Semantic status colors remain available where state requires it. */
   --ateva-blush: #f2f2f3;
   --ateva-blush-ink: #17191c;
-  --ateva-line: rgb(23 25 28 / 0.12);
-  --ateva-line-strong: rgb(23 25 28 / 0.2);
   --ateva-focus: #17191c;
   /* Public surfaces follow the chosen palette (see the palette blocks
      below); none of these depend on `.dark`. subtle and nested are the ink
@@ -103,16 +94,21 @@ body {
   --public-copy: var(--copy);
   --public-muted: var(--muted);
   --public-line: color-mix(in srgb, var(--ink) 12%, transparent);
-  --app-canvas: var(--ateva-fog);
-  --app-surface: var(--ateva-paper);
-  --app-nested: var(--ateva-mist);
-  --app-ink: var(--ateva-ink);
-  --app-copy: #52565f;
-  --app-muted: #62666f;
-  --app-tertiary: var(--ateva-tertiary);
-  --app-line: var(--ateva-line);
-  --app-line-strong: var(--ateva-line-strong);
-  --app-shadow: 0 1px 2px rgb(23 25 28 / 0.04), 0 16px 36px -30px rgb(23 25 28 / 0.22);
+  /* Dashboards: a plain light version of Warm (dark under html.dark below).
+     Literals rather than var(--page) so the light palette a visitor picked never tints
+     the app shell; checked for AA by src/__tests__/dashboard-tokens.test.ts. */
+  --app-canvas: #f4f3ef;
+  --app-surface: #ffffff;
+  --app-subtle: #faf9f6;
+  --app-nested: #ecebe6;
+  --app-ink: #111111;
+  --app-copy: #55554f;
+  --app-muted: #61615b;
+  --app-tertiary: #686862;
+  --app-danger: #b42318;
+  --app-line: rgb(17 17 17 / 0.12);
+  --app-line-strong: rgb(17 17 17 / 0.2);
+  --app-shadow: 0 1px 2px rgb(40 30 20 / 0.04), 0 16px 36px -30px rgb(40 30 20 / 0.22);
 }
 
 /* Palette tokens: one set per background palette, chosen by the pre-paint
@@ -231,20 +227,22 @@ html[data-palette='midnight'] {
   }
 }
 
-/* The app shell (--app-*) still follows `.dark` until the dashboards move to
-   palettes in PR 2. */
+/* Dashboards in dark mode: the Midnight ink values. `.dark` is set exactly when
+   the palette is Midnight (applyPalette in src/lib/palette.ts). */
 html.dark {
   color-scheme: dark;
   --ateva-blush: #2d3036;
   --ateva-blush-ink: #ffffff;
   --ateva-focus: #ffffff;
-  --app-canvas: #17191c;
-  --app-surface: #202226;
-  --app-nested: #2d3036;
-  --app-ink: #f7f6f2;
-  --app-copy: #c6c7c9;
-  --app-muted: #a3a6af;
-  --app-tertiary: #8e929a;
+  --app-canvas: #0f0f12;
+  --app-surface: #1c1c21;
+  --app-subtle: #17171b;
+  --app-nested: #26262c;
+  --app-ink: #f4f3ef;
+  --app-copy: #b4b4bb;
+  --app-muted: #a3a3aa;
+  --app-tertiary: #909098;
+  --app-danger: #ff9b94;
   --app-line: rgb(255 255 255 / 0.12);
   --app-line-strong: rgb(255 255 255 / 0.2);
   --app-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 18px 40px -32px rgb(0 0 0 / 0.65);
@@ -968,33 +966,18 @@ html.dark .status-badge[data-status-tone='danger'] {
    older utility mappings are migrated safely. It gives the existing routes a
    two-tone system without changing their data flow or interaction semantics.
    ------------------------------------------------------------------------- */
-:root,
-html:not(.dark):not([data-palette='midnight']) {
-  --ateva-refine-canvas: #ffffff;
-  --ateva-refine-surface: #ffffff;
-  --ateva-refine-subtle: #fafafb;
-  --ateva-refine-inset: #f2f2f3;
-  --ateva-refine-ink: #17191c;
-  --ateva-refine-copy: #52565f;
-  --ateva-refine-muted: #62666f;
-  --ateva-refine-line: rgb(23 25 28 / 0.14);
-  --ateva-refine-line-strong: rgb(23 25 28 / 0.22);
-  --ateva-refine-action: #17191c;
-  --ateva-refine-action-ink: #ffffff;
-}
-
-html.dark {
-  --ateva-refine-canvas: #17191c;
-  --ateva-refine-surface: #202226;
-  --ateva-refine-subtle: #1c1f22;
-  --ateva-refine-inset: #2d3036;
-  --ateva-refine-ink: #ffffff;
-  --ateva-refine-copy: #d3d5d8;
-  --ateva-refine-muted: #a3a6af;
-  --ateva-refine-line: rgb(255 255 255 / 0.14);
-  --ateva-refine-line-strong: rgb(255 255 255 / 0.24);
-  --ateva-refine-action: #ffffff;
-  --ateva-refine-action-ink: #17191c;
+:root {
+  --ateva-refine-canvas: var(--app-canvas);
+  --ateva-refine-surface: var(--app-surface);
+  --ateva-refine-subtle: var(--app-subtle);
+  --ateva-refine-inset: var(--app-nested);
+  --ateva-refine-ink: var(--app-ink);
+  --ateva-refine-copy: var(--app-copy);
+  --ateva-refine-muted: var(--app-muted);
+  --ateva-refine-line: var(--app-line);
+  --ateva-refine-line-strong: var(--app-line-strong);
+  --ateva-refine-action: var(--app-ink);
+  --ateva-refine-action-ink: var(--app-surface);
 }
 
 body {
@@ -1229,35 +1212,19 @@ body {
    intact; these scoped rules give them one predictable presentation without
    changing their semantics or route contracts.
    ------------------------------------------------------------------------- */
-:root,
-html:not(.dark):not([data-palette='midnight']) {
-  --ateva-canvas-final: #ffffff;
-  --ateva-surface-final: #ffffff;
-  --ateva-subtle-final: #fafafb;
-  --ateva-nested-final: #f2f2f3;
-  --ateva-ink-final: #17191c;
-  --ateva-copy-final: #52565f;
-  --ateva-muted-final: #62666f;
-  --ateva-faint-final: #62666f;
-  --ateva-line-final: rgb(23 25 28 / 0.12);
-  --ateva-line-strong-final: rgb(23 25 28 / 0.2);
-  --ateva-action-final: #17191c;
-  --ateva-action-ink-final: #ffffff;
-}
-
-html.dark {
-  --ateva-canvas-final: #17191c;
-  --ateva-surface-final: #202226;
-  --ateva-subtle-final: #1c1f22;
-  --ateva-nested-final: #2d3036;
-  --ateva-ink-final: #ffffff;
-  --ateva-copy-final: #d3d5d8;
-  --ateva-muted-final: #a3a6af;
-  --ateva-faint-final: #8e929a;
-  --ateva-line-final: rgb(255 255 255 / 0.13);
-  --ateva-line-strong-final: rgb(255 255 255 / 0.22);
-  --ateva-action-final: #ffffff;
-  --ateva-action-ink-final: #17191c;
+:root {
+  --ateva-canvas-final: var(--app-canvas);
+  --ateva-surface-final: var(--app-surface);
+  --ateva-subtle-final: var(--app-subtle);
+  --ateva-nested-final: var(--app-nested);
+  --ateva-ink-final: var(--app-ink);
+  --ateva-copy-final: var(--app-copy);
+  --ateva-muted-final: var(--app-muted);
+  --ateva-faint-final: var(--app-tertiary);
+  --ateva-line-final: var(--app-line);
+  --ateva-line-strong-final: var(--app-line-strong);
+  --ateva-action-final: var(--app-ink);
+  --ateva-action-ink-final: var(--app-surface);
 }
 
 body {
@@ -1459,6 +1426,16 @@ body {
   color: var(--ateva-action-ink-final) !important;
 }
 
+/* The dark brand fill (html.dark .app-shell .bg-brand-500, #6b3825) outranks
+   the rule above on background only, leaving action-ink text on brown at
+   1.8:1. Brand buttons and links keep the action pair in dark mode too. */
+html.dark .app-shell button[class~='bg-brand-500'],
+html.dark .app-shell button[class~='bg-brand-600'],
+html.dark .app-shell a[class~='bg-brand-500'],
+html.dark .app-shell a[class~='bg-brand-600'] {
+  background: var(--ateva-action-final) !important;
+}
+
 .app-shell .app-stat-card {
   min-width: 0;
   border: 0 !important;
@@ -1629,6 +1606,16 @@ html.dark .app-shell [class~='text-amber-950'],
 html.dark .app-shell [class~='text-amber-900'],
 html.dark .app-shell [class~='text-amber-800'] {
   color: #f2d3a7 !important;
+}
+
+/* Red text inside the shell sits on neutral surfaces (the red-50 panels above
+   become the inset tone), where Tailwind red-500/600 fall below 4.5:1. */
+.app-shell [class~='text-red-500'],
+.app-shell [class~='text-red-600'],
+.app-shell [class~='text-red-700'],
+.app-shell [class~='hover:text-red-700']:hover,
+.app-shell [class~='hover:text-red-800']:hover {
+  color: var(--app-danger) !important;
 }
 
 html.dark .app-shell [class~='text-red-950'],
