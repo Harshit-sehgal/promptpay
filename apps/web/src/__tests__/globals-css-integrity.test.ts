@@ -95,6 +95,15 @@ describe('globals.css integrity', () => {
     expect(css).not.toMatch(/\.app-shell[^{,]*\.(?:text|bg|border)-[a-z]+-\d/);
   });
 
+  it('keeps sign out reachable on mobile with the rail menu closed', () => {
+    // Only the nav and palette picker hide behind the menu; the foot links stay.
+    expect(css).toMatch(/\.dash-rail\[data-open\] \.dash-rail__nav \{/);
+    expect(css).toMatch(
+      /\.dash-rail:not\(\[data-open\]\) \.dash-rail__foot > :not\(\.dash-rail__foot-links\) \{/,
+    );
+    expect(css).not.toMatch(/\.dash-rail__foot \{\s*display: none;/);
+  });
+
   it('keeps status as a tone dot beside ink text', () => {
     expect(css).toMatch(/\.dash-pill,\n\.status-badge \{/);
     expect(css).toMatch(/\.dash-pill__dot,\n\.status-badge__dot \{/);

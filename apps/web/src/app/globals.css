@@ -2747,14 +2747,18 @@ html[data-palette='midnight'] {
   font-size: 18px;
 }
 
-.dash-rail__nav,
-.dash-rail__foot {
+/* Below lg the menu reveals the nav and the palette picker. Sign out and the
+   home link stay in reach with the menu closed, as in every earlier shell. */
+.dash-rail__nav {
   display: none;
 }
 
-.dash-rail[data-open] .dash-rail__nav,
-.dash-rail[data-open] .dash-rail__foot {
+.dash-rail[data-open] .dash-rail__nav {
   display: flex;
+}
+
+.dash-rail:not([data-open]) .dash-rail__foot > :not(.dash-rail__foot-links) {
+  display: none;
 }
 
 .dash-rail__nav {
@@ -2797,6 +2801,7 @@ html[data-palette='midnight'] {
 }
 
 .dash-rail__foot {
+  display: flex;
   flex-direction: column;
   gap: 14px;
   margin-top: 16px;
