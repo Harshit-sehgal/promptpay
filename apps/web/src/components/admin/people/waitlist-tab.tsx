@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Notice } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi, type PeopleWaitlistParams } from '@/lib/api/services';
@@ -9,6 +9,8 @@ import { formatRelativeTime } from '@/lib/format';
 
 import { DebouncedInput, formatDay, Pager } from './controls';
 import { ExportButton } from './export-button';
+import { TagFilter } from './tag-filter';
+import { TagChips } from './tags-editor';
 import {
   type ListResponse,
   PAGE_SIZE,
@@ -18,6 +20,7 @@ import {
   type WaitlistRow,
   type WaitlistStatus,
 } from './types';
+import { WaitlistDetailDialog } from './waitlist-detail';
 
 const isCountryCode = (value: string) => value.length === 0 || value.length === 2;
 const upper = (value: string) => value.toUpperCase();
@@ -34,6 +37,7 @@ const EXPORT_COLUMNS: CsvColumn<WaitlistRow>[] = [
   { header: 'Joined', value: (r) => r.createdAt },
   { header: 'Updated', value: (r) => r.updatedAt },
   { header: 'Registered user ID', value: (r) => r.registeredUserId },
+  { header: 'Tags', value: (r) => (r.tags ?? []).join('; ') },
 ];
 
 export function WaitlistTab({
@@ -42,6 +46,8 @@ export function WaitlistTab({
   onQuery,
   onOpen,
   onStatusChanged,
+  version,
+  onTagsChanged,
 }: {
   query: PeopleQuery;
   summary: PeopleSummary | null;
@@ -49,6 +55,10 @@ export function WaitlistTab({
   onOpen: (id: string) => void;
   /** Called after a status write succeeds so the counts can be refreshed. */
   onStatusChanged: () => void;
+  /** Changes when tags were edited, to reload the rows and tag choices. */
+  version: number;
+  /** Called after tags save in the notes dialog. */
+  onTagsChanged: () => void;
 }) {
   const [data, setData] = useState<ListResponse<WaitlistRow> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,14 +66,17 @@ export function WaitlistTab({
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState<Set<string>>(new Set());
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [notesRow, setNotesRow] = useState<WaitlistRow | null>(null);
+  const closeNotes = useCallback(() => setNotesRow(null), []);
 
   const filters = useMemo<PeopleWaitlistParams>(
     () => ({
       ...(query.q ? { search: query.q } : {}),
       ...(query.status ? { status: query.status as WaitlistStatus } : {}),
       ...(query.country ? { country: query.country } : {}),
+      ...(query.tag ? { tag: query.tag } : {}),
     }),
-    [query.q, query.status, query.country],
+    [query.q, query.status, query.country, query.tag],
   );
 
   useEffect(() => {
@@ -84,7 +97,7 @@ export function WaitlistTab({
     return () => {
       cancelled = true;
     };
-  }, [filters, query.page, attempt]);
+  }, [filters, query.page, attempt, version]);
 
   const patchRow = (id: string, patch: Partial<WaitlistRow>) =>
     setData((current) =>
@@ -161,6 +174,12 @@ export function WaitlistTab({
           placeholder="Email or company"
           className="min-w-[200px] flex-1"
         />
+        <TagFilter
+          subject="waitlist"
+          value={query.tag}
+          version={version}
+          onChange={(tag) => onQuery({ tag })}
+        />
         <DebouncedInput
           label="Country"
           value={query.country}
@@ -214,7 +233,7 @@ export function WaitlistTab({
             aria-label="Waitlist table, scrolls horizontally"
             style={{ opacity: loading ? 0.6 : 1 }}
           >
-            <table className="min-w-[820px]">
+            <table className="min-w-[900px]">
               <thead>
                 <tr>
                   <th>Email</th>
@@ -224,12 +243,16 @@ export function WaitlistTab({
                   <th>Account</th>
                   <th>Source</th>
                   <th>Joined</th>
+                  <th>Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td className="text-[var(--ink)]">{row.email}</td>
+                    <td className="max-w-[280px] break-words text-[var(--ink)]">
+                      {row.email}
+                      <TagChips tags={row.tags ?? []} />
+                    </td>
                     <td className="min-w-[14ch]">{row.company || '-'}</td>
                     <td>{row.country || '-'}</td>
                     <td>
@@ -279,6 +302,16 @@ export function WaitlistTab({
                         {formatRelativeTime(row.createdAt)}
                       </span>
                     </td>
+                    <td>
+                      <button
+                        type="button"
+                        aria-label={`Notes for ${row.email}`}
+                        onClick={() => setNotesRow(row)}
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
+                      >
+                        Notes
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -294,6 +327,8 @@ export function WaitlistTab({
         busy={loading}
         onPage={(page) => onQuery({ page })}
       />
+
+      <WaitlistDetailDialog row={notesRow} onClose={closeNotes} onTagsChanged={onTagsChanged} />
     </>
   );
 }

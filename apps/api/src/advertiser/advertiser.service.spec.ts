@@ -56,6 +56,8 @@ function makePrisma() {
     userSettings: { updateMany: vi.fn() },
     waitStateEvent: { updateMany: vi.fn() },
     auditLog: { updateMany: vi.fn() },
+    personNote: { deleteMany: vi.fn() },
+    personTag: { deleteMany: vi.fn() },
     adCreative: { updateMany: vi.fn(), findMany: vi.fn() },
     consent: { findMany: vi.fn() },
     // A-068: daily trend uses $queryRaw for server-side day-bucket aggregation.
@@ -84,6 +86,8 @@ function prepareErasureMocks(prisma: ReturnType<typeof makePrisma>) {
   prisma.adImpression.updateMany.mockResolvedValue({ count: 0 });
   prisma.adClick.updateMany.mockResolvedValue({ count: 0 });
   prisma.auditLog.updateMany.mockResolvedValue({ count: 0 });
+  prisma.personNote.deleteMany.mockResolvedValue({ count: 0 });
+  prisma.personTag.deleteMany.mockResolvedValue({ count: 0 });
   prisma.$executeRaw.mockResolvedValue(1);
 }
 

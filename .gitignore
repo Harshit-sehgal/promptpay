@@ -66,3 +66,6 @@ start-bridge.sh
 
 # Superpowers brainstorm and SDD scratch
 .superpowers/
+
+# Local design screenshots (large; regenerate from the probe scripts when needed)
+docs/screenshots/

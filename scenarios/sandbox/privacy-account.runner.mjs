@@ -97,6 +97,8 @@ async function runDeletion() {
     adImpression: { updateMany: async () => ({ count: 0 }) },
     adClick: { updateMany: async () => ({ count: 0 }) },
     auditLog: { updateMany: async () => ({ count: 0 }) },
+    personNote: { deleteMany: async () => ({ count: 0 }) },
+    personTag: { deleteMany: async () => ({ count: 0 }) },
     $executeRaw: async () => 1,
     $transaction: async (callback) => callback(prisma),
   };

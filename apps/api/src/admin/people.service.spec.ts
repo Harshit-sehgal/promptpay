@@ -35,9 +35,16 @@ function makeService() {
   };
   const device = { groupBy: vi.fn().mockResolvedValue([]) };
   const fraudFlag = { count: vi.fn().mockResolvedValue(0) };
+  const personTag = { findMany: vi.fn().mockResolvedValue([]) };
   const auditLog = vi.fn().mockResolvedValue(undefined);
   const auditStrict = vi.fn().mockResolvedValue(undefined);
-  const prisma = { user, advertiserWaitlist, device, fraudFlag } as unknown as PrismaService;
+  const prisma = {
+    user,
+    advertiserWaitlist,
+    device,
+    fraudFlag,
+    personTag,
+  } as unknown as PrismaService;
   const audit = { log: auditLog, logStrict: auditStrict } as unknown as AuditService;
   return {
     service: new PeopleService(prisma, audit),
@@ -45,6 +52,7 @@ function makeService() {
     advertiserWaitlist,
     device,
     fraudFlag,
+    personTag,
     auditStrict,
     auditLog,
   };
@@ -366,6 +374,102 @@ describe('PeopleService', () => {
         truncated: false,
         filters: { role: 'developer', search: false },
       });
+    });
+  });
+
+  describe('tags', () => {
+    it('attaches sorted tags to user rows with one query for the page', async () => {
+      const { service, user, personTag } = makeService();
+      user.findMany.mockResolvedValue([userRecord('u1'), userRecord('u2'), userRecord('u3')]);
+      personTag.findMany.mockResolvedValue([
+        { subjectId: 'u1', tag: 'vip' },
+        { subjectId: 'u2', tag: 'beta' },
+        { subjectId: 'u1', tag: 'alpha' },
+      ]);
+      const res = await service.listUsers({}, {});
+      expect(personTag.findMany).toHaveBeenCalledTimes(1);
+      expect(personTag.findMany.mock.calls[0][0].where).toEqual({
+        subjectType: 'user',
+        subjectId: { in: ['u1', 'u2', 'u3'] },
+      });
+      expect(res.rows.map((r) => r.tags)).toEqual([['alpha', 'vip'], ['beta'], []]);
+    });
+
+    it('attaches tags to waitlist rows with one query for the page', async () => {
+      const { service, advertiserWaitlist, personTag } = makeService();
+      advertiserWaitlist.findMany.mockResolvedValue([
+        WL_RECORD,
+        { ...WL_RECORD, id: 'wl-2', email: 'two@example.com' },
+      ]);
+      personTag.findMany.mockResolvedValue([{ subjectId: 'wl-2', tag: 'warm' }]);
+      const res = await service.listWaitlist({}, {});
+      expect(personTag.findMany).toHaveBeenCalledTimes(1);
+      expect(personTag.findMany.mock.calls[0][0].where.subjectType).toBe('waitlist');
+      expect(res.rows.map((r) => r.tags)).toEqual([[], ['warm']]);
+    });
+
+    it('skips the tag query for an empty page', async () => {
+      const { service, personTag } = makeService();
+      await service.listUsers({}, {});
+      expect(personTag.findMany).not.toHaveBeenCalled();
+    });
+
+    it('filters users by tag through the matching person ids', async () => {
+      const { service, user, personTag } = makeService();
+      personTag.findMany.mockResolvedValueOnce([{ subjectId: 'u1' }, { subjectId: 'u9' }]);
+      await service.listUsers({ tag: ' VIP ' }, {});
+      expect(personTag.findMany).toHaveBeenCalledWith({
+        where: { subjectType: 'user', tag: 'vip' },
+        select: { subjectId: true },
+        take: 10_001,
+      });
+      expect(user.findMany.mock.calls[0][0].where.id).toEqual({ in: ['u1', 'u9'] });
+    });
+
+    it('filters the waitlist and export by tag; an unused tag matches nobody', async () => {
+      const { service, advertiserWaitlist, personTag, auditStrict } = makeService();
+      personTag.findMany.mockResolvedValue([]);
+      await service.listWaitlist({ tag: 'warm' }, {});
+      expect(advertiserWaitlist.findMany.mock.calls[0][0].where.id).toEqual({ in: [] });
+      await service.exportPeople('a', 'admin', 'waitlist', { tag: 'warm' });
+      expect(advertiserWaitlist.findMany.mock.calls[1][0].where.id).toEqual({ in: [] });
+      expect(auditStrict.mock.calls[0][0].afterSnap.filters.tag).toBe('warm');
+    });
+
+    it('rejects an invalid tag filter and one that matches too many people', async () => {
+      const { service, personTag } = makeService();
+      await expect(service.listUsers({ tag: 'Bad Tag!' }, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(personTag.findMany).not.toHaveBeenCalled();
+      personTag.findMany.mockResolvedValueOnce(
+        Array.from({ length: 10_001 }, (_, i) => ({ subjectId: `u${i}` })),
+      );
+      await expect(service.listUsers({ tag: 'vip' }, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('adds tags to the user detail and to exported rows', async () => {
+      const { service, user, personTag } = makeService();
+      user.findUnique.mockResolvedValue({
+        ...userRecord('u1'),
+        referralCode: null,
+        updatedAt: new Date(),
+        consents: [],
+        devices: [],
+        referralIn: [],
+        _count: { devices: 0, referralOut: 0 },
+      });
+      personTag.findMany.mockResolvedValue([
+        { subjectId: 'u1', tag: 'zeta' },
+        { subjectId: 'u1', tag: 'beta' },
+      ]);
+      expect((await service.getUser('u1')).tags).toEqual(['beta', 'zeta']);
+
+      user.findMany.mockResolvedValueOnce([userRecord('u1')]);
+      const res = await service.exportPeople('a', 'admin', 'users', {});
+      expect((res.rows[0] as { tags: string[] }).tags).toEqual(['beta', 'zeta']);
     });
   });
 

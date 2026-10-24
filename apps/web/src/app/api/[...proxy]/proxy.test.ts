@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import * as route from './route';
 import { ALLOWED_PATH_PREFIXES, isProxyPathAllowed, stripSensitiveFields } from './route';
 
 describe('proxy allowlist (A-006)', () => {
@@ -63,5 +64,15 @@ describe('proxy response scrubbing (A-005 / A-006)', () => {
     // The same body, without the setup flag, is stripped.
     const stripped = stripSensitiveFields(setup) as Record<string, unknown>;
     expect(stripped.secret).toBeUndefined();
+  });
+});
+
+describe('proxy methods', () => {
+  // adminApi.setPersonTags sends PUT; without a handler Next answers 405
+  // before the request ever reaches the API.
+  it('forwards every method the web client sends', () => {
+    for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const) {
+      expect(typeof route[method]).toBe('function');
+    }
   });
 });

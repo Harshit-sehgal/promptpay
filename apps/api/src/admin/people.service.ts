@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
-import { Prisma, UserRole, UserStatus } from '@ateva/db';
+import { type PersonSubject, Prisma, UserRole, UserStatus } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
-import { WAITLIST_STATUSES } from './dto/people.dto';
+import { TAG_PATTERN, WAITLIST_STATUSES } from './dto/people.dto';
+import { compareText } from './people-notes.service';
 
 /**
  * Admin "People CRM": a read-mostly view over registered users and the
@@ -22,6 +23,8 @@ const EXPORT_CAP = 10_000;
 const DETAIL_CHILD_CAP = 50;
 const SEARCH_MAX = 200;
 const DAY_MS = 86_400_000;
+/** A tag filter resolves to person ids first; refuse rather than truncate silently. */
+const TAG_FILTER_CAP = 10_000;
 
 const USER_ROLES = Object.values(UserRole) as string[];
 const USER_STATUSES = Object.values(UserStatus) as string[];
@@ -40,12 +43,14 @@ export interface UsersFilter {
   verified?: string;
   from?: string;
   to?: string;
+  tag?: string;
 }
 
 export interface WaitlistFilter {
   search?: string;
   status?: string;
   country?: string;
+  tag?: string;
 }
 
 const USER_ROW_SELECT = {
@@ -164,7 +169,7 @@ export class PeopleService {
   // ── Registered users ───────────────────────────────────────────────────
 
   async listUsers(filter: UsersFilter, opts: PageOpts) {
-    const where = this.buildUsersWhere(filter);
+    const where = await this.buildUsersWhere(filter);
     const { take, skip, page } = paginate(opts);
     const [records, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -220,9 +225,10 @@ export class PeopleService {
     });
     if (!user) throw new NotFoundException('User not found');
 
-    const openFlags = await this.prisma.fraudFlag.count({
-      where: { userId: id, status: 'open' },
-    });
+    const [openFlags, tags] = await Promise.all([
+      this.prisma.fraudFlag.count({ where: { userId: id, status: 'open' } }),
+      this.tagsFor('user', [id]),
+    ]);
 
     const referrer = user.referralIn[0]?.referrer ?? null;
     return {
@@ -268,13 +274,14 @@ export class PeopleService {
       referredBy: referrer ? { id: referrer.id, email: referrer.email } : null,
       referralsMade: user._count.referralOut,
       openFlags,
+      tags: tags.get(id) ?? [],
     };
   }
 
   // ── Waitlist ───────────────────────────────────────────────────────────
 
   async listWaitlist(filter: WaitlistFilter, opts: PageOpts) {
-    const where = this.buildWaitlistWhere(filter);
+    const where = await this.buildWaitlistWhere(filter);
     const { take, skip, page } = paginate(opts);
     const [records, total] = await Promise.all([
       this.prisma.advertiserWaitlist.findMany({
@@ -343,7 +350,7 @@ export class PeopleService {
     let truncated: boolean;
     if (kind === 'users') {
       const records = await this.prisma.user.findMany({
-        where: this.buildUsersWhere(filter),
+        where: await this.buildUsersWhere(filter),
         select: USER_ROW_SELECT,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: EXPORT_CAP + 1,
@@ -352,7 +359,7 @@ export class PeopleService {
       rows = await this.toUserRows(records.slice(0, EXPORT_CAP));
     } else {
       const records = await this.prisma.advertiserWaitlist.findMany({
-        where: this.buildWaitlistWhere(filter),
+        where: await this.buildWaitlistWhere(filter),
         select: WAITLIST_ROW_SELECT,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: EXPORT_CAP + 1,
@@ -377,6 +384,7 @@ export class PeopleService {
           role: filter.role ?? null,
           status: filter.status ?? null,
           country: filter.country ?? null,
+          tag: filter.tag?.trim().toLowerCase() || null,
           verified: filter.verified ?? null,
           from: filter.from ?? null,
           to: filter.to ?? null,
@@ -389,7 +397,7 @@ export class PeopleService {
 
   // ── Internals ──────────────────────────────────────────────────────────
 
-  private buildUsersWhere(f: UsersFilter): Prisma.UserWhereInput {
+  private async buildUsersWhere(f: UsersFilter): Promise<Prisma.UserWhereInput> {
     const where: Prisma.UserWhereInput = {};
     if (f.role) {
       if (!USER_ROLES.includes(f.role)) throw new BadRequestException(`Invalid role: ${f.role}`);
@@ -418,10 +426,14 @@ export class PeopleService {
     }
     const createdAt = dateRange(f.from, f.to);
     if (createdAt) where.createdAt = createdAt;
+    const tagged = await this.idsWithTag('user', f.tag);
+    if (tagged) where.id = { in: tagged };
     return where;
   }
 
-  private buildWaitlistWhere(f: WaitlistFilter): Prisma.AdvertiserWaitlistWhereInput {
+  private async buildWaitlistWhere(
+    f: WaitlistFilter,
+  ): Promise<Prisma.AdvertiserWaitlistWhereInput> {
     const where: Prisma.AdvertiserWaitlistWhereInput = {};
     if (f.status) {
       if (!(WAITLIST_STATUSES as readonly string[]).includes(f.status)) {
@@ -438,11 +450,54 @@ export class PeopleService {
         { company: { contains: search, mode: 'insensitive' } },
       ];
     }
+    const tagged = await this.idsWithTag('waitlist', f.tag);
+    if (tagged) where.id = { in: tagged };
     return where;
   }
 
-  /** Attach lastSeenAt (one grouped query for the whole page). */
+  /**
+   * Ids of the people carrying `rawTag`, or undefined when no tag filter was
+   * asked for. Bounded: a tag on more than TAG_FILTER_CAP people is a 400
+   * instead of a silently partial list.
+   */
+  private async idsWithTag(subject: PersonSubject, rawTag?: string): Promise<string[] | undefined> {
+    const tag = rawTag?.trim().toLowerCase();
+    if (!tag) return undefined;
+    if (!TAG_PATTERN.test(tag)) throw new BadRequestException(`Invalid tag: ${tag.slice(0, 40)}`);
+    const rows = await this.prisma.personTag.findMany({
+      where: { subjectType: subject, tag },
+      select: { subjectId: true },
+      take: TAG_FILTER_CAP + 1,
+    });
+    if (rows.length > TAG_FILTER_CAP) {
+      throw new BadRequestException('That tag is on too many people to filter by; narrow it first');
+    }
+    return rows.map((r) => r.subjectId);
+  }
+
+  /** Tags for a page of people in one query: subjectId -> sorted tags. */
+  private async tagsFor(subject: PersonSubject, ids: string[]): Promise<Map<string, string[]>> {
+    const byId = new Map<string, string[]>();
+    if (ids.length === 0) return byId;
+    const rows = await this.prisma.personTag.findMany({
+      where: { subjectType: subject, subjectId: { in: ids } },
+      select: { subjectId: true, tag: true },
+    });
+    for (const r of rows) {
+      const list = byId.get(r.subjectId);
+      if (list) list.push(r.tag);
+      else byId.set(r.subjectId, [r.tag]);
+    }
+    for (const list of byId.values()) list.sort(compareText);
+    return byId;
+  }
+
+  /** Attach lastSeenAt (one grouped query) and tags (one query) for the page. */
   private async toUserRows(records: UserRowRecord[]) {
+    const tags = await this.tagsFor(
+      'user',
+      records.map((r) => r.id),
+    );
     const seen = new Map<string, Date>();
     if (records.length > 0) {
       const groups = await this.prisma.device.groupBy({
@@ -470,11 +525,16 @@ export class PeopleService {
       companyName: u.advertiser?.companyName ?? null,
       deviceCount: u._count.devices,
       lastSeenAt: seen.has(u.id) ? iso(seen.get(u.id) as Date) : null,
+      tags: tags.get(u.id) ?? [],
     }));
   }
 
   /** Attach registeredUserId with a single email lookup for the whole page. */
   private async toWaitlistRows(records: WaitlistRowRecord[]) {
+    const tags = await this.tagsFor(
+      'waitlist',
+      records.map((r) => r.id),
+    );
     const byEmail = new Map<string, string>();
     if (records.length > 0) {
       const emails = [...new Set(records.map((r) => r.email.toLowerCase()))];
@@ -497,6 +557,7 @@ export class PeopleService {
       createdAt: iso(r.createdAt),
       updatedAt: iso(r.updatedAt),
       registeredUserId: byEmail.get(r.email.toLowerCase()) ?? null,
+      tags: tags.get(r.id) ?? [],
     }));
   }
 }

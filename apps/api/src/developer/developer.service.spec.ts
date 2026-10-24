@@ -55,6 +55,8 @@ const mockPrisma = {
   userSettings: { updateMany: vi.fn() },
   waitStateEvent: { updateMany: vi.fn() },
   auditLog: { updateMany: vi.fn() },
+  personNote: { deleteMany: vi.fn() },
+  personTag: { deleteMany: vi.fn() },
   $executeRaw: vi.fn(),
   $transaction: vi.fn(async (arg: any) =>
     typeof arg === 'function' ? arg(mockPrisma) : Promise.all(arg),
@@ -99,6 +101,8 @@ describe('DeveloperService', () => {
     mockPrisma.adImpression.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.adClick.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.auditLog.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.personNote.deleteMany.mockResolvedValue({ count: 0 });
+    mockPrisma.personTag.deleteMany.mockResolvedValue({ count: 0 });
     mockPrisma.$executeRaw.mockResolvedValue(1);
     service = new DeveloperService(
       mockPrisma as any,
