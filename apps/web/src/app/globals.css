@@ -616,23 +616,23 @@ html.dark .app-shell .text-brand-700 {
   color: #f4c8b0 !important;
 }
 
-html:not(.dark) .app-shell .text-emerald-200,
-html:not(.dark) .app-shell .text-emerald-300,
-html:not(.dark) .app-shell .text-emerald-400,
-html:not(.dark) .app-shell .text-emerald-500,
-html:not(.dark) .app-shell .text-emerald-600 {
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-200,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-300,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-400,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-500,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-600 {
   color: #047857 !important;
 }
 
-html:not(.dark) .app-shell .text-amber-300,
-html:not(.dark) .app-shell .text-amber-400 {
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-amber-300,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-amber-400 {
   color: #a16207 !important;
 }
 
-html:not(.dark) .app-shell .text-red-200,
-html:not(.dark) .app-shell .text-red-300,
-html:not(.dark) .app-shell .text-red-400,
-html:not(.dark) .app-shell .text-rose-400 {
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-200,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-300,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-400,
+html:not(.dark):not([data-palette='midnight']) .app-shell .text-rose-400 {
   color: #be123c !important;
 }
 
@@ -969,7 +969,7 @@ html.dark .status-badge[data-status-tone='danger'] {
    two-tone system without changing their data flow or interaction semantics.
    ------------------------------------------------------------------------- */
 :root,
-html:not(.dark) {
+html:not(.dark):not([data-palette='midnight']) {
   --ateva-refine-canvas: #ffffff;
   --ateva-refine-surface: #ffffff;
   --ateva-refine-subtle: #fafafb;
@@ -1230,7 +1230,7 @@ body {
    changing their semantics or route contracts.
    ------------------------------------------------------------------------- */
 :root,
-html:not(.dark) {
+html:not(.dark):not([data-palette='midnight']) {
   --ateva-canvas-final: #ffffff;
   --ateva-surface-final: #ffffff;
   --ateva-subtle-final: #fafafb;
@@ -1883,29 +1883,29 @@ html.dark .public-page main [class~='text-emerald-700'] {
 /* Legacy dark routes use `text-white` for ordinary copy. Keep white text on
    explicit controls and the brand mark, while making headings, fields, and
    body copy readable in the light preference. */
-html:not(.dark) .app-shell h1[class~='text-white'],
-html:not(.dark) .app-shell h1 [class~='text-white'],
-html:not(.dark) .app-shell h2[class~='text-white'],
-html:not(.dark) .app-shell h2 [class~='text-white'],
-html:not(.dark) .app-shell h3[class~='text-white'],
-html:not(.dark) .app-shell h3 [class~='text-white'],
-html:not(.dark) .app-shell h4[class~='text-white'],
-html:not(.dark) .app-shell h4 [class~='text-white'],
-html:not(.dark) .app-shell p[class~='text-white'],
-html:not(.dark) .app-shell label[class~='text-white'],
-html:not(.dark) .app-shell td[class~='text-white'],
-html:not(.dark) .app-shell th[class~='text-white'],
-html:not(.dark) .app-shell input[class~='text-white'],
-html:not(.dark) .app-shell select[class~='text-white'],
-html:not(.dark) .app-shell textarea[class~='text-white'] {
+html:not(.dark):not([data-palette='midnight']) .app-shell h1[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h1 [class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h2[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h2 [class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h3[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h3 [class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h4[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell h4 [class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell p[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell label[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell td[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell th[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell input[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell select[class~='text-white'],
+html:not(.dark):not([data-palette='midnight']) .app-shell textarea[class~='text-white'] {
   color: var(--app-ink) !important;
 }
 
-html:not(.dark) .app-shell .app-sidebar [class~='text-white'] {
+html:not(.dark):not([data-palette='midnight']) .app-shell .app-sidebar [class~='text-white'] {
   color: var(--app-ink) !important;
 }
 
-html:not(.dark) .app-shell .app-sidebar__mark {
+html:not(.dark):not([data-palette='midnight']) .app-shell .app-sidebar__mark {
   color: var(--app-canvas) !important;
 }
 
@@ -3646,6 +3646,29 @@ body:has(.site-header):not(:has(.home-page))
   color: var(--ink) !important;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+/* Midnight is already dark, so an ink panel would be a cream strip. Panels and
+   bands use the solid surface instead; buttons and links keep the light ink
+   fill, and the controls inside a panel stay light with dark text. */
+html[data-palette='midnight']
+  body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):not(
+    a,
+    button
+  ) {
+  background-color: var(--solid) !important;
+  color: var(--ink) !important;
+}
+
+html[data-palette='midnight']
+  body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):not(a, button)
+  :is([class~='bg-white'], [class~='bg-brand-500']) {
+  background-color: var(--ink) !important;
+  color: var(--page) !important;
 }
 
 body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-950'],

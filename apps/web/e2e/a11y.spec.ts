@@ -119,7 +119,7 @@ for (const path of PAGES) {
 }
 
 for (const { id } of PALETTES) {
-  for (const path of ['/', '/legal/data-retention']) {
+  for (const path of ['/', '/legal/data-retention', '/pricing']) {
     test(`every palette passes axe: ${id} on ${path}`, async ({ page }) => {
       await page.addInitScript(([key, palette]) => window.localStorage.setItem(key, palette), [
         PALETTE_STORAGE_KEY,

@@ -702,9 +702,10 @@ background palettes (Warm default, Sunset, Mint, Lavender, Citrus, Midnight) are
 `html[data-palette]` token blocks in `globals.css` mirrored by
 `src/lib/palette.ts`; an inline `<head>` script applies the stored
 `ateva-palette` value before first paint and migrates `ateva-landing-theme=dark`
-to Midnight once. Public and auth pages use frosted glass over blurred colour
+to Midnight once. Midnight also sets `html.dark` (and every other palette
+removes it), so the dashboards' `.dark` rules follow the palette. Public and auth pages use frosted glass over blurred colour
 fields (`src/components/motion/`), a glass header with the palette picker
-(`palette-picker.tsx`, a radiogroup), and the shared footer. Motion is gated on
+(`src/components/palette-picker.tsx`, a radiogroup), and the shared footer. Motion is gated on
 `html[data-motion]`: reveals, parallax on the fields only, and under
 `prefers-reduced-motion` everything renders in its final state while the timer
 still ticks. The landing-era `landing-*` CSS and the light/dark toggle on public

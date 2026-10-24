@@ -38,7 +38,7 @@ export function SponsorsSection() {
             One line, one link, one clear label.
             <div className="home-card__row">
               <span>Sponsored</span>
-              <span>—</span>
+              <span aria-hidden="true">—</span>
             </div>
           </Reveal>
         </div>

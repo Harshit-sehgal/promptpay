@@ -87,6 +87,18 @@ describe('globals.css integrity', () => {
     expect(css).not.toMatch(/\.landing-|data-landing-theme/);
   });
 
+  it('keeps light-mode dashboard overrides at their original specificity', () => {
+    // These selectors were `html:not(.dark):not([data-landing-theme='dark'])`.
+    // Dropping the second :not() lost a class-level unit, and the light-mode
+    // status colours (`.text-emerald-400` stat values) then lost to
+    // `.app-shell .app-stat-card p:last-child` on source order and turned grey.
+    const bare = css.match(/html:not\(\.dark\)(?!:not\(\[data-palette='midnight'\]\))/g) ?? [];
+    expect(bare).toEqual([]);
+    expect(css).toMatch(
+      /html:not\(\.dark\):not\(\[data-palette='midnight'\]\) \.app-shell \.text-emerald-400/,
+    );
+  });
+
   it('keeps the final component language quiet and two-tone', () => {
     expect(css).toMatch(/--ateva-canvas-final:\s*#ffffff/);
     expect(css).toMatch(/--ateva-action-final:\s*#17191c/);
