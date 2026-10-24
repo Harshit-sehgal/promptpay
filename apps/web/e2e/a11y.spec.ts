@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+import { PALETTE_STORAGE_KEY, PALETTES } from '../src/lib/palette';
 
 /**
  * Accessibility smoke tests (WCAG 2.1 AA).
@@ -55,6 +57,48 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
 });
 
+/** Fails on any serious or critical axe violation; lower-impact findings become annotations. */
+async function assertNoBlockingViolations(page: Page, label: string) {
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+
+  // Axe still evaluates every selected WCAG rule. Lower-impact findings are
+  // reported as annotations rather than being hidden through rule suppression.
+  const blocking = results.violations.filter(
+    (v) => v.impact === 'critical' || v.impact === 'serious',
+  );
+  const advisory = results.violations.filter(
+    (v) => v.impact !== 'critical' && v.impact !== 'serious',
+  );
+
+  for (const violation of advisory) {
+    test.info().annotations.push({
+      type: `a11y-${violation.impact ?? 'unknown'}`,
+      description: `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
+    });
+  }
+
+  if (blocking.length > 0) {
+    // Name the offending ELEMENTS, not just the rule. The previous message
+    // reported "color-contrast (serious) - 2 node(s)" and nothing else, which
+    // is not enough to fix anything: the first guess at the culprit
+    // (`text-surface-500`) turned out to measure 4.74:1 and pass. axe already
+    // knows the selector and the measured ratio — printing them turns a
+    // guessing game into a one-line fix.
+    const summary = blocking
+      .map((v) => {
+        const nodes = v.nodes
+          .map(
+            (n) =>
+              `      → ${n.target.join(' ')}\n        ${n.failureSummary?.replace(/\n/g, '\n        ') ?? ''}`,
+          )
+          .join('\n');
+        return `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)\n${nodes}`;
+      })
+      .join('\n  ');
+    throw new Error(`${blocking.length} blocking a11y violation(s) on ${label}:\n  ${summary}`);
+  }
+}
+
 for (const path of PAGES) {
   test(`${path} has no serious or critical WCAG 2.1 AA violations`, async ({ page }) => {
     await page.goto(path, { waitUntil: 'domcontentloaded' });
@@ -68,47 +112,27 @@ for (const path of PAGES) {
     await expect(main).toHaveCount(1);
     await expect(main).toBeVisible();
 
-    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
-
-    // Axe still evaluates every selected WCAG rule. Lower-impact findings are
-    // reported as annotations rather than being hidden through rule suppression.
-    const blocking = results.violations.filter(
-      (v) => v.impact === 'critical' || v.impact === 'serious',
-    );
-    const advisory = results.violations.filter(
-      (v) => v.impact !== 'critical' && v.impact !== 'serious',
-    );
-
-    for (const violation of advisory) {
-      test.info().annotations.push({
-        type: `a11y-${violation.impact ?? 'unknown'}`,
-        description: `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
-      });
-    }
-
-    if (blocking.length > 0) {
-      // Name the offending ELEMENTS, not just the rule. The previous message
-      // reported "color-contrast (serious) - 2 node(s)" and nothing else, which
-      // is not enough to fix anything: the first guess at the culprit
-      // (`text-surface-500`) turned out to measure 4.74:1 and pass. axe already
-      // knows the selector and the measured ratio — printing them turns a
-      // guessing game into a one-line fix.
-      const summary = blocking
-        .map((v) => {
-          const nodes = v.nodes
-            .map(
-              (n) =>
-                `      → ${n.target.join(' ')}\n        ${n.failureSummary?.replace(/\n/g, '\n        ') ?? ''}`,
-            )
-            .join('\n');
-          return `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)\n${nodes}`;
-        })
-        .join('\n  ');
-      throw new Error(`${blocking.length} blocking a11y violation(s) on ${path}:\n  ${summary}`);
-    }
+    await assertNoBlockingViolations(page, path);
 
     await expect(main).toHaveCount(1);
   });
+}
+
+for (const { id } of PALETTES) {
+  for (const path of ['/', '/legal/data-retention']) {
+    test(`every palette passes axe: ${id} on ${path}`, async ({ page }) => {
+      await page.addInitScript(([key, palette]) => window.localStorage.setItem(key, palette), [
+        PALETTE_STORAGE_KEY,
+        id,
+      ] as const);
+      // The bootstrap is a beforeInteractive script, so wait for it to run
+      // before scanning; under a busy dev server that can take a while.
+      await page.goto(path, { waitUntil: 'load' });
+      await expect(page.locator('html')).toHaveAttribute('data-palette', id, { timeout: 30_000 });
+      await expect(page.locator('main#main-content')).toBeVisible();
+      await assertNoBlockingViolations(page, `${path} (${id})`);
+    });
+  }
 }
 
 test('pages have a lang attribute on <html>', async ({ page }) => {

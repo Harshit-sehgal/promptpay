@@ -76,7 +76,8 @@ export const PALETTES: readonly Palette[] = [
     ink: '#f4f3ef',
     copy: '#b4b4bb',
     quiet: '#8a8a92',
-    glass: 'rgb(255 255 255 / .07)',
+    // Darker than the mockup's 7% white so copy clears 4.5:1 over the fields (R10).
+    glass: 'rgb(28 28 34 / .6)',
   },
 ];
 

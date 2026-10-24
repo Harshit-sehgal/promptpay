@@ -93,14 +93,16 @@ body {
   --ateva-focus: #17191c;
   /* Public surfaces follow the chosen palette (see the palette blocks
      below); none of these depend on `.dark`. subtle and nested are the ink
-     tinted into the solid surface, so they stay a step apart in every palette. */
+     tinted into the solid surface, so they stay a step apart in every palette.
+     muted is the copy colour: public text sits over the colour fields, where
+     the quiet grey falls below 4.5:1 in every palette. */
   --public-canvas: var(--page);
   --public-surface: var(--solid);
   --public-subtle: color-mix(in srgb, var(--ink) 3%, var(--solid));
   --public-nested: color-mix(in srgb, var(--ink) 7%, var(--solid));
   --public-ink: var(--ink);
   --public-copy: var(--copy);
-  --public-muted: var(--quiet);
+  --public-muted: var(--copy);
   --public-line: color-mix(in srgb, var(--ink) 12%, transparent);
   --app-canvas: var(--ateva-fog);
   --app-surface: var(--ateva-paper);
@@ -185,7 +187,9 @@ html[data-palette='midnight'] {
   --ink: #f4f3ef;
   --copy: #b4b4bb;
   --quiet: #8a8a92;
-  --glass: rgb(255 255 255 / 0.07);
+  /* A dark tint, not the 7% white of the mockup: white glass over the saturated
+     fields left copy at 2.9-3.3:1 (ruling R10). */
+  --glass: rgb(28 28 34 / 0.6);
   --glass-strong: rgb(30 30 36 / 0.85);
   --glass-edge: rgb(255 255 255 / 0.16);
   --glass-shadow: 0 1px 0 rgb(255 255 255 / 0.12) inset, 0 30px 60px -30px rgb(0 0 0 / 0.7);
@@ -281,73 +285,9 @@ body {
   color: var(--ateva-blush-ink);
 }
 
-body:has(.site-header):not(:has(.home-page)) main {
-  color: var(--public-ink);
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-white'] {
-  background-color: var(--public-surface) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/70'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/60'] {
-  background-color: var(--public-subtle) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-100'] {
-  background-color: var(--public-nested) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-900'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-950'] {
-  background-color: var(--public-ink) !important;
-  color: var(--public-canvas) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-950'],
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-900'],
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-800'] {
-  color: var(--public-ink) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-700'],
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-600'] {
-  color: var(--public-copy) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-500'],
-body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-400'] {
-  color: var(--public-muted) !important;
-}
-
-body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-100'],
-body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-200'],
-body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-200/80'] {
-  border-color: var(--public-line) !important;
-}
-
 /* Authentication is intentionally a hybrid: a quiet editorial frame around
-   conventional, compact form content. */
-.auth-shell {
-  background: var(--public-subtle) !important;
-  color: var(--public-ink);
-}
-
-.auth-shell__frame {
-  border-color: var(--public-line) !important;
-  background: var(--public-surface) !important;
-  box-shadow: var(--app-shadow) !important;
-}
-
-.auth-shell__aside {
-  background: var(--ateva-ink) !important;
-}
-
-.auth-shell__content {
-  background: var(--public-surface);
-}
-
+   conventional, compact form content. The frame itself is styled with the
+   palette system near the end of this file. */
 .auth-shell .bg-white {
   background-color: var(--public-surface) !important;
 }
@@ -1672,10 +1612,6 @@ html[data-landing-theme='dark'] .landing-page .landing-sponsor-requirements {
   background: rgb(163 163 163);
 }
 /* Dark mode overrides for dashboard layouts */
-html.dark body {
-  background-color: rgb(13 14 16);
-  color: rgb(164 168 175);
-}
 html.dark * {
   border-color: rgb(45 48 54 / 0.55);
 }
@@ -4205,12 +4141,6 @@ html:is(.dark, [data-landing-theme='dark']) {
   --ateva-refine-action-ink: #17191c;
 }
 
-html,
-body {
-  background: var(--ateva-refine-canvas) !important;
-  color: var(--ateva-refine-ink);
-}
-
 body {
   font-family: var(--font-ui);
 }
@@ -4258,12 +4188,6 @@ body {
 /* Public pages use rules and type for structure. A product surface or a real
    control may still be contained, but a marketing card does not need a shadow
    and three layers of rounding to announce itself. */
-.public-page,
-.public-page main {
-  background: var(--ateva-refine-canvas) !important;
-  color: var(--ateva-refine-ink) !important;
-}
-
 .public-page main h1,
 .public-page main h2,
 .public-page main h3 {
@@ -5021,12 +4945,6 @@ html:is(.dark, [data-landing-theme='dark']) {
   --ateva-action-ink-final: #17191c;
 }
 
-html,
-body {
-  background: var(--ateva-canvas-final) !important;
-  color: var(--ateva-ink-final);
-}
-
 body {
   font-family: var(--font-ui);
 }
@@ -5038,12 +4956,6 @@ body {
 
 /* Public pages: typography and rules carry the composition. Only the actual
    product artifacts and controls receive a contained surface. */
-.public-page,
-.public-page main {
-  background: var(--ateva-canvas-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
 .public-page main [class~='bg-white'],
 .public-page main [class~='bg-surface-50'],
 .public-page main [class~='bg-surface-50/60'],
@@ -5490,31 +5402,11 @@ body {
 
 /* Authentication is the hybrid mode: one quiet frame, one restrained brand
    panel, and a conventional form—not a dashboard and not a marketing maze. */
-.auth-shell {
-  background: var(--ateva-subtle-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
-.auth-shell__frame {
-  border-color: var(--ateva-line-final) !important;
-  border-radius: 16px !important;
-  background: var(--ateva-surface-final) !important;
-  box-shadow: none !important;
-}
-
-.auth-shell__content {
-  background: var(--ateva-surface-final);
-}
-
 .auth-shell .auth-form-frame {
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   padding-inline: 0 !important;
-}
-
-.auth-shell__aside-artifact {
-  border-color: rgb(255 255 255 / 0.16) !important;
 }
 
 .auth-shell input,
@@ -6125,12 +6017,14 @@ html:is(.dark, [data-landing-theme='dark']) .app-shell [class~='text-red-800'] {
 /* Standalone public documents now share the same chrome as the other public
    routes. Keep their prose readable without importing the homepage layout. */
 .public-page main {
-  background-color: var(--public-canvas) !important;
   color: var(--public-ink);
 }
 
-.public-page {
-  background-color: var(--public-canvas) !important;
+/* The wrappers keep their old bg-* utilities; the page colour and the fixed
+   colour fields come from the body, so the wrappers must stay see-through. */
+.public-page,
+.public-page main {
+  background-color: transparent !important;
 }
 
 .public-page main [class~='bg-white'] {
@@ -8851,13 +8745,6 @@ html[data-motion='enabled'] .reveal:not(.is-in) {
   font-family: var(--font-ui), system-ui, sans-serif;
 }
 
-/* The older refine/final layers paint html and body white with !important;
-   the homepage sits on the palette's page colour (Task 10 retires those). */
-html:has(.home-page),
-html:has(.home-page) body {
-  background: var(--page) !important;
-}
-
 .home-page main {
   overflow-x: clip;
 }
@@ -9464,5 +9351,161 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
 
 .site-footer__cookie:hover {
   border-color: color-mix(in srgb, var(--ink) 45%, transparent);
+  color: var(--ink);
+}
+
+/* -------------------------------------------------------------------------
+   Public and auth pages on the palette system. The body paints the palette
+   page colour (html stays transparent so the body colour reaches the canvas
+   and the fixed .page-backdrop fields sit between the two). These rules come
+   last so they win over the older utility mappings above without needing
+   higher specificity; Task 10 retires those mappings.
+   ------------------------------------------------------------------------- */
+
+/* Dashboards keep the app canvas and `.dark` until PR 2. */
+html:has(.app-shell),
+html:has(.app-shell) body {
+  background: var(--ateva-canvas-final);
+  color: var(--ateva-ink-final);
+}
+
+html.dark:has(.app-shell) body {
+  color: rgb(164 168 175);
+}
+
+/* Fixed colour fields behind every public page but the homepage (and behind
+   the auth pages), rendered by PageBackdrop in site-header.tsx. */
+.page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The error line in the consent banner is red-600, which reads on white but not on
+   the dark banner surface Midnight gives it. */
+html.dark [role='dialog'][aria-label='Cookie consent'] [class~='text-red-600'] {
+  color: #ff9b94;
+}
+
+/* Reading pages put body text straight over the fields, so they are drawn at
+   half the field opacity of the palette (the homepage keeps the full strength). */
+.page-backdrop .color-field {
+  opacity: calc(var(--orb-op) * 0.5);
+}
+
+body:has(.site-header):not(:has(.home-page)) main {
+  color: var(--ink);
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-white'],
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50'],
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/70'],
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/60'] {
+  border-color: var(--glass-edge) !important;
+  background-color: var(--glass) !important;
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-100'] {
+  background-color: var(--public-nested) !important;
+}
+
+/* Dark and brand emphasis panels invert to ink with page-coloured text. Their
+   text utilities assume a dark fill (text-white/60, text-brand-300), so everything
+   inside inherits the panel colour, except the light controls they hold. */
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-900'],
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-950'],
+body:has(.site-header):not(:has(.home-page)) main [class~='bg-brand-500'] {
+  background-color: var(--ink) !important;
+  color: var(--page) !important;
+}
+
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500'])
+  * {
+  color: inherit !important;
+}
+
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500'])
+  :is([class~='bg-white'], [class~='bg-brand-500']) {
+  background-color: var(--page) !important;
+  color: var(--ink) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-950'],
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-900'],
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-800'] {
+  color: var(--ink) !important;
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-700'],
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-600'] {
+  color: var(--copy) !important;
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-500'],
+body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-400'],
+body:has(.site-header):not(:has(.home-page)) main .public-eyebrow {
+  color: var(--public-muted) !important;
+}
+
+body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-100'],
+body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-200'],
+body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-200/80'] {
+  border-color: var(--public-line) !important;
+}
+
+body:has(.site-header):not(:has(.home-page)) main .font-serif,
+.auth-shell .font-serif {
+  font-family: var(--font-display) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.045em !important;
+  word-spacing: 0.04em;
+}
+
+/* Auth: the frame is one glass panel over the backdrop; the brand aside is a
+   solid surface in the palette ink. */
+.auth-shell {
+  background: transparent;
+  color: var(--ink);
+}
+
+.auth-shell__frame {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+  border-radius: 22px !important;
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+}
+
+.auth-shell__aside {
+  background: var(--solid);
+  color: var(--ink);
+}
+
+.auth-shell__aside [class~='border-t'] {
+  border-color: var(--public-line);
+}
+
+.auth-shell__quiet {
+  color: var(--quiet);
+}
+
+.auth-shell__mark {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.auth-shell__mobile-brand {
   color: var(--ink);
 }

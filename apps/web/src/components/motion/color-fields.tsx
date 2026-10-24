@@ -24,7 +24,7 @@ export function ColorFields({ fields }: { fields: ColorField[] }) {
   const nodes = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const section = wrapper.current?.parentElement;
     if (!section) return;
     let frame = 0;
