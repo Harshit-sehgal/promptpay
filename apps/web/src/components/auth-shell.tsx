@@ -2,8 +2,8 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { BrandMark } from './brand-mark';
+import { PageBackdrop } from './motion/page-backdrop';
 import { PalettePicker } from './palette-picker';
-import { PageBackdrop } from './site-header';
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -31,7 +31,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
               Account access
             </p>
             <p className="mt-5 max-w-md text-balance font-serif text-[52px] font-normal leading-[1.02] tracking-[-0.03em]">
-              A clear path into <em className="font-normal italic">your Ateva workspace.</em>
+              A clear path into <em className="italic">your Ateva workspace.</em>
             </p>
 
             <div className="auth-shell__aside-artifact mt-10 border-t pt-5">

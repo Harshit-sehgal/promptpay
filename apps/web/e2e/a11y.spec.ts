@@ -125,11 +125,12 @@ for (const { id } of PALETTES) {
         PALETTE_STORAGE_KEY,
         id,
       ] as const);
-      // The bootstrap is a beforeInteractive script, so wait for it to run
-      // before scanning; under a busy dev server that can take a while.
-      await page.goto(path, { waitUntil: 'load' });
-      await expect(page.locator('html')).toHaveAttribute('data-palette', id, { timeout: 30_000 });
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      // The palette is applied before first paint; also let any colour
+      // transition settle so axe never samples a frame between two palettes.
+      await expect(page.locator('html')).toHaveAttribute('data-palette', id);
       await expect(page.locator('main#main-content')).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
       await assertNoBlockingViolations(page, `${path} (${id})`);
     });
   }

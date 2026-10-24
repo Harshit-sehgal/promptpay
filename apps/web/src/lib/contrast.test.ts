@@ -53,4 +53,27 @@ describe.each(PALETTES)('palette $id contrast (WCAG AA, 4.5:1)', (p) => {
   it('the timer chip (page-coloured text on an ink fill) reads', () => {
     expect(contrastRatio(page, parseHex(p.ink))).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('public muted text reads over the half-strength page fields, bare and under glass', () => {
+    // The non-home backdrop draws fields at half the palette opacity. Worst
+    // case: one or two overlapping fields under the text, with or without glass.
+    const op = p.fieldOpacity / 2;
+    const fields = p.c.map(parseHex);
+    const one = fields.map((c) => composite({ rgb: c, alpha: op }, page));
+    const two = fields.flatMap((a, i) =>
+      fields
+        .filter((_, j) => j !== i)
+        .map((b) => composite({ rgb: a, alpha: op }, composite({ rgb: b, alpha: op }, page))),
+    );
+    const bare = [page, ...one, ...two];
+    const glass = parseGlass(p.glass);
+    for (const bg of [...bare, ...bare.map((b) => composite(glass, b))]) {
+      expect(contrastRatio(parseHex(p.muted), bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('muted is copy or a step quieter than copy, never more prominent', () => {
+    const ratio = (hex: string) => contrastRatio(parseHex(hex), page);
+    expect(ratio(p.muted)).toBeLessThanOrEqual(ratio(p.copy));
+  });
 });

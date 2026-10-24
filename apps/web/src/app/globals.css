@@ -94,15 +94,15 @@ body {
   /* Public surfaces follow the chosen palette (see the palette blocks
      below); none of these depend on `.dark`. subtle and nested are the ink
      tinted into the solid surface, so they stay a step apart in every palette.
-     muted is the copy colour: public text sits over the colour fields, where
-     the quiet grey falls below 4.5:1 in every palette. */
+     muted is its own per-palette token: public text sits over the colour
+     fields, where the quiet grey falls below 4.5:1 in every palette. */
   --public-canvas: var(--page);
   --public-surface: var(--solid);
   --public-subtle: color-mix(in srgb, var(--ink) 3%, var(--solid));
   --public-nested: color-mix(in srgb, var(--ink) 7%, var(--solid));
   --public-ink: var(--ink);
   --public-copy: var(--copy);
-  --public-muted: var(--copy);
+  --public-muted: var(--muted);
   --public-line: color-mix(in srgb, var(--ink) 12%, transparent);
   --app-canvas: var(--ateva-fog);
   --app-surface: var(--ateva-paper);
@@ -131,6 +131,7 @@ html[data-palette='warm'] {
   --ink: #111111;
   --copy: #55554f;
   --quiet: #6e6e68;
+  --muted: #61615b;
   --glass: rgb(255 255 255 / 0.52);
   --glass-strong: rgb(255 255 255 / 0.72);
   --glass-edge: rgb(255 255 255 / 0.85);
@@ -146,6 +147,7 @@ html[data-palette='warm'] {
 html[data-palette='sunset'] {
   color-scheme: light;
   --page: #fbf3ee;
+  --muted: #55554f;
   --c1: #ff9f87;
   --c2: #ffc98f;
   --c3: #f7a8cc;
@@ -156,6 +158,7 @@ html[data-palette='sunset'] {
 html[data-palette='mint'] {
   color-scheme: light;
   --page: #f2f6f3;
+  --muted: #63635d;
   --c1: #9fe3c6;
   --c2: #b3d9f2;
   --c3: #f1ec9e;
@@ -165,6 +168,7 @@ html[data-palette='mint'] {
 html[data-palette='lavender'] {
   color-scheme: light;
   --page: #f6f3f9;
+  --muted: #55554f;
   --c1: #c8b4f4;
   --c2: #f5b5d4;
   --c3: #b9c6f6;
@@ -174,6 +178,7 @@ html[data-palette='lavender'] {
 html[data-palette='citrus'] {
   color-scheme: light;
   --page: #f7f6ee;
+  --muted: #63635d;
   --c1: #d6f08c;
   --c2: #ffe07a;
   --c3: #ffbf8c;
@@ -187,6 +192,7 @@ html[data-palette='midnight'] {
   --ink: #f4f3ef;
   --copy: #b4b4bb;
   --quiet: #8a8a92;
+  --muted: #b4b4bb;
   /* A dark tint, not the 7% white of the mockup: white glass over the saturated
      fields left copy at 2.9-3.3:1 (ruling R10). */
   --glass: rgb(28 28 34 / 0.6);
@@ -265,7 +271,7 @@ body {
   border: 1px solid var(--public-line-strong);
   border-radius: 999px;
   background: transparent;
-  color: var(--public-muted);
+  color: var(--app-muted);
   font-family: var(--font-ui), system-ui, sans-serif;
   font-size: 0.7rem;
   letter-spacing: 0;
@@ -8630,7 +8636,12 @@ html:is(.dark, [data-landing-theme='dark']) .landing-page .landing-planner .land
 .site-header__nav-link {
   border-radius: 4px;
   color: var(--copy);
-  transition: color 0.2s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-header__nav-link {
+    transition: color 0.2s;
+  }
 }
 
 .site-header__nav-link:hover {
@@ -9307,7 +9318,18 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
   color: var(--copy);
   font-size: 0.8125rem;
   line-height: 1.25rem;
-  transition: color 0.18s ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-footer__link {
+    transition: color 0.18s ease;
+  }
+
+  .site-footer__cookie {
+    transition:
+      border-color 0.18s ease,
+      color 0.18s ease;
+  }
 }
 
 .site-footer__link:hover {
@@ -9344,9 +9366,6 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
   padding: 0.5rem 0.875rem;
   color: var(--copy);
   font: inherit;
-  transition:
-    border-color 0.18s ease,
-    color 0.18s ease;
 }
 
 .site-footer__cookie:hover {
@@ -9374,7 +9393,7 @@ html.dark:has(.app-shell) body {
 }
 
 /* Fixed colour fields behind every public page but the homepage (and behind
-   the auth pages), rendered by PageBackdrop in site-header.tsx. */
+   the auth pages), rendered by motion/page-backdrop.tsx. */
 .page-backdrop {
   position: fixed;
   inset: 0;
@@ -9407,6 +9426,55 @@ body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/60'] {
   background-color: var(--glass) !important;
   backdrop-filter: blur(22px) saturate(1.4);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
+}
+
+/* Older layers squared bordered cards off and dropped their side borders.
+   A glass card keeps its full edge; rounded objects take the system radii
+   (16px objects, 22px panels). Full-width bands carry no rounded-* class and
+   stay square. */
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is(
+    [class~='bg-white'],
+    [class~='bg-surface-50'],
+    [class~='bg-surface-50/70'],
+    [class~='bg-surface-50/60']
+  ):is([class~='border'], [class~='border-2']) {
+  border: 1px solid var(--glass-edge) !important;
+}
+
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is(
+    [class~='bg-white'],
+    [class~='bg-surface-50'],
+    [class~='bg-surface-50/70'],
+    [class~='bg-surface-50/60']
+  ):is([class~='rounded-lg'], [class~='rounded-xl']),
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):is(
+    [class~='rounded-lg'],
+    [class~='rounded-xl']
+  ) {
+  border-radius: 16px !important;
+}
+
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is(
+    [class~='bg-white'],
+    [class~='bg-surface-50'],
+    [class~='bg-surface-50/70'],
+    [class~='bg-surface-50/60']
+  ):is([class~='rounded-2xl'], [class~='rounded-3xl']),
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):is(
+    [class~='rounded-2xl'],
+    [class~='rounded-3xl']
+  ) {
+  border-radius: 22px !important;
 }
 
 body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-100'] {
@@ -9455,6 +9523,11 @@ body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-500'],
 body:has(.site-header):not(:has(.home-page)) main [class~='text-surface-400'],
 body:has(.site-header):not(:has(.home-page)) main .public-eyebrow {
   color: var(--public-muted) !important;
+}
+
+body:has(.site-header):not(:has(.home-page)) main input::placeholder,
+body:has(.site-header):not(:has(.home-page)) main textarea::placeholder {
+  color: var(--public-muted);
 }
 
 body:has(.site-header):not(:has(.home-page)) main [class~='border-surface-100'],

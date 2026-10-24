@@ -126,6 +126,10 @@ describe('globals.css integrity', () => {
       expect(read('--glass')).toBe(norm(p.glass));
     });
 
+    it.each(PALETTES)('$id muted matches palette.ts in its own block', (p) => {
+      expect(paletteBlock(p.id)).toContain(`--muted: ${p.muted};`);
+    });
+
     it('falls back to the opaque glass where backdrop-filter is unsupported', () => {
       const m =
         /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)\s*\{([^{}]+)\{([^{}]*)\}/.exec(

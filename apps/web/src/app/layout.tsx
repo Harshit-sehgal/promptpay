@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
-import Script from 'next/script';
 import './globals.css';
 import ConsentRePrompt from '@/components/consent-reprompt';
 import CookieConsent from '@/components/cookie-consent';
@@ -75,10 +74,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
       className={`${interTight.variable} ${geist.variable} ${geistMono.variable}`}
     >
+      <head>
+        {/* A plain inline script in <head> runs before first paint. next/script's
+            beforeInteractive is queued until the JS chunks load in the App Router,
+            which painted Warm first and then animated to the stored palette. */}
+        <script
+          id="ateva-theme-bootstrap"
+          dangerouslySetInnerHTML={{ __html: paletteBootstrapScript }}
+        />
+      </head>
       <body className="font-sans antialiased">
-        <Script id="ateva-theme-bootstrap" strategy="beforeInteractive">
-          {paletteBootstrapScript}
-        </Script>
         <SkipLink />
         <SandboxBanner />
         <Providers>

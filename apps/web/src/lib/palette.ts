@@ -15,6 +15,12 @@ export interface Palette {
   ink: string;
   copy: string;
   quiet: string;
+  /**
+   * Muted text on the non-home public and auth pages: lighter than copy where a
+   * value still clears 4.5:1 over the half-strength page fields (two
+   * overlapping, bare or under glass); otherwise copy itself.
+   */
+  muted: string;
   /** Space-separated rgb() form: the contrast test parses it. */
   glass: string;
 }
@@ -34,6 +40,7 @@ export const PALETTES: readonly Palette[] = [
     c: ['#f6c9a8', '#c4dcc6', '#d6cdea', '#ecdcb4'],
     fieldOpacity: 0.75,
     ...LIGHT,
+    muted: '#61615b',
   },
   {
     id: 'sunset',
@@ -42,6 +49,7 @@ export const PALETTES: readonly Palette[] = [
     c: ['#ff9f87', '#ffc98f', '#f7a8cc', '#ffd9a0'],
     fieldOpacity: 0.7,
     ...LIGHT,
+    muted: '#55554f',
   },
   {
     id: 'mint',
@@ -50,6 +58,7 @@ export const PALETTES: readonly Palette[] = [
     c: ['#9fe3c6', '#b3d9f2', '#f1ec9e', '#c9eedd'],
     fieldOpacity: 0.75,
     ...LIGHT,
+    muted: '#63635d',
   },
   {
     id: 'lavender',
@@ -58,6 +67,7 @@ export const PALETTES: readonly Palette[] = [
     c: ['#c8b4f4', '#f5b5d4', '#b9c6f6', '#e6d4fa'],
     fieldOpacity: 0.75,
     ...LIGHT,
+    muted: '#55554f',
   },
   {
     id: 'citrus',
@@ -66,6 +76,7 @@ export const PALETTES: readonly Palette[] = [
     c: ['#d6f08c', '#ffe07a', '#ffbf8c', '#c5ecb0'],
     fieldOpacity: 0.7,
     ...LIGHT,
+    muted: '#63635d',
   },
   {
     id: 'midnight',
@@ -76,6 +87,7 @@ export const PALETTES: readonly Palette[] = [
     ink: '#f4f3ef',
     copy: '#b4b4bb',
     quiet: '#8a8a92',
+    muted: '#b4b4bb',
     // Darker than the mockup's 7% white so copy clears 4.5:1 over the fields (R10).
     glass: 'rgb(28 28 34 / .6)',
   },

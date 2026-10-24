@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+let pathname = '/';
+vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
 
 import { SiteHeader } from './site-header';
 
@@ -24,6 +25,7 @@ describe('SiteHeader', () => {
   });
 
   afterEach(() => {
+    pathname = '/';
     cleanup();
     vi.restoreAllMocks();
   });
@@ -45,6 +47,18 @@ describe('SiteHeader', () => {
     expect(screen.getByRole('link', { name: 'Join beta' }).getAttribute('href')).toBe(
       '/auth/signup?role=developer',
     );
+  });
+
+  it('renders the fixed colour-field backdrop on every page but the homepage', () => {
+    const { container, unmount } = render(<SiteHeader />);
+    expect(container.querySelector('.page-backdrop')).toBeNull();
+    unmount();
+
+    pathname = '/pricing';
+    const { container: pricing } = render(<SiteHeader />);
+    const backdrop = pricing.querySelector('.page-backdrop');
+    expect(backdrop?.getAttribute('aria-hidden')).toBe('true');
+    expect(backdrop?.querySelectorAll('.color-field')).toHaveLength(3);
   });
 
   it('has no mobile menu: narrow screens just hide the text links', () => {

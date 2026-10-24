@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { type ColorField, ColorFields } from './motion/color-fields';
+import { PageBackdrop } from './motion/page-backdrop';
 import { PalettePicker } from './palette-picker';
 
 interface SiteHeaderProps {
@@ -21,24 +21,6 @@ export const NAV_ITEMS = [
   { label: 'Privacy', href: '/#privacy' },
   { label: 'Sponsors', href: '/#sponsors' },
 ];
-
-/* The fixed backdrop behind every public page except the homepage, which
-   places its own fields per section. The parent is the viewport, so the
-   parallax offset stays at zero; the speeds only matter if that changes. */
-const PAGE_FIELDS: ColorField[] = [
-  { color: 1, size: 640, x: '-14%', y: '-12%', speed: 0.04 },
-  { color: 2, size: 560, x: '64%', y: '14%', speed: 0.05 },
-  { color: 3, size: 600, x: '20%', y: '62%', speed: 0.03 },
-];
-
-/** Fixed palette colour fields behind a public page's content. */
-export function PageBackdrop() {
-  return (
-    <div aria-hidden="true" className="page-backdrop">
-      <ColorFields fields={PAGE_FIELDS} />
-    </div>
-  );
-}
 
 /** The page counts as scrolled once it has moved more than this many pixels. */
 const SCROLLED_AFTER_PX = 24;
