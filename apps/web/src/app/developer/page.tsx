@@ -171,7 +171,7 @@ export default function DeveloperDashboard() {
     <>
       <PageHeader
         eyebrow="Developer"
-        title="Your waits, counted."
+        title="Dashboard"
         lede="Earnings, payout readiness, trust status, and integration controls for your developer account."
         actions={
           <>
@@ -274,7 +274,7 @@ export default function DeveloperDashboard() {
           <div className="dash-grid dash-grid--wide-left">
             <Panel label="Earnings breakdown" flush>
               <PanelHeader
-                title="Earnings breakdown"
+                title="Earnings Breakdown"
                 action={
                   <ActionLink href="/developer/earnings" variant="text">
                     View history
@@ -316,7 +316,7 @@ export default function DeveloperDashboard() {
             </Panel>
 
             <Panel label="Trust and payout status">
-              <PanelHeader title="Trust and payouts" />
+              <PanelHeader title="Trust & Payout Status" />
               <div className="flex items-center justify-between gap-3">
                 <Pill tone={trust.tone}>
                   <span className="capitalize">{trust.label}</span>
@@ -358,7 +358,7 @@ export default function DeveloperDashboard() {
           {referral && (
             <Panel label="Referral program" flush>
               <PanelHeader
-                title="Referrals"
+                title="Referral Program"
                 action={
                   <ActionLink href="/developer/referral" variant="text">
                     View details
