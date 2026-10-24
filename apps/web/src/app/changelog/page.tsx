@@ -66,7 +66,7 @@ export default function ChangelogPage() {
                   <span
                     className="public-changelog-version"
                     style={{
-                      fontFamily: 'var(--font-mono), ui-monospace, monospace',
+                      fontFamily: 'var(--font-utility), ui-monospace, monospace',
                       fontSize: '14px',
                       fontWeight: 600,
                       // --accent (#16a34a) measures 3.30:1 on white and fails WCAG AA

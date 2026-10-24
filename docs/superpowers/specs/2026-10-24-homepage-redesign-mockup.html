@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ateva — background picker</title>
+<script>
+  // Apply the visitor's palette before first paint so the page never flashes the wrong colours.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('ateva-palette'); } catch (e) {}
+    if (!t && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) t = 'midnight';
+    if (t && t !== 'warm') document.documentElement.dataset.theme = t;
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --paper: #f4f3ef; --ink: #111111; --copy: #55554f; --quiet: #8a8a84; --line: rgb(17 17 17 / .1);
+    --glass: rgb(255 255 255 / .52); --glass-strong: rgb(255 255 255 / .72); --glass-edge: rgb(255 255 255 / .85);
+    --glass-shadow: 0 1px 0 rgb(255 255 255 / .9) inset, 0 24px 60px -30px rgb(40 30 20 / .35);
+    --display: 'Inter Tight', sans-serif; --ui: 'Geist', system-ui, sans-serif; --mono: 'Geist Mono', monospace;
+    --gut: clamp(20px, 4vw, 48px);
+    --c1: #f6c9a8; --c2: #c4dcc6; --c3: #d6cdea; --c4: #ecdcb4; --orb-op: .75;
+    --on-ink: #ffffff; --mini-bg: rgb(255 255 255 / .6); --solid: #ffffff; --struck: #a9a8a0; --dash: rgb(17 17 17 / .22); --ok: #2f9e5b;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+  html { overflow-x: clip; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--ui); overflow-x: clip; }
+  main { overflow-x: clip; }
+  .in { max-width: 1240px; margin: 0 auto; padding: 0 var(--gut); position: relative; z-index: 1; }
+  h2 { font: 800 clamp(36px, 5vw, 68px)/.98 var(--display); letter-spacing: -0.045em; word-spacing: .04em; }
+  .lede { font-size: 18px; line-height: 1.55; color: var(--copy); max-width: 500px; }
+  .btn { display: inline-block; font: 600 15px var(--ui); padding: 14px 24px; border-radius: 999px; background: var(--ink); color: var(--on-ink); }
+  .clock { font-family: var(--mono); font-weight: 500; letter-spacing: -0.06em; background: var(--ink); color: var(--paper); padding: 0 .12em; border-radius: .12em; display: inline-block; min-width: 3.1ch; text-align: center; font-variant-numeric: tabular-nums; }
+
+  /* ---------- glass ---------- */
+  .glass { background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .glass { background: var(--glass-strong); } }
+
+  /* soft colour fields that the glass sits on; muted so the page stays calm */
+  .orbs { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+  .orb { position: absolute; border-radius: 50%; filter: blur(60px); opacity: var(--orb-op); will-change: transform; }
+  .o-c1 { background: var(--c1); } .o-c2 { background: var(--c2); } .o-c3 { background: var(--c3); } .o-c4 { background: var(--c4); }
+
+
+  /* ---------- background palettes ---------- */
+  html[data-theme="sunset"]   { --paper: #fbf3ee; --c1: #ff9f87; --c2: #ffc98f; --c3: #f7a8cc; --c4: #ffd9a0; --orb-op: .7; }
+  html[data-theme="mint"]     { --paper: #f2f6f3; --c1: #9fe3c6; --c2: #b3d9f2; --c3: #f1ec9e; --c4: #c9eedd; }
+  html[data-theme="lavender"] { --paper: #f6f3f9; --c1: #c8b4f4; --c2: #f5b5d4; --c3: #b9c6f6; --c4: #e6d4fa; }
+  html[data-theme="citrus"]   { --paper: #f7f6ee; --c1: #d6f08c; --c2: #ffe07a; --c3: #ffbf8c; --c4: #c5ecb0; --orb-op: .7; }
+  html[data-theme="midnight"] {
+    --paper: #0f0f12; --ink: #f4f3ef; --copy: #b4b4bb; --quiet: #85858d; --line: rgb(255 255 255 / .12);
+    --glass: rgb(255 255 255 / .07); --glass-strong: rgb(30 30 36 / .85); --glass-edge: rgb(255 255 255 / .16);
+    --glass-shadow: 0 1px 0 rgb(255 255 255 / .12) inset, 0 30px 60px -30px rgb(0 0 0 / .7);
+    --c1: #6b4cf6; --c2: #ff7a45; --c3: #18b88f; --c4: #c43d8f; --orb-op: .45;
+    --on-ink: #111111; --mini-bg: rgb(255 255 255 / .06); --solid: #1c1c21; --struck: #6d6d74; --dash: rgb(255 255 255 / .22); --ok: #4fd18b;
+    color-scheme: dark;
+  }
+  body, .orb { transition: background-color .6s ease; }
+
+  /* palette picker: a visitor setting in the nav */
+  .picker { position: relative; }
+  .picker > button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--glass-edge); background: var(--glass); cursor: pointer; display: grid; place-items: center; }
+  .picker > button span { width: 20px; height: 20px; border-radius: 50%; background: conic-gradient(var(--c1), var(--c2), var(--c3), var(--c4), var(--c1)); box-shadow: 0 0 0 1px rgb(0 0 0 / .08) inset; }
+  .menu { position: absolute; right: 0; top: calc(100% + 10px); width: 236px; border-radius: 20px; padding: 14px; opacity: 0; transform: translateY(-6px) scale(.98); transform-origin: top right; pointer-events: none; transition: opacity .2s var(--ease), transform .2s var(--ease); background: var(--glass-strong); }
+  .menu.open { opacity: 1; transform: none; pointer-events: auto; }
+  .menu p { font: 500 12px var(--mono); color: var(--quiet); margin: 0 4px 10px; }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .swatches button { border: 0; background: none; cursor: pointer; display: grid; justify-items: center; gap: 6px; padding: 8px 4px; border-radius: 12px; font: 500 12px var(--ui); color: var(--copy); }
+  .swatches button:hover { background: var(--mini-bg); }
+  .swatches button i { width: 36px; height: 36px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px rgb(0 0 0 / .08) inset; }
+  .swatches button[aria-checked="true"] { color: var(--ink); }
+  .swatches button[aria-checked="true"] i { border-color: var(--ink); }
+
+  /* ---------- product objects ---------- */
+  .agent { border-radius: 16px; padding: 16px 18px; font: 14px/1.65 var(--mono); color: var(--copy); }
+  .agent b { color: var(--ink); font-weight: 500; }
+  .agent .st::after { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); margin-left: 8px; vertical-align: 1px; animation: pulse 1.2s ease-in-out infinite; }
+  .agent .st.done::after { animation: none; background: var(--ok); }
+  .card { border-radius: 16px; padding: 14px 16px 12px; font-size: 14px; line-height: 1.4; }
+  .card strong { display: block; font-weight: 600; margin-bottom: 2px; }
+  .card .row { display: flex; justify-content: space-between; margin-top: 10px; font: 500 11px var(--mono); color: var(--quiet); }
+  @keyframes pulse { 50% { transform: scale(.5); opacity: .4; } }
+
+  /* ---------- nav: turns to glass once you scroll ---------- */
+  .nav-wrap { position: sticky; top: 12px; z-index: 10; padding: 0 var(--gut); }
+  nav { max-width: 1240px; margin: 0 auto; display: flex; align-items: center; gap: 28px; padding: 12px 18px; font-size: 14px; border-radius: 999px; border: 1px solid transparent; transition: background .4s, border-color .4s, box-shadow .4s, backdrop-filter .4s; }
+  nav.stuck { background: var(--glass); border-color: var(--glass-edge); box-shadow: var(--glass-shadow); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4); }
+  nav b { font: 800 20px var(--display); letter-spacing: -0.03em; margin-right: auto; }
+  nav a { color: var(--copy); }
+  nav .join { color: var(--on-ink); background: var(--ink); padding: 8px 14px; border-radius: 999px; font-weight: 600; }
+
+  /* ---------- hero ---------- */
+  .hero-sec { position: relative; margin-top: -64px; padding-top: 64px; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 56px; align-items: center; padding: clamp(50px, 8vw, 110px) 0 120px; }
+  .hero h1 { font: 800 clamp(48px, 7vw, 100px)/.94 var(--display); letter-spacing: -0.048em; word-spacing: .05em; }
+  .hero h1 .w { display: inline-block; opacity: 0; transform: translateY(.35em); animation: rise .6s var(--ease) forwards; }
+  .hero .lede, .hero .cta-row { opacity: 0; transform: translateY(16px); animation: rise .6s var(--ease) forwards; }
+  .hero .lede { margin-top: 28px; animation-delay: .4s; }
+  .hero .cta-row { margin-top: 30px; animation-delay: .5s; }
+  .hero .sub { margin-left: 18px; font-size: 14px; color: var(--quiet); }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  .stage { position: relative; height: 330px; }
+  .stage .agent { position: absolute; left: 0; right: 0; top: 24px; }
+  .stage .card { position: absolute; left: 28px; right: 28px; top: 150px; opacity: 0; transform: translateY(10px) scale(.98); transition: opacity .28s var(--ease), transform .28s var(--ease); }
+  .stage .card.show { opacity: 1; transform: none; }
+  .o-h1 { width: 520px; height: 520px; right: -80px; top: 40px; }
+  .o-h2 { width: 380px; height: 380px; right: 300px; top: 280px; }
+  .o-h3 { width: 300px; height: 300px; left: -100px; top: -60px; }
+
+  /* ---------- scroll reveal ---------- */
+  .rv { opacity: 0; transform: translateY(28px); transition: opacity .6s var(--ease), transform .6s var(--ease); transition-delay: calc(var(--i, 0) * 70ms); }
+  .rv.on { opacity: 1; transform: none; }
+
+  /* ---------- one wait, three timestamps ---------- */
+  .moments { position: relative; padding: 110px 0; }
+  .moments .head { display: flex; justify-content: space-between; align-items: end; gap: 32px; flex-wrap: wrap; }
+  .strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 56px; }
+  .moment { border-radius: 22px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .moment .t { font: 800 44px/1 var(--display); letter-spacing: -0.04em; }
+  .moment .t .clock { font-size: 34px; }
+  .moment p { font-size: 15px; line-height: 1.5; color: var(--copy); }
+  .moment .mini { background: var(--mini-bg); border-radius: 12px; padding: 12px 14px; font: 12.5px/1.6 var(--mono); color: var(--copy); min-height: 128px; }
+  .moment .mini b { color: var(--ink); font-weight: 500; }
+  .moment .mini .card { margin-top: 10px; padding: 10px 12px; background: var(--solid); box-shadow: 0 8px 20px -14px rgb(0 0 0 / .4); font: 13px/1.4 var(--ui); }
+  .moment .mini .ok { color: var(--ok); }
+  .o-m1 { width: 460px; height: 460px; left: 10%; top: 120px; }
+  .o-m2 { width: 400px; height: 400px; right: 5%; top: 220px; }
+
+  /* ---------- privacy: strike lines draw in as you scroll ---------- */
+  .privacy { position: relative; padding: 110px 0; }
+  .ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 48px; }
+  .ledger > div { border-radius: 22px; padding: 26px 28px 30px; }
+  .ledger h3 { font: 500 13px var(--mono); color: var(--quiet); margin-bottom: 18px; }
+  .ledger ul { list-style: none; font: 600 clamp(24px, 2.8vw, 36px)/1.3 var(--display); letter-spacing: -0.03em; }
+  .ledger .never li { color: var(--struck); }
+  .ledger .never li span { position: relative; }
+  .ledger .never li span::after { content: ''; position: absolute; left: -2px; right: -2px; top: 54%; height: 3px; background: var(--ink); border-radius: 2px; transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease); transition-delay: calc(var(--i, 0) * 110ms + 150ms); }
+  .ledger .never.on li span::after { transform: scaleX(1); }
+  .o-p1 { width: 520px; height: 420px; right: 0; top: 80px; }
+
+  /* ---------- sponsors ---------- */
+  .sponsors { position: relative; padding: 110px 0; }
+  .sponsors .grid { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 56px; align-items: center; }
+  .sponsors .lede { margin-top: 22px; }
+  .sponsors .btn { margin-top: 30px; }
+  .slots { display: grid; gap: 12px; }
+  .slots .empty { background: rgb(255 255 255 / .18); border: 1.5px dashed var(--dash); box-shadow: none; }
+  .slots .empty .row { color: var(--struck); }
+  .o-s1 { width: 440px; height: 440px; right: 6%; top: 40px; }
+  .o-s2 { width: 320px; height: 320px; left: 20%; bottom: -60px; }
+
+  /* ---------- close ---------- */
+  .close { padding: 110px 0 56px; }
+  .close .panel { border-radius: 28px; padding: clamp(28px, 5vw, 64px); }
+  .close h2 { max-width: 900px; }
+  .close .btn { margin-top: 30px; }
+  .fine { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 14px; color: var(--copy); display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+
+  @media (max-width: 860px) {
+    nav a:not(.join) { display: none; }
+    .menu { position: fixed; left: 16px; right: 16px; top: 72px; width: auto; transform-origin: top center; }
+    .hero, .sponsors .grid, .ledger { grid-template-columns: 1fr; }
+    .hero { gap: 20px; padding-bottom: 70px; }
+    .hero .sub { display: block; margin: 12px 0 0; }
+    .stage { height: 270px; }
+    .stage .card { left: 14px; right: 14px; top: 130px; }
+    .strip { grid-template-columns: 1fr; }
+    .orb { filter: blur(48px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rv, .hero h1 .w, .hero .lede, .hero .cta-row { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+    .ledger .never li span::after { transform: scaleX(1); transition: none; }
+    .agent .st::after { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="nav-wrap"><nav data-nav><b>ateva</b><a>How it works</a><a>Privacy</a><a>Sponsors</a><div class="picker">
+    <button type="button" aria-label="Change background colours" aria-haspopup="true" aria-expanded="false" data-pick><span></span></button>
+    <div class="menu glass" data-menu>
+      <p>Background</p>
+      <div class="swatches" role="radiogroup" aria-label="Background colours">
+        <button type="button" role="radio" data-t="warm"><i style="background:linear-gradient(135deg,#f6c9a8,#c4dcc6 60%,#d6cdea)"></i>Warm</button>
+        <button type="button" role="radio" data-t="sunset"><i style="background:linear-gradient(135deg,#ff9f87,#ffc98f 60%,#f7a8cc)"></i>Sunset</button>
+        <button type="button" role="radio" data-t="mint"><i style="background:linear-gradient(135deg,#9fe3c6,#b3d9f2 60%,#f1ec9e)"></i>Mint</button>
+        <button type="button" role="radio" data-t="lavender"><i style="background:linear-gradient(135deg,#c8b4f4,#f5b5d4 60%,#b9c6f6)"></i>Lavender</button>
+        <button type="button" role="radio" data-t="citrus"><i style="background:linear-gradient(135deg,#d6f08c,#ffe07a 60%,#ffbf8c)"></i>Citrus</button>
+        <button type="button" role="radio" data-t="midnight"><i style="background:linear-gradient(135deg,#0f0f12 30%,#6b4cf6,#ff7a45)"></i>Midnight</button>
+      </div>
+    </div>
+  </div><a class="join">Join beta</a></nav></div>
+
+<main>
+<header class="hero-sec">
+  <div class="orbs"><div class="orb o-c1 o-h1" data-par="-.12"></div><div class="orb o-c3 o-h2" data-par=".08"></div><div class="orb o-c2 o-h3" data-par="-.05"></div></div>
+  <div class="in">
+    <div class="hero" id="hero">
+      <div>
+        <h1 data-split>Your agent has been working for <span class="clock" data-clock>0:00</span>.</h1>
+        <p class="lede">That wait is where Ateva shows one small sponsored card. Nothing you type is sent.</p>
+        <div class="cta-row"><a class="btn">Join the beta</a><span class="sub">Free · private beta · VS Code</span></div>
+      </div>
+      <div class="stage rv" style="--i:3">
+        <div class="agent glass"><b>claude</b> › fix the flaky checkout test<br><span class="st" data-st>Working</span></div>
+        <div class="card glass" data-card><strong>Tidewater CI</strong>2,000 free build minutes a month for open-source repos.<div class="row"><span>Sponsored — wait state detected</span><span>✕</span></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="moments">
+  <div class="orbs"><div class="orb o-c4 o-m1" data-par="-.1"></div><div class="orb o-c2 o-m2" data-par=".06"></div></div>
+  <div class="in">
+    <div class="head">
+      <h2 class="rv">One wait, start<br>to finish.</h2>
+      <p class="lede rv" style="--i:1">The card only exists while your agent works. Nothing shows up while you type or read code.</p>
+    </div>
+    <div class="strip">
+      <div class="moment glass rv" style="--i:0">
+        <div class="t"><span class="clock">0:00</span></div>
+        <div class="mini"><b>claude</b> › fix the flaky checkout test<br>Working…</div>
+        <p>You hand your agent a task and wait.</p>
+      </div>
+      <div class="moment glass rv" style="--i:1">
+        <div class="t"><span class="clock">0:01</span></div>
+        <div class="mini"><b>claude</b> › fix the flaky checkout test<br>Running tests…
+          <div class="card"><strong>Tidewater CI</strong>2,000 free build minutes</div></div>
+        <p>One labelled card appears. Close it any time.</p>
+      </div>
+      <div class="moment glass rv" style="--i:2">
+        <div class="t"><span class="clock">0:12</span></div>
+        <div class="mini"><b>claude</b> › fix the flaky checkout test<br><span class="ok">✓</span> Done. 3 files changed.</div>
+        <p>Your agent finishes. The card is gone.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="privacy">
+  <div class="orbs"><div class="orb o-c3 o-p1" data-par="-.08"></div></div>
+  <div class="in">
+    <h2 class="rv">Here's everything we see.</h2>
+    <div class="ledger">
+      <div class="glass rv" style="--i:0"><h3>Sent to Ateva</h3><ul><li>A wait started</li><li>Which tool it was</li><li>The card was shown</li><li>For how long</li></ul></div>
+      <div class="glass never rv" style="--i:1"><h3>Never sent</h3><ul><li style="--i:0"><span>Your prompts</span></li><li style="--i:1"><span>Your code</span></li><li style="--i:2"><span>Terminal output</span></li><li style="--i:3"><span>File and repo names</span></li></ul></div>
+    </div>
+  </div>
+</section>
+
+<section class="sponsors">
+  <div class="orbs"><div class="orb o-c1 o-s1" data-par="-.1"></div><div class="orb o-c4 o-s2" data-par=".05"></div></div>
+  <div class="in grid">
+    <div>
+      <h2 class="rv">Reach developers while their agent works.</h2>
+      <p class="lede rv" style="--i:1">One card per wait, clearly labelled, counted only once it has actually been on screen. Founding sponsors can join the waitlist now. Nothing is billed during the beta.</p>
+      <a class="btn rv" style="--i:2">Join the sponsor waitlist</a>
+    </div>
+    <div class="slots">
+      <div class="card glass rv" style="--i:1"><strong>Tidewater CI</strong>2,000 free build minutes a month for open-source repos.<div class="row"><span>Sponsored</span><span>on screen 5.2s</span></div></div>
+      <div class="card glass empty rv" style="--i:2"><strong>Your product</strong>One line, one link, one clear label.<div class="row"><span>Sponsored</span><span>—</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="close">
+  <div class="in">
+    <div class="panel glass rv">
+      <h2>Your next wait could be <span class="clock" data-clock2>0:00</span> well spent.</h2>
+      <a class="btn">Join the beta</a>
+    </div>
+    <div class="fine"><span>Private beta: measuring delivery only. No rewards and no campaign billing yet. Tidewater CI is an example sponsor.</span><span>Privacy · Terms · Status</span></div>
+  </div>
+</section>
+</main>
+
+
+<script>
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Headline words rise in one after another.
+(() => {
+  const h = document.querySelector('[data-split]');
+  let i = 0;
+  [...h.childNodes].forEach(n => {
+    if (n.nodeType === 3) {
+      const frag = document.createDocumentFragment();
+      n.textContent.split(/(\s+)/).forEach(part => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.append(part); return; }
+        const s = document.createElement('span'); s.className = 'w'; s.textContent = part; s.style.animationDelay = (i++ * 40) + 'ms'; frag.append(s);
+      });
+      n.replaceWith(frag);
+    } else { n.classList.add('w'); n.style.animationDelay = (i++ * 40) + 'ms'; }
+  });
+})();
+
+// One clock: timer, agent status and card stay in step.
+(() => {
+  const hero = document.getElementById('hero');
+  const clock = hero.querySelector('[data-clock]'), st = hero.querySelector('[data-st]'), card = hero.querySelector('[data-card]');
+  const clock2 = document.querySelector('[data-clock2]');
+  const words = ['Working', 'Reading 14 files', 'Running tests', 'Writing a fix'];
+  let s = 0;
+  const tick = () => {
+    const shown = Math.min(s, 12), done = s >= 12;
+    clock.textContent = clock2.textContent = '0:' + String(shown).padStart(2, '0');
+    st.textContent = done ? '✓ Done. 3 files changed.' : words[Math.floor(s / 3) % words.length] + '…';
+    st.classList.toggle('done', done);
+    card.classList.toggle('show', s >= 1 && s <= 11);
+    s = s >= 15 ? 0 : s + 1;
+  };
+  tick(); setInterval(tick, 1000);
+})();
+
+// Reveal on scroll.
+(() => {
+  const els = document.querySelectorAll('.rv');
+  if (reduce) { els.forEach(e => e.classList.add('on')); return; }
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('on'); io.unobserve(e.target); } }), { threshold: .18, rootMargin: '0px 0px -8% 0px' });
+  els.forEach(e => io.observe(e));
+})();
+
+// Glass nav once the page moves; colour fields drift at different speeds.
+(() => {
+  const nav = document.querySelector('[data-nav]');
+  const par = [...document.querySelectorAll('[data-par]')];
+  let ticking = false;
+  const update = () => {
+    const y = scrollY;
+    nav.classList.toggle('stuck', y > 24);
+    if (!reduce) par.forEach(el => {
+      const r = el.parentElement.getBoundingClientRect();
+      const off = (r.top + r.height / 2 - innerHeight / 2) * parseFloat(el.dataset.par);
+      el.style.transform = `translate3d(0, ${off.toFixed(1)}px, 0)`;
+    });
+    ticking = false;
+  };
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } }, { passive: true });
+  update();
+})();
+
+// Background picker: the visitor's choice is remembered on this device.
+(() => {
+  const root = document.documentElement;
+  const open = document.querySelector('[data-pick]'), menu = document.querySelector('[data-menu]');
+  const opts = [...menu.querySelectorAll('[role=radio]')];
+  const current = () => root.dataset.theme || 'warm';
+  const mark = () => opts.forEach(o => { const on = o.dataset.t === current(); o.setAttribute('aria-checked', on); o.tabIndex = on ? 0 : -1; });
+  const set = t => {
+    if (t === 'warm') delete root.dataset.theme; else root.dataset.theme = t;
+    try { localStorage.setItem('ateva-palette', t); } catch (e) {}
+    mark();
+  };
+  const toggle = show => {
+    menu.classList.toggle('open', show);
+    open.setAttribute('aria-expanded', show);
+    if (show) opts.find(o => o.tabIndex === 0).focus();
+  };
+  open.onclick = () => toggle(!menu.classList.contains('open'));
+  opts.forEach((o, i) => {
+    o.onclick = () => set(o.dataset.t);
+    o.onkeydown = e => {
+      const step = { ArrowRight: 1, ArrowDown: 3, ArrowLeft: -1, ArrowUp: -3 }[e.key];
+      if (step) { e.preventDefault(); const n = opts[(i + step + opts.length) % opts.length]; set(n.dataset.t); n.focus(); }
+      if (e.key === 'Escape') { toggle(false); open.focus(); }
+    };
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.picker')) toggle(false); });
+  // Follow the system setting until the visitor picks something themselves.
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    let saved = null; try { saved = localStorage.getItem('ateva-palette'); } catch (err) {}
+    if (!saved) { if (e.matches) root.dataset.theme = 'midnight'; else delete root.dataset.theme; mark(); }
+  });
+  mark();
+})();
+</script>
+</body>
+</html>

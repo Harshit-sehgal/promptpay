@@ -1,75 +1,42 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
-import Script from 'next/script';
 import './globals.css';
 import ConsentRePrompt from '@/components/consent-reprompt';
 import CookieConsent from '@/components/cookie-consent';
 import SandboxBanner from '@/components/sandbox-banner';
 import SiteFooter from '@/components/site-footer';
 import { SkipLink } from '@/components/skip-link';
+import { paletteBootstrapScript } from '@/lib/palette';
 
 import { Providers } from './providers';
 
-const inter = localFont({
-  src: [
-    { path: '../../public/fonts/inter-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/inter-500.ttf', weight: '500', style: 'normal' },
-    { path: '../../public/fonts/inter-600.ttf', weight: '600', style: 'normal' },
-    { path: '../../public/fonts/inter-700.ttf', weight: '700', style: 'normal' },
-  ],
-  variable: '--font-inter',
+const interTight = localFont({
+  src: [{ path: '../../public/fonts/inter-tight-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-display',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
-const instrumentSerif = localFont({
-  src: [
-    { path: '../../public/fonts/instrument-serif-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/instrument-serif-400-italic.ttf', weight: '400', style: 'italic' },
-  ],
-  variable: '--font-serif',
+const geist = localFont({
+  src: [{ path: '../../public/fonts/geist-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-ui',
   display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 });
 
-const jetbrainsMono = localFont({
-  src: [
-    { path: '../../public/fonts/jetbrains-mono-400.ttf', weight: '400', style: 'normal' },
-    { path: '../../public/fonts/jetbrains-mono-500.ttf', weight: '500', style: 'normal' },
-  ],
-  variable: '--font-mono',
+const geistMono = localFont({
+  src: [{ path: '../../public/fonts/geist-mono-var.ttf', weight: '100 900', style: 'normal' }],
+  variable: '--font-utility',
   display: 'swap',
+  fallback: ['ui-monospace', 'monospace'],
 });
-
-const themeBootstrapScript = `
-(() => {
-  try {
-    const stored = window.localStorage.getItem('ateva-landing-theme');
-    const resolved = stored === 'dark' || stored === 'light' ? stored : 'light';
-    if (resolved) {
-      document.documentElement.dataset.landingTheme = resolved;
-      document.documentElement.classList.toggle('dark', resolved === 'dark');
-    }
-    if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      document.documentElement.dataset.landingMotion = 'enabled';
-    }
-  } catch {
-    document.documentElement.dataset.landingTheme = 'light';
-    document.documentElement.classList.remove('dark');
-  }
-})();
-`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://ateva.vercel.app'),
   title: 'Ateva — delivery verification for AI-agent apps',
   description:
     'Ateva gives integrated AI-agent apps a clearly labelled sponsor surface during eligible waits and verifies delivery. Private beta; rewards and campaign billing remain disabled.',
-  keywords: [
-    'AI wait time',
-    'developer earnings',
-    'developer ads',
-    'privacy-first ads',
-    'paypal payouts',
-  ],
+  keywords: ['AI wait time', 'developer ads', 'privacy-first ads'],
   openGraph: {
     type: 'website',
     siteName: 'Ateva',
@@ -99,12 +66,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       data-scroll-behavior="smooth"
       suppressHydrationWarning
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+      className={`${interTight.variable} ${geist.variable} ${geistMono.variable}`}
     >
+      <head>
+        {/* A plain inline script in <head> runs before first paint. next/script's
+            beforeInteractive is queued until the JS chunks load in the App Router,
+            which painted Warm first and then animated to the stored palette. */}
+        <script
+          id="ateva-theme-bootstrap"
+          dangerouslySetInnerHTML={{ __html: paletteBootstrapScript }}
+        />
+      </head>
       <body className="font-sans antialiased">
-        <Script id="ateva-theme-bootstrap" strategy="beforeInteractive">
-          {themeBootstrapScript}
-        </Script>
         <SkipLink />
         <SandboxBanner />
         <Providers>

@@ -63,3 +63,6 @@ start-bridge.sh
 # Local agent tooling
 .claude/
 .freebuff/
+
+# Superpowers brainstorm and SDD scratch
+.superpowers/

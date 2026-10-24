@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { BrandMark } from '@/components/brand-mark';
 import { openCookieSettings } from '@/components/cookie-consent';
 
@@ -19,11 +18,10 @@ function apiDocsUrl(): string | null {
 }
 
 const PRODUCT_LINKS = [
-  ['Product', '/#product'],
-  ['Developers', '/#developers'],
+  ['How it works', '/#how-it-works'],
+  ['Privacy', '/#privacy'],
   ['Sponsors', '/#sponsors'],
   ['Pricing', '/pricing'],
-  ['Trust', '/#trust'],
   ['Comparison', '/comparison'],
 ] as const;
 
@@ -44,67 +42,38 @@ const COMPANY_LINKS = [
   ['Contact', '/contact'],
 ] as const;
 
-const linkClass =
-  'wl-link-u w-fit rounded-sm text-[13px] leading-5 text-surface-600 transition-colors hover:text-surface-950';
-
 export default function SiteFooter() {
-  const pathname = usePathname();
   const docsUrl = apiDocsUrl();
-  const isHome = pathname === '/' || pathname === null;
 
   return (
-    <footer
-      className={`site-footer border-t border-surface-200/80 bg-surface-50 ${isHome ? '' : 'site-footer--compact'}`}
-    >
+    <footer className="site-footer">
       <div className="mx-auto max-w-[1240px] px-5 py-14 sm:px-6 sm:py-16 lg:px-8">
-        <div className="site-footer__lead flex flex-col justify-between gap-8 border-b border-surface-200/80 pb-12 lg:flex-row lg:items-end">
-          <div>
-            <Link
-              href="/"
-              aria-label="Ateva home"
-              className="inline-flex items-center gap-2.5 rounded-full focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-4"
-            >
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-surface-950 text-white">
-                <BrandMark size={16} />
-              </span>
-              <span className="text-[15px] font-semibold tracking-[-0.02em] text-surface-950">
-                Ateva
-              </span>
-            </Link>
-            <p className="mt-5 max-w-sm text-sm leading-6 text-surface-500">
-              Delivery verification for explicitly integrated AI-agent workflows.
-            </p>
-          </div>
-          {isHome ? (
-            <p className="max-w-xl text-balance font-serif text-3xl leading-[1.08] tracking-[-0.025em] text-surface-950 sm:text-4xl lg:text-right">
-              The wait becomes visible.{' '}
-              <em className="font-normal italic text-brand-600">The work stays private.</em>
-            </p>
-          ) : (
-            <p className="site-footer__compact-note max-w-xl text-balance text-sm leading-6 text-surface-500 lg:text-right">
-              Ateva keeps the work in the app and records only the eligible wait.
-            </p>
-          )}
+        <div className="site-footer__lead">
+          <Link href="/" aria-label="Ateva home" className="site-footer__brand">
+            <span className="site-footer__mark">
+              <BrandMark size={16} />
+            </span>
+            <span className="site-footer__wordmark">Ateva</span>
+          </Link>
+          <p className="site-footer__description">
+            Delivery verification for explicitly integrated AI-agent workflows.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-8 py-10 sm:gap-10 lg:grid-cols-[1.4fr_1fr_1.35fr_1fr] lg:gap-12 lg:py-12">
           <div>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
-              Product boundary
-            </p>
-            <p className="mt-4 max-w-[250px] text-[13px] leading-6 text-surface-600">
+            <p className="site-footer__heading">Product boundary</p>
+            <p className="site-footer__note">
               No source-code access. No prompt access. No terminal-output collection.
             </p>
           </div>
 
           <div>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
-              Product
-            </p>
-            <ul className="mt-4 space-y-2.5">
+            <p className="site-footer__heading">Product</p>
+            <ul className="site-footer__list">
               {PRODUCT_LINKS.map(([label, href]) => (
                 <li key={href}>
-                  <Link href={href} className={linkClass}>
+                  <Link href={href} className="site-footer__link">
                     {label}
                   </Link>
                 </li>
@@ -113,13 +82,16 @@ export default function SiteFooter() {
           </div>
 
           <div>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
-              Resources
-            </p>
-            <ul className="mt-4 space-y-2.5">
+            <p className="site-footer__heading">Resources</p>
+            <ul className="site-footer__list">
               {docsUrl && (
                 <li>
-                  <a href={docsUrl} className={linkClass} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={docsUrl}
+                    className="site-footer__link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     API docs
                   </a>
                 </li>
@@ -133,7 +105,7 @@ export default function SiteFooter() {
                       : undefined
                   }
                 >
-                  <Link href={href} className={linkClass}>
+                  <Link href={href} className="site-footer__link">
                     {label}
                   </Link>
                 </li>
@@ -142,13 +114,11 @@ export default function SiteFooter() {
           </div>
 
           <div>
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-surface-400">
-              Company
-            </p>
-            <ul className="mt-4 space-y-2.5">
+            <p className="site-footer__heading">Company</p>
+            <ul className="site-footer__list">
               {COMPANY_LINKS.map(([label, href]) => (
                 <li key={href}>
-                  <Link href={href} className={linkClass}>
+                  <Link href={href} className="site-footer__link">
                     {label}
                   </Link>
                 </li>
@@ -157,13 +127,9 @@ export default function SiteFooter() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-surface-200/80 pt-6 font-mono text-[11px] uppercase tracking-[0.1em] text-surface-400 sm:flex-row sm:items-center sm:justify-between">
+        <div className="site-footer__base">
           <span>© {new Date().getFullYear()} Ateva</span>
-          <button
-            type="button"
-            onClick={openCookieSettings}
-            className="w-fit rounded-full border border-surface-300 px-3.5 py-2 text-surface-600 transition-colors hover:border-surface-500 hover:text-surface-950"
-          >
+          <button type="button" onClick={openCookieSettings} className="site-footer__cookie">
             Cookie settings
           </button>
           <span>Private beta · rewards disabled</span>

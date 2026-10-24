@@ -692,7 +692,27 @@ passing, `node --test scripts/ci-package-contract.test.mjs` 20/20. The
 
 ## Resolved 2026-08-26 — cohesive editorial UI redesign
 
-The web product now uses one deliberate visual system across its public,
+**Superseded on the public site 2026-10-24** (spec
+`docs/superpowers/specs/2026-10-24-homepage-redesign-design.md`). The homepage is
+now "the counter": a live wait timer in the headline over one agent window where
+a labelled sponsored card appears at 0:01 (`src/components/home/`). Type is
+self-hosted Inter Tight 800 for display (`--font-display`, so `font-serif` now
+renders it), Geist for UI and body, and Geist Mono for live values. Six
+background palettes (Warm default, Sunset, Mint, Lavender, Citrus, Midnight) are
+`html[data-palette]` token blocks in `globals.css` mirrored by
+`src/lib/palette.ts`; an inline `<head>` script applies the stored
+`ateva-palette` value before first paint and migrates `ateva-landing-theme=dark`
+to Midnight once. Midnight also sets `html.dark` (and every other palette
+removes it), so the dashboards' `.dark` rules follow the palette. Public and auth pages use frosted glass over blurred colour
+fields (`src/components/motion/`), a glass header with the palette picker
+(`src/components/palette-picker.tsx`, a radiogroup), and the shared footer. Motion is gated on
+`html[data-motion]`: reveals, parallax on the fields only, and under
+`prefers-reduced-motion` everything renders in its final state while the timer
+still ticks. The landing-era `landing-*` CSS and the light/dark toggle on public
+pages are gone; dashboards keep the sidebar toggle and `.dark` until PR 2. The
+original record follows.
+
+The web product then used one deliberate visual system across its public,
 authentication, and dashboard surfaces, informed by the Refero Steep reference
 without copying its analytics product or page composition. The system uses a
 paper-and-ink palette, sienna accent, Instrument Serif display type, restrained
@@ -711,8 +731,8 @@ reserved for actual status.
   waitlist card. The auth routes share a two-panel `AuthShell` that explains the
   privacy boundary while preserving compact mobile forms. Dashboard sidebars
   and supporting UI primitives use the same token and shape language.
-- Local Instrument Serif files back both the web display face and the generated
-  OpenGraph card. Motion remains optional under `prefers-reduced-motion`, focus
+- Local Instrument Serif files backed both the web display face and the generated
+  OpenGraph card (both Inter Tight since 2026-10-24). Motion remains optional under `prefers-reduced-motion`, focus
   treatment stays visible, and the full public/auth axe sweep passes at desktop
   and mobile breakpoints.
 - The accessibility harness now waits for the page-local main landmark instead

@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { PALETTES } from '../lib/palette';
+
 /**
  * Structural guards for `globals.css`.
  *
@@ -32,19 +34,24 @@ describe('globals.css integrity', () => {
   });
 
   it('imports Tailwind and pulls no webfont from a third party', () => {
-    // Fonts are self-hosted through `next/font/local` in `layout.tsx` (Inter,
-    // JetBrains Mono, Instrument Serif). A remote `@import url(fonts.googleapis…)`
+    // Fonts are self-hosted through `next/font/local` in `layout.tsx` (Inter Tight,
+    // Geist, Geist Mono). A remote `@import url(fonts.googleapis…)`
     // would add a render-blocking third-party request the build cannot control.
     expect(css).toMatch(/@import ['"]tailwindcss['"];/);
     expect(css).not.toMatch(/@import\s+url\(/);
   });
 
-  it('has the serif wired as a local font, not merely referenced', () => {
-    // The failure mode this guards: `font-serif` classes shipped while the face
-    // was never loaded, so headings silently fell back to Georgia.
+  it('wires the three self-hosted families used by the design system', () => {
+    // The failure mode this guards: font classes shipped while the face was
+    // never loaded, so text silently fell back to a system font.
     const layout = readFileSync(join(__dirname, '..', 'app', 'layout.tsx'), 'utf8');
-    expect(layout).toMatch(/instrument-serif-400\.ttf/);
-    expect(layout).toMatch(/--font-serif/);
+    for (const file of ['inter-tight-var.ttf', 'geist-var.ttf', 'geist-mono-var.ttf']) {
+      expect(layout).toContain(file);
+    }
+    for (const v of ['--font-display', '--font-ui', '--font-utility']) {
+      expect(layout).toContain(v);
+    }
+    expect(layout).not.toMatch(/instrument-serif|jetbrains-mono/);
   });
 
   it('balances every brace', () => {
@@ -76,12 +83,19 @@ describe('globals.css integrity', () => {
     expect(header).toMatch(/backdrop-blur-xl/);
   });
 
-  it('keeps dark-mode planner values readable in its light input controls', () => {
+  it('no landing-era selectors remain', () => {
+    expect(css).not.toMatch(/\.landing-|data-landing-theme/);
+  });
+
+  it('keeps light-mode dashboard overrides at their original specificity', () => {
+    // These selectors were `html:not(.dark):not([data-landing-theme='dark'])`.
+    // Dropping the second :not() lost a class-level unit, and the light-mode
+    // status colours (`.text-emerald-400` stat values) then lost to
+    // `.app-shell .app-stat-card p:last-child` on source order and turned grey.
+    const bare = css.match(/html:not\(\.dark\)(?!:not\(\[data-palette='midnight'\]\))/g) ?? [];
+    expect(bare).toEqual([]);
     expect(css).toMatch(
-      /html\[data-landing-theme='dark'\][\s\S]*\.landing-page \.landing-planner input\s*\{\s*color: #1d2933 !important;/,
-    );
-    expect(css).toMatch(
-      /html\[data-landing-theme='dark'\][\s\S]*\.landing-planner \.bg-white\s*\{\s*background-color: #ffffff !important;/,
+      /html:not\(\.dark\):not\(\[data-palette='midnight'\]\) \.app-shell \.text-emerald-400/,
     );
   });
 
@@ -92,5 +106,51 @@ describe('globals.css integrity', () => {
     expect(css).toMatch(/\.status-badge__dot\s*\{/);
     expect(css).toMatch(/\.app-stat-card__value\s*\{/);
     expect(css).toMatch(/\.app-shell \.launch-mode-banner\s*\{/);
+  });
+
+  describe('palette token layer', () => {
+    const paletteBlock = (id: string) => {
+      const blocks = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+      const hit = blocks.find(([, selector]) => selector!.includes(`html[data-palette='${id}']`));
+      return hit?.[2] ?? '';
+    };
+
+    it.each(PALETTES)('defines $id page and --c1 inside its html[data-palette] block', (p) => {
+      const block = paletteBlock(p.id);
+      expect(block).toContain(`--page: ${p.page}`);
+      expect(block).toContain(`--c1: ${p.c[0]}`);
+    });
+
+    it.each(PALETTES)('$id ink, copy, quiet and glass match palette.ts', (p) => {
+      // Light palettes inherit these from the Warm block.
+      const block = p.id === 'midnight' ? paletteBlock('midnight') : paletteBlock('warm');
+      const norm = (v: string) => v.replace(/\b0\./g, '.');
+      const read = (name: string) =>
+        norm(new RegExp(`${name}:\\s*([^;]+);`).exec(block)?.[1]?.trim() ?? '');
+      expect(read('--ink')).toBe(norm(p.ink));
+      expect(read('--copy')).toBe(norm(p.copy));
+      expect(read('--quiet')).toBe(norm(p.quiet));
+      expect(read('--glass')).toBe(norm(p.glass));
+    });
+
+    it.each(PALETTES)('$id muted matches palette.ts in its own block', (p) => {
+      expect(paletteBlock(p.id)).toContain(`--muted: ${p.muted};`);
+    });
+
+    it('falls back to the opaque glass where backdrop-filter is unsupported', () => {
+      const m =
+        /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)\s*\{([^{}]+)\{([^{}]*)\}/.exec(
+          css,
+        );
+      expect(m?.[1]).toContain('html[data-palette]');
+      expect(m?.[2]).toMatch(/--glass:\s*var\(--glass-strong\)/);
+    });
+
+    it('sets color-scheme per palette', () => {
+      expect(paletteBlock('midnight')).toMatch(/color-scheme:\s*dark/);
+      for (const p of PALETTES.filter((x) => x.id !== 'midnight')) {
+        expect(paletteBlock(p.id)).toMatch(/color-scheme:\s*light/);
+      }
+    });
   });
 });

@@ -123,6 +123,19 @@ test.describe('Public pages render their real content', () => {
   }
 });
 
+test('homepage anchors used by header and footer all resolve', async ({ page }) => {
+  await page.goto('/');
+  const hrefs = await page
+    .locator('header a[href^="/#"], footer a[href^="/#"]')
+    .evaluateAll((links) => links.map((link) => link.getAttribute('href') ?? ''));
+  expect(hrefs.length, 'header and footer should link to homepage sections').toBeGreaterThan(0);
+
+  for (const href of new Set(hrefs)) {
+    const id = href.slice(2);
+    await expect(page.locator(`#${id}`), `${href} should resolve to one section`).toHaveCount(1);
+  }
+});
+
 test.describe('Legal documents are reachable from the footer', () => {
   // A-087 shipped partly because these pages are linked everywhere but visited
   // by nobody. If a link breaks, the document is effectively unpublished even

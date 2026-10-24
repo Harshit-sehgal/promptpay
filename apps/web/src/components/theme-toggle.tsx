@@ -1,35 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { applyPalette, PALETTE_STORAGE_KEY } from '@/lib/palette';
 
-export const THEME_STORAGE_KEY = 'ateva-landing-theme';
+type ThemePreference = 'light' | 'dark';
 
-export type ThemePreference = 'light' | 'dark';
-
-function readStoredTheme(): ThemePreference | null {
-  try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === 'dark' || stored === 'light' ? stored : null;
-  } catch {
-    return null;
-  }
-}
-
-export function applyTheme(theme: ThemePreference) {
-  document.documentElement.dataset.landingTheme = theme;
-  document.documentElement.classList.toggle('dark', theme === 'dark');
-}
-
+/**
+ * Light/dark switch for the dashboards. It is a two-way shortcut onto the
+ * shared background palette: dark is Midnight, light is Warm. It writes the
+ * same `ateva-palette` setting as the public picker, so `.dark` and Midnight
+ * always agree.
+ */
 export function ThemeToggle() {
   // Keep the first render deterministic so the server markup matches during
-  // hydration. The prepaint bootstrap has already applied the real theme to
-  // the document; the effect below synchronizes this small control immediately
+  // hydration. The prepaint bootstrap has already applied the real palette to
+  // the document; the effect below synchronizes this small control right
   // after hydration without reintroducing a page-level theme flash.
   const [theme, setTheme] = useState<ThemePreference | null>(null);
 
   useEffect(() => {
-    const storedTheme = readStoredTheme();
-    if (storedTheme) applyTheme(storedTheme);
     setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   }, []);
 
@@ -37,11 +26,12 @@ export function ThemeToggle() {
   const nextTheme = isDark ? 'light' : 'dark';
 
   const toggleTheme = () => {
-    applyTheme(nextTheme);
+    const palette = nextTheme === 'dark' ? 'midnight' : 'warm';
+    applyPalette(palette);
     setTheme(nextTheme);
 
     try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      window.localStorage.setItem(PALETTE_STORAGE_KEY, palette);
     } catch {
       // The visual preference still applies when storage is unavailable.
     }

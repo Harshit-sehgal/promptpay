@@ -1,5 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
+
+import { PALETTE_STORAGE_KEY, PALETTES } from '../src/lib/palette';
 
 /**
  * Accessibility smoke tests (WCAG 2.1 AA).
@@ -55,6 +57,48 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
 });
 
+/** Fails on any serious or critical axe violation; lower-impact findings become annotations. */
+async function assertNoBlockingViolations(page: Page, label: string) {
+  const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+
+  // Axe still evaluates every selected WCAG rule. Lower-impact findings are
+  // reported as annotations rather than being hidden through rule suppression.
+  const blocking = results.violations.filter(
+    (v) => v.impact === 'critical' || v.impact === 'serious',
+  );
+  const advisory = results.violations.filter(
+    (v) => v.impact !== 'critical' && v.impact !== 'serious',
+  );
+
+  for (const violation of advisory) {
+    test.info().annotations.push({
+      type: `a11y-${violation.impact ?? 'unknown'}`,
+      description: `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
+    });
+  }
+
+  if (blocking.length > 0) {
+    // Name the offending ELEMENTS, not just the rule. The previous message
+    // reported "color-contrast (serious) - 2 node(s)" and nothing else, which
+    // is not enough to fix anything: the first guess at the culprit
+    // (`text-surface-500`) turned out to measure 4.74:1 and pass. axe already
+    // knows the selector and the measured ratio — printing them turns a
+    // guessing game into a one-line fix.
+    const summary = blocking
+      .map((v) => {
+        const nodes = v.nodes
+          .map(
+            (n) =>
+              `      → ${n.target.join(' ')}\n        ${n.failureSummary?.replace(/\n/g, '\n        ') ?? ''}`,
+          )
+          .join('\n');
+        return `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)\n${nodes}`;
+      })
+      .join('\n  ');
+    throw new Error(`${blocking.length} blocking a11y violation(s) on ${label}:\n  ${summary}`);
+  }
+}
+
 for (const path of PAGES) {
   test(`${path} has no serious or critical WCAG 2.1 AA violations`, async ({ page }) => {
     await page.goto(path, { waitUntil: 'domcontentloaded' });
@@ -68,47 +112,28 @@ for (const path of PAGES) {
     await expect(main).toHaveCount(1);
     await expect(main).toBeVisible();
 
-    const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
-
-    // Axe still evaluates every selected WCAG rule. Lower-impact findings are
-    // reported as annotations rather than being hidden through rule suppression.
-    const blocking = results.violations.filter(
-      (v) => v.impact === 'critical' || v.impact === 'serious',
-    );
-    const advisory = results.violations.filter(
-      (v) => v.impact !== 'critical' && v.impact !== 'serious',
-    );
-
-    for (const violation of advisory) {
-      test.info().annotations.push({
-        type: `a11y-${violation.impact ?? 'unknown'}`,
-        description: `${violation.id}: ${violation.help} (${violation.nodes.length} node(s))`,
-      });
-    }
-
-    if (blocking.length > 0) {
-      // Name the offending ELEMENTS, not just the rule. The previous message
-      // reported "color-contrast (serious) - 2 node(s)" and nothing else, which
-      // is not enough to fix anything: the first guess at the culprit
-      // (`text-surface-500`) turned out to measure 4.74:1 and pass. axe already
-      // knows the selector and the measured ratio — printing them turns a
-      // guessing game into a one-line fix.
-      const summary = blocking
-        .map((v) => {
-          const nodes = v.nodes
-            .map(
-              (n) =>
-                `      → ${n.target.join(' ')}\n        ${n.failureSummary?.replace(/\n/g, '\n        ') ?? ''}`,
-            )
-            .join('\n');
-          return `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)\n${nodes}`;
-        })
-        .join('\n  ');
-      throw new Error(`${blocking.length} blocking a11y violation(s) on ${path}:\n  ${summary}`);
-    }
+    await assertNoBlockingViolations(page, path);
 
     await expect(main).toHaveCount(1);
   });
+}
+
+for (const { id } of PALETTES) {
+  for (const path of ['/', '/legal/data-retention', '/pricing']) {
+    test(`every palette passes axe: ${id} on ${path}`, async ({ page }) => {
+      await page.addInitScript(([key, palette]) => window.localStorage.setItem(key, palette), [
+        PALETTE_STORAGE_KEY,
+        id,
+      ] as const);
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      // The palette is applied before first paint; also let any colour
+      // transition settle so axe never samples a frame between two palettes.
+      await expect(page.locator('html')).toHaveAttribute('data-palette', id);
+      await expect(page.locator('main#main-content')).toBeVisible();
+      await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+      await assertNoBlockingViolations(page, `${path} (${id})`);
+    });
+  }
 }
 
 test('pages have a lang attribute on <html>', async ({ page }) => {
@@ -141,62 +166,4 @@ test('skip link bypasses navigation and enters the page-local main landmark', as
 
   await page.keyboard.press('Tab');
   await expect(main.getByRole('link').first()).toBeFocused();
-});
-
-test('homepage planner controls have accessible names in both modes', async ({ page }) => {
-  await page.goto('/');
-
-  // Developer mode is a preset radiogroup plus two typed number fields and a
-  // switch. Both modes have now been through two control changes — sliders
-  // whose output never moved, then steppers — so the names are asserted here
-  // rather than left to drift with the widget of the day.
-  await expect(page.getByRole('radiogroup', { name: 'Typical day' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Typical' })).toBeVisible();
-
-  for (const name of ['Eligible waits per day', 'Units per hour you allow']) {
-    await expect(page.getByRole('spinbutton', { name })).toBeVisible();
-  }
-
-  await expect(page.getByRole('switch', { name: 'Quiet hours' })).toBeVisible();
-
-  await page.getByRole('button', { name: 'For advertisers' }).click();
-  for (const name of ['Campaign budget', 'Target CPM', 'Expected click-through rate']) {
-    await expect(page.getByRole('spinbutton', { name })).toBeVisible();
-  }
-});
-
-test('homepage planner recomputes instead of showing a fixed sentence', async ({ page }) => {
-  await page.goto('/');
-
-  const output = page.getByText('signals a day').locator('..');
-  const before = await output.innerText();
-
-  // The regression this guards: the original component's three sliders left the
-  // output identical no matter what was moved.
-  await page.getByRole('radio', { name: 'Heavy' }).click();
-  await expect(output).not.toHaveText(before);
-
-  // The platform's own ceiling must bind, not the visitor's imagination.
-  await expect(
-    page.getByText(/eligible waits would pass unused|nothing is turned away/),
-  ).toBeVisible();
-
-  // A typed value must drive the result too, not just the presets.
-  const waits = page.getByRole('spinbutton', { name: 'Eligible waits per day' });
-  await waits.fill('20');
-  await expect(output).toContainText('20');
-
-  // Out of range is corrected on blur rather than accepted or silently ignored.
-  await waits.fill('9999');
-  await waits.blur();
-  await expect(waits).toHaveValue('500');
-
-  // The advertiser side is a calculator as well: typing a budget moves reach.
-  await page.getByRole('button', { name: 'For advertisers' }).click();
-  // Anchor on the result caption, not the unit — the unit is also used in the
-  // Target CPM hint and is deliberately labelled as a model rather than data.
-  const reach = page.getByText('Modelled reach').locator('..');
-  const reachBefore = await reach.innerText();
-  await page.getByRole('spinbutton', { name: 'Campaign budget' }).fill('4000');
-  await expect(reach).not.toHaveText(reachBefore);
 });
