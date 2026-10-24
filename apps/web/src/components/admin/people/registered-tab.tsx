@@ -176,7 +176,7 @@ export function RegisteredTab({
         aria-busy={loading}
         className="dash-panel dash-panel--flush"
       >
-        {loading && !data ? (
+        {error && !data ? null : loading && !data ? (
           <p className="py-12 text-center text-sm text-[var(--muted)]" role="status">
             Loading registered users.
           </p>

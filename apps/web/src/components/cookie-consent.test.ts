@@ -73,6 +73,23 @@ describe('CookieConsent version handling', () => {
     expect(postMock.mock.calls[0]?.[1]).not.toHaveProperty('version');
   });
 
+  it('withdraws an earlier acceptance when declining while the version cannot be loaded', async () => {
+    window.localStorage.setItem(
+      COOKIE_CONSENT_STORAGE_KEY,
+      JSON.stringify({ choice: 'accepted', at: '2026-10-01T00:00:00.000Z', version: '2026-07-01' }),
+    );
+    vi.mocked(api.get).mockRejectedValue(new Error('Unavailable'));
+
+    render(createElement(CookieConsent));
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Cookie consent' })).toBeNull(),
+    );
+    const stored = JSON.parse(window.localStorage.getItem(COOKIE_CONSENT_STORAGE_KEY) ?? '{}');
+    expect(stored).toMatchObject({ choice: 'declined', version: '2026-07-01' });
+  });
+
   it('lets a visitor decline for this session when the required version cannot be loaded', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('Unavailable'));
 

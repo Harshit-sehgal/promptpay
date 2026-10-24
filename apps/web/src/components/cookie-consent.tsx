@@ -137,6 +137,10 @@ export default function CookieConsent() {
       if (choice === 'declined') {
         disableClientMonitoring();
         rememberSessionDecline();
+        // Withdraw an earlier acceptance too. Keeping its version means the
+        // banner asks again only if the policy version has since changed.
+        const prior = readStoredCookieConsent();
+        if (prior?.choice === 'accepted') writeStoredCookieConsent('declined', prior.version);
         setVisible(false);
         return;
       }

@@ -170,7 +170,7 @@ export class PeopleService {
       this.prisma.user.findMany({
         where,
         select: USER_ROW_SELECT,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take,
         skip,
       }),
@@ -196,7 +196,7 @@ export class PeopleService {
         },
         consents: {
           select: { purpose: true, version: true, granted: true, createdAt: true },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: DETAIL_CHILD_CAP,
         },
         devices: {
@@ -280,7 +280,7 @@ export class PeopleService {
       this.prisma.advertiserWaitlist.findMany({
         where,
         select: WAITLIST_ROW_SELECT,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take,
         skip,
       }),
@@ -303,11 +303,17 @@ export class PeopleService {
       return (await this.toWaitlistRows([target]))[0];
     }
 
-    const updated = await this.prisma.advertiserWaitlist.update({
-      where: { id },
+    // Conditional write: if another admin changed the row since the read,
+    // the count is 0 and nothing is audited against a stale before-snapshot.
+    const { count } = await this.prisma.advertiserWaitlist.updateMany({
+      where: { id, status: target.status },
       data: { status: status as AdvertiserWaitlistStatus },
+    });
+    const updated = await this.prisma.advertiserWaitlist.findUniqueOrThrow({
+      where: { id },
       select: WAITLIST_ROW_SELECT,
     });
+    if (count === 0) return (await this.toWaitlistRows([updated]))[0];
     await this.audit.log({
       actorId,
       actorRole,
@@ -339,7 +345,7 @@ export class PeopleService {
       const records = await this.prisma.user.findMany({
         where: this.buildUsersWhere(filter),
         select: USER_ROW_SELECT,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: EXPORT_CAP + 1,
       });
       truncated = records.length > EXPORT_CAP;
@@ -348,20 +354,35 @@ export class PeopleService {
       const records = await this.prisma.advertiserWaitlist.findMany({
         where: this.buildWaitlistWhere(filter),
         select: WAITLIST_ROW_SELECT,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: EXPORT_CAP + 1,
       });
       truncated = records.length > EXPORT_CAP;
       rows = await this.toWaitlistRows(records.slice(0, EXPORT_CAP));
     }
 
-    await this.audit.log({
+    // Bulk PII leaves the system here, so the evidence must land before the
+    // data does. Filters are recorded without the free-text search term.
+    await this.audit.logStrict({
       actorId,
       actorRole,
       action: 'admin_exported_people',
       targetType: 'people_export',
       targetId: kind,
-      afterSnap: { kind, rows: rows.length },
+      afterSnap: {
+        kind,
+        rows: rows.length,
+        truncated,
+        filters: {
+          role: filter.role ?? null,
+          status: filter.status ?? null,
+          country: filter.country ?? null,
+          verified: filter.verified ?? null,
+          from: filter.from ?? null,
+          to: filter.to ?? null,
+          search: Boolean(filter.search?.trim()),
+        },
+      },
     });
     return { rows, truncated };
   }
@@ -458,7 +479,9 @@ export class PeopleService {
     if (records.length > 0) {
       const emails = [...new Set(records.map((r) => r.email.toLowerCase()))];
       const users = await this.prisma.user.findMany({
-        where: { OR: emails.map((e) => ({ email: { equals: e, mode: 'insensitive' as const } })) },
+        // Emails are stored lowercased on both sides (auth canonicalises,
+        // the waitlist lowercases), so `in` can use the unique email index.
+        where: { email: { in: emails } },
         select: { id: true, email: true },
       });
       for (const u of users) byEmail.set(u.email.toLowerCase(), u.id);
@@ -514,7 +537,14 @@ function dateRange(from?: string, to?: string): Prisma.DateTimeFilter | undefine
   if (!from && !to) return undefined;
   const range: Prisma.DateTimeFilter = {};
   if (from) range.gte = parseDay(from, 'from');
-  if (to) range.lt = new Date(parseDay(to, 'to').getTime() + DAY_MS);
+  if (to) {
+    const end = new Date(parseDay(to, 'to').getTime() + DAY_MS);
+    if (Number.isNaN(end.getTime())) throw new BadRequestException('to is out of range');
+    range.lt = end;
+  }
+  if (range.gte && range.lt && range.gte >= range.lt) {
+    throw new BadRequestException('from must not be after to');
+  }
   return range;
 }
 

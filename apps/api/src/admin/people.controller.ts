@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -9,8 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser, Roles } from '../common/decorators';
+import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { parsePaginationParam } from '../common/utils/pagination-query';
@@ -23,7 +26,8 @@ import { PeopleService } from './people.service';
  */
 @ApiTags('Admin')
 @Controller('admin/people')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// AdminMfaStepUpGuard only gates writes, matching POST /admin/users/:id/status.
+@UseGuards(JwtAuthGuard, RolesGuard, AdminMfaStepUpGuard)
 @Roles('admin', 'super_admin')
 export class PeopleController {
   constructor(private readonly service: PeopleService) {}
@@ -37,19 +41,27 @@ export class PeopleController {
   @ApiOperation({ summary: 'List registered users' })
   @Get('users')
   listUsers(
-    @Query('search') search?: string,
-    @Query('role') role?: string,
-    @Query('status') status?: string,
-    @Query('country') country?: string,
-    @Query('verified') verified?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query('search') search?: unknown,
+    @Query('role') role?: unknown,
+    @Query('status') status?: unknown,
+    @Query('country') country?: unknown,
+    @Query('verified') verified?: unknown,
+    @Query('from') from?: unknown,
+    @Query('to') to?: unknown,
+    @Query('page') page?: unknown,
+    @Query('limit') limit?: unknown,
   ) {
     return this.service.listUsers(
-      { search, role, status, country, verified, from, to },
-      { page: parsePaginationParam(page), limit: parsePaginationParam(limit) },
+      {
+        search: one(search, 'search'),
+        role: one(role, 'role'),
+        status: one(status, 'status'),
+        country: one(country, 'country'),
+        verified: one(verified, 'verified'),
+        from: one(from, 'from'),
+        to: one(to, 'to'),
+      },
+      pageOpts(page, limit),
     );
   }
 
@@ -62,15 +74,19 @@ export class PeopleController {
   @ApiOperation({ summary: 'List advertiser waitlist entries' })
   @Get('waitlist')
   listWaitlist(
-    @Query('search') search?: string,
-    @Query('status') status?: string,
-    @Query('country') country?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query('search') search?: unknown,
+    @Query('status') status?: unknown,
+    @Query('country') country?: unknown,
+    @Query('page') page?: unknown,
+    @Query('limit') limit?: unknown,
   ) {
     return this.service.listWaitlist(
-      { search, status, country },
-      { page: parsePaginationParam(page), limit: parsePaginationParam(limit) },
+      {
+        search: one(search, 'search'),
+        status: one(status, 'status'),
+        country: one(country, 'country'),
+      },
+      pageOpts(page, limit),
     );
   }
 
@@ -86,27 +102,46 @@ export class PeopleController {
   }
 
   @ApiOperation({ summary: 'Export people (JSON, capped at 10 000 rows)' })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Get('export')
   exportPeople(
     @CurrentUser('id') actorId: string,
     @CurrentUser('role') actorRole: string,
-    @Query('kind') kind?: string,
-    @Query('search') search?: string,
-    @Query('role') role?: string,
-    @Query('status') status?: string,
-    @Query('country') country?: string,
-    @Query('verified') verified?: string,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
+    @Query('kind') kind?: unknown,
+    @Query('search') search?: unknown,
+    @Query('role') role?: unknown,
+    @Query('status') status?: unknown,
+    @Query('country') country?: unknown,
+    @Query('verified') verified?: unknown,
+    @Query('from') from?: unknown,
+    @Query('to') to?: unknown,
   ) {
-    return this.service.exportPeople(actorId, actorRole, kind ?? '', {
-      search,
-      role,
-      status,
-      country,
-      verified,
-      from,
-      to,
+    return this.service.exportPeople(actorId, actorRole, one(kind, 'kind') ?? '', {
+      search: one(search, 'search'),
+      role: one(role, 'role'),
+      status: one(status, 'status'),
+      country: one(country, 'country'),
+      verified: one(verified, 'verified'),
+      from: one(from, 'from'),
+      to: one(to, 'to'),
     });
   }
+}
+
+/**
+ * These params are bare query strings, so the global ValidationPipe never
+ * sees them. A repeated key (`?search=a&search=b`) arrives as an array and
+ * would otherwise reach `.trim()` and fail as a 500.
+ */
+function one(value: unknown, name: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') throw new BadRequestException(`${name} must be a single value`);
+  return value;
+}
+
+function pageOpts(page: unknown, limit: unknown) {
+  return {
+    page: parsePaginationParam(one(page, 'page')),
+    limit: parsePaginationParam(one(limit, 'limit')),
+  };
 }

@@ -336,6 +336,32 @@ Query: status, trust_level, country, search.
 
 Response: user list.
 
+### GET /admin/people/summary
+
+Auth: admin or super_admin JWT. Response: registered-user and waitlist counts (totals, by role/status, last 7 and 30 days) and a zero-filled 30-day `signupsByDay` series.
+
+### GET /admin/people/users
+
+Query: search, role, status, country, verified (`email` or `unverified`), from, to, page, limit (max 100). Each key must appear once.
+
+Response: paginated people rows with verification flags, two-factor, advertiser company, device count and last seen. Never returns secrets or pseudonyms.
+
+### GET /admin/people/users/:id
+
+Response: full person detail including advertiser profile, consents, devices and referrals.
+
+### GET /admin/people/waitlist
+
+Query: search, status, country, page, limit. Response: paginated advertiser waitlist rows, each with `registeredUserId` when that email has an account.
+
+### POST /admin/people/waitlist/:id/status
+
+Request: `{ "status": "pending" | "invited" | "onboarded" | "declined" }`. Requires recent two-factor in production (admin step-up). The change is conditional on the status read, and audit-logged as `admin_set_waitlist_status` without the email.
+
+### GET /admin/people/export
+
+Query: kind (`users` or `waitlist`) plus that list's filters. Response: `{ rows, truncated }`, at most 10 000 rows. Throttled to 10 a minute and strictly audit-logged as `admin_exported_people` (filters recorded, free-text search reduced to a flag).
+
 ### GET /admin/advertisers
 
 Response: advertiser list and review status.

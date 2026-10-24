@@ -449,49 +449,6 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   background: rgb(88 92 99);
 }
 
-.theme-toggle {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid rgb(45 59 70 / 0.16);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.72);
-  padding: 0.375rem 0.7rem 0.375rem 0.45rem;
-  color: #52616d;
-  font-family: var(--font-utility), ui-monospace, monospace;
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-transform: uppercase;
-  transition:
-    border-color 0.25s ease,
-    background-color 0.25s ease,
-    color 0.25s ease;
-}
-
-.theme-toggle:hover {
-  border-color: rgb(45 59 70 / 0.34);
-  background: #ffffff;
-  color: #1d2933;
-}
-
-.theme-toggle__icon {
-  display: grid;
-  width: 1.625rem;
-  height: 1.625rem;
-  place-items: center;
-  border-radius: 999px;
-  background: #edf1f4;
-  color: #445361;
-}
-
-.theme-toggle__icon svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
 /* -------------------------------------------------------------------------
    Final component contracts
 
@@ -754,11 +711,6 @@ body {
   border-inline: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-}
-
-.theme-toggle__icon {
-  background: transparent !important;
-  color: currentColor !important;
 }
 
 /* Operational mode: compact, tonal, and predictable. Repeated metric cards
@@ -2749,8 +2701,10 @@ html[data-palette='midnight'] {
   display: flex;
 }
 
-.dash-rail:not([data-open]) .dash-rail__foot > :not(.dash-rail__foot-links) {
-  display: none;
+@media (max-width: 1023.98px) {
+  .dash-rail:not([data-open]) .dash-rail__foot > :not(.dash-rail__foot-links) {
+    display: none;
+  }
 }
 
 .dash-rail__group {

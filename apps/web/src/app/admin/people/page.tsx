@@ -36,6 +36,14 @@ function PeopleView() {
     };
   }, [summaryAttempt]);
 
+  // Follow navigations that change the query from outside this view, such as
+  // the sidebar link back to the bare page.
+  const paramString = searchParams.toString();
+  useEffect(() => {
+    const next = parseQuery(new URLSearchParams(paramString));
+    setQuery((current) => (serialiseQuery(current) === serialiseQuery(next) ? current : next));
+  }, [paramString]);
+
   // Mirror the view into the address bar so it can be shared.
   useEffect(() => {
     const qs = serialiseQuery(query);
@@ -51,6 +59,7 @@ function PeopleView() {
   );
   const switchTab = (tab: PeopleTab) => setQuery({ ...EMPTY_QUERY, tab });
   const refreshSummary = useCallback(() => setSummaryAttempt((n) => n + 1), []);
+  const closeDetail = useCallback(() => setOpenUserId(null), []);
 
   const users = summary?.users;
   const waitlist = summary?.waitlist;
@@ -161,11 +170,7 @@ function PeopleView() {
         />
       )}
 
-      <PersonDetailDialog
-        userId={openUserId}
-        onClose={() => setOpenUserId(null)}
-        onOpenUser={setOpenUserId}
-      />
+      <PersonDetailDialog userId={openUserId} onClose={closeDetail} onOpenUser={setOpenUserId} />
     </>
   );
 }

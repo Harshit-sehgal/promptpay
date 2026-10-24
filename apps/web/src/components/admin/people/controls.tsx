@@ -25,6 +25,15 @@ export function DebouncedInput({
   className?: string;
 }) {
   const [text, setText] = useState(value);
+  // Follow outside resets (tab switch, back to the bare URL) without
+  // clobbering what the user is typing between commits.
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value !== lastValue.current) {
+      lastValue.current = value;
+      setText(value);
+    }
+  }, [value]);
   const commit = useRef(onCommit);
   useEffect(() => {
     commit.current = onCommit;
@@ -160,7 +169,8 @@ export function downloadCsv(filename: string, csv: string): void {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoking in the same task can cancel the download in Safari and Firefox.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function userStatusTone(status: string): Tone {

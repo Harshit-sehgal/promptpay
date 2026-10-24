@@ -23,6 +23,31 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-10-25 — dashboard redesign and the admin People CRM
+
+The developer, advertiser and admin dashboards now follow the homepage
+palettes (`html[data-palette]`, Midnight sets `html.dark`) in a flat "ledger"
+style: solid panels with hairline borders, a solid palette-colour rail with
+ink text and the palette picker in its foot, a heavy rule under each page
+title, and stat rows drawn as one ruled strip. Glass, blur, eyebrows and
+decorative arrows are gone from the dashboards. Design record:
+`docs/superpowers/specs/2026-10-24-dashboard-redesign-design.md`. Below
+1024px the rail collapses to a menu; Sign out and Back to home stay visible.
+
+`/admin/people` is the operator CRM over registered users and the advertiser
+waitlist (contract: `docs/superpowers/specs/2026-10-25-people-crm-design.md`,
+endpoints in `docs/04-api-specification.md`). The API (`apps/api/src/admin/people.*`)
+uses explicit selects that never include secrets or pseudonyms, rejects
+repeated query keys with 400, gates the waitlist status write behind
+`AdminMfaStepUpGuard`, writes it conditionally on the status it read, and
+strictly audits CSV exports (10 a minute, 10 000 rows max). No migration was
+added: notes and tags are deferred because they need a table.
+
+Also: the cookie banner can be declined for the session when the consent
+version cannot be loaded (and that decline withdraws an earlier acceptance),
+`formatNumber`/`formatPercent` render 0 instead of NaN, and the advertiser
+billing route uses the shared `RouteSkeleton`.
+
 ## Resolved 2026-09-09 — private-beta readiness sweep: PR stack landed, dependency advisories, scenario time bomb, beta:verify
 
 The private-beta readiness pass reconciled the repository state and landed
@@ -709,8 +734,9 @@ fields (`src/components/motion/`), a glass header with the palette picker
 `html[data-motion]`: reveals, parallax on the fields only, and under
 `prefers-reduced-motion` everything renders in its final state while the timer
 still ticks. The landing-era `landing-*` CSS and the light/dark toggle on public
-pages are gone. The dashboards keep the sidebar toggle and `.dark` and get a
-plain light/dark version: no fields, no picker, no glass. Their `--app-*` tokens
+pages are gone. The dashboards then kept the sidebar toggle and `.dark` with a
+plain light/dark version (superseded 2026-10-25: they now follow the palettes,
+see the top of this file). Their `--app-*` tokens
 are fixed Warm literals, with Midnight values under `html.dark`, so a public
 light palette never tints the app shell. The older `--ateva-refine-*` and
 `--ateva-*-final` layers are now references to `--app-*`, not colours of their

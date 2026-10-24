@@ -30,19 +30,22 @@ function makeService() {
     groupBy: vi.fn().mockResolvedValue([]),
     findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn(),
-    update: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
   };
   const device = { groupBy: vi.fn().mockResolvedValue([]) };
   const fraudFlag = { count: vi.fn().mockResolvedValue(0) };
   const auditLog = vi.fn().mockResolvedValue(undefined);
+  const auditStrict = vi.fn().mockResolvedValue(undefined);
   const prisma = { user, advertiserWaitlist, device, fraudFlag } as unknown as PrismaService;
-  const audit = { log: auditLog } as unknown as AuditService;
+  const audit = { log: auditLog, logStrict: auditStrict } as unknown as AuditService;
   return {
     service: new PeopleService(prisma, audit),
     user,
     advertiserWaitlist,
     device,
     fraudFlag,
+    auditStrict,
     auditLog,
   };
 }
@@ -233,9 +236,13 @@ describe('PeopleService', () => {
     it('audits the change with before/after and no email', async () => {
       const { service, advertiserWaitlist, auditLog } = makeService();
       advertiserWaitlist.findUnique.mockResolvedValue(WL_RECORD);
-      advertiserWaitlist.update.mockResolvedValue({ ...WL_RECORD, status: 'invited' });
+      advertiserWaitlist.findUniqueOrThrow.mockResolvedValue({ ...WL_RECORD, status: 'invited' });
       const row = await service.setWaitlistStatus('admin-1', 'admin', 'wl-1', 'invited');
       expect(row.status).toBe('invited');
+      expect(advertiserWaitlist.updateMany).toHaveBeenCalledWith({
+        where: { id: 'wl-1', status: 'pending' },
+        data: { status: 'invited' },
+      });
       expect(auditLog).toHaveBeenCalledTimes(1);
       const entry = auditLog.mock.calls[0][0];
       expect(entry).toMatchObject({
@@ -255,7 +262,17 @@ describe('PeopleService', () => {
       advertiserWaitlist.findUnique.mockResolvedValue(WL_RECORD);
       const row = await service.setWaitlistStatus('admin-1', 'admin', 'wl-1', 'pending');
       expect(row.id).toBe('wl-1');
-      expect(advertiserWaitlist.update).not.toHaveBeenCalled();
+      expect(advertiserWaitlist.updateMany).not.toHaveBeenCalled();
+      expect(auditLog).not.toHaveBeenCalled();
+    });
+
+    it('does not audit when another admin changed the row first', async () => {
+      const { service, advertiserWaitlist, auditLog } = makeService();
+      advertiserWaitlist.findUnique.mockResolvedValue(WL_RECORD);
+      advertiserWaitlist.updateMany.mockResolvedValue({ count: 0 });
+      advertiserWaitlist.findUniqueOrThrow.mockResolvedValue({ ...WL_RECORD, status: 'declined' });
+      const row = await service.setWaitlistStatus('admin-1', 'admin', 'wl-1', 'invited');
+      expect(row.status).toBe('declined');
       expect(auditLog).not.toHaveBeenCalled();
     });
 
@@ -313,30 +330,42 @@ describe('PeopleService', () => {
   });
 
   describe('exportPeople', () => {
-    it('caps at 10000, flags truncation, and audits kind + row count only', async () => {
-      const { service, advertiserWaitlist, auditLog } = makeService();
+    it('caps at 10000, flags truncation, and audits strictly without PII', async () => {
+      const { service, advertiserWaitlist, auditStrict: auditLog } = makeService();
       const many = Array.from({ length: 10_001 }, (_, i) => ({ ...WL_RECORD, id: `wl-${i}` }));
       advertiserWaitlist.findMany.mockResolvedValueOnce(many);
-      const res = await service.exportPeople('admin-1', 'admin', 'waitlist', {});
+      const res = await service.exportPeople('admin-1', 'admin', 'waitlist', {
+        search: 'someone@example.com',
+      });
       expect(advertiserWaitlist.findMany.mock.calls[0][0].take).toBe(10_001);
       expect(res.rows).toHaveLength(10_000);
       expect(res.truncated).toBe(true);
       expect(auditLog).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'admin_exported_people',
-          afterSnap: { kind: 'waitlist', rows: 10_000 },
+          afterSnap: expect.objectContaining({
+            kind: 'waitlist',
+            rows: 10_000,
+            truncated: true,
+            filters: expect.objectContaining({ search: true }),
+          }),
         }),
       );
       expect(JSON.stringify(auditLog.mock.calls[0][0])).not.toContain('example.com');
     });
 
     it('exports users with the list row shape and not truncated', async () => {
-      const { service, user, auditLog } = makeService();
+      const { service, user, auditStrict: auditLog } = makeService();
       user.findMany.mockResolvedValueOnce([userRecord('u1')]);
       const res = await service.exportPeople('admin-1', 'admin', 'users', { role: 'developer' });
       expect(res.truncated).toBe(false);
       expect(res.rows).toHaveLength(1);
-      expect(auditLog.mock.calls[0][0].afterSnap).toEqual({ kind: 'users', rows: 1 });
+      expect(auditLog.mock.calls[0][0].afterSnap).toMatchObject({
+        kind: 'users',
+        rows: 1,
+        truncated: false,
+        filters: { role: 'developer', search: false },
+      });
     });
   });
 
@@ -346,7 +375,7 @@ describe('PeopleService', () => {
       user.findMany.mockResolvedValue([userRecord('u1')]);
       advertiserWaitlist.findMany.mockResolvedValue([WL_RECORD]);
       advertiserWaitlist.findUnique.mockResolvedValue(WL_RECORD);
-      advertiserWaitlist.update.mockResolvedValue({ ...WL_RECORD, status: 'invited' });
+      advertiserWaitlist.findUniqueOrThrow.mockResolvedValue({ ...WL_RECORD, status: 'invited' });
       user.findUnique.mockResolvedValue({
         ...userRecord('u1'),
         referralCode: null,
@@ -370,7 +399,7 @@ describe('PeopleService', () => {
         ...user.findUnique.mock.calls,
         ...advertiserWaitlist.findMany.mock.calls,
         ...advertiserWaitlist.findUnique.mock.calls,
-        ...advertiserWaitlist.update.mock.calls,
+        ...advertiserWaitlist.findUniqueOrThrow.mock.calls,
         ...device.groupBy.mock.calls,
       ];
       expect(calls.length).toBeGreaterThan(0);
