@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard } from '@/components';
+import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Pill, Stat, type Tone } from '@/components/dash';
 import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
@@ -85,6 +86,12 @@ export function parseDepositAmountMinor(value: string, currency: string): bigint
   }
 }
 
+function entryTone(entryType: string): Tone {
+  if (entryType === 'credit') return 'ok';
+  if (entryType === 'refund') return 'warn';
+  return 'neutral';
+}
+
 export default function AdvertiserBillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,74 +151,72 @@ export default function AdvertiserBillingPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Billing</h1>
-        <p className="text-ink-200 text-sm">Deposit history, charges, and account balance</p>
-      </div>
+      <PageHeader title="Billing" />
 
       {loading && !data && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
           {/* Stats cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <StatCard
-              label="Account balance"
-              value={formatCurrency(data.balanceMinor, data.currency)}
-              valueColor="text-brand-500"
-            />
-            <StatCard
-              label="Total deposits"
-              value={formatCurrency(data.totalDepositsMinor, data.currency)}
-            />
-            <StatCard
-              label="Total charges"
-              value={formatCurrency(data.totalChargesMinor, data.currency)}
-            />
-            <StatCard
-              label="Total refunds"
-              value={formatCurrency(data.totalRefundsMinor ?? 0, data.currency)}
-              valueColor={data.totalRefundsMinor ? 'text-amber-400' : 'text-ink-200'}
-            />
+          <div className="dash-grid dash-grid--4">
+            <Panel label="Account balance">
+              <Stat
+                label="Account balance"
+                value={formatCurrency(data.balanceMinor, data.currency)}
+              />
+            </Panel>
+            <Panel label="Total deposits">
+              <Stat
+                label="Total deposits"
+                value={formatCurrency(data.totalDepositsMinor, data.currency)}
+              />
+            </Panel>
+            <Panel label="Total charges">
+              <Stat
+                label="Total charges"
+                value={formatCurrency(data.totalChargesMinor, data.currency)}
+              />
+            </Panel>
+            <Panel label="Total refunds">
+              <Stat
+                label="Total refunds"
+                value={formatCurrency(data.totalRefundsMinor ?? 0, data.currency)}
+              />
+            </Panel>
           </div>
           {data.balances && data.balances.length > 1 && (
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4 mb-8">
-              <p className="text-ink-200 text-xs uppercase tracking-wide mb-3">
-                Balances by currency
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <Panel>
+              <p className="dash-eyebrow mb-3">Balances by currency</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {data.balances.map((balance) => (
                   <div
                     key={balance.currency}
-                    className="flex items-center justify-between bg-ink-700/50 rounded-lg px-3 py-2"
+                    className="flex items-center justify-between rounded-xl border border-[var(--hair)] bg-[var(--page)] px-3 py-2"
                   >
-                    <span className="text-ink-200 text-sm">{balance.currency}</span>
-                    <span className="text-white font-mono text-sm">
+                    <span className="text-sm text-[var(--copy)]">{balance.currency}</span>
+                    <span className="dash-mono text-sm text-[var(--ink)]">
                       {formatCurrency(balance.balanceMinor, balance.currency)}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </Panel>
           )}
 
           {/* Deposit card */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
-            <h2 className="text-white font-semibold mb-2">Deposit funds</h2>
-            <p className="text-ink-200 text-sm mb-5">
+          <Panel label="Deposit funds">
+            <PanelHeader title="Deposit funds" />
+            <p className="mb-5 text-sm text-[var(--copy)]">
               Add funds to your account via Dodo Payments. Your balance is used to run ad campaigns.
             </p>
 
             <div className="mb-4">
-              <label
-                htmlFor="deposit-currency"
-                className="block text-ink-200 text-xs uppercase tracking-wide mb-1.5"
-              >
+              <label htmlFor="deposit-currency" className="mb-1.5 block">
                 Deposit currency
               </label>
               <select
@@ -225,7 +230,6 @@ export default function AdvertiserBillingPage() {
                   setCustomAmount('');
                   setDepositError(null);
                 }}
-                className="bg-ink-700 border border-ink-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500"
               >
                 {DEPOSIT_CURRENCIES.map((currency) => (
                   <option key={currency.code} value={currency.code}>
@@ -236,35 +240,35 @@ export default function AdvertiserBillingPage() {
             </div>
 
             {/* Amount presets */}
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="mb-4 flex flex-wrap gap-2">
               {depositPresetMinorUnits(depositCurrency).map((amount) => (
                 <button
                   key={amount.toString()}
+                  type="button"
                   onClick={() => {
                     setSelectedMinor(amount);
                     setShowCustom(false);
                     setCustomAmount('');
                     setDepositError(null);
                   }}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all border ${
+                  className={`dash-btn dash-btn--md ${
                     !showCustom && selectedMinor === amount
-                      ? 'bg-brand-500 border-brand-400 text-white shadow-lg shadow-brand-500/20'
-                      : 'bg-ink-700 border-ink-600 text-ink-200 hover:border-ink-500 hover:text-white'
+                      ? 'dash-btn--primary'
+                      : 'dash-btn--secondary'
                   }`}
                 >
                   {formatCurrency(amount, displayDepositCurrency)}
                 </button>
               ))}
               <button
+                type="button"
                 onClick={() => {
                   setShowCustom(true);
                   setSelectedMinor(null);
                   setDepositError(null);
                 }}
-                className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all border ${
-                  showCustom
-                    ? 'bg-brand-500 border-brand-400 text-white shadow-lg shadow-brand-500/20'
-                    : 'bg-ink-700 border-ink-600 text-ink-200 hover:border-ink-500 hover:text-white'
+                className={`dash-btn dash-btn--md ${
+                  showCustom ? 'dash-btn--primary' : 'dash-btn--secondary'
                 }`}
               >
                 Custom
@@ -275,7 +279,7 @@ export default function AdvertiserBillingPage() {
             {showCustom && (
               <div className="mb-4">
                 <div className="relative max-w-[200px]">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-200 text-sm font-medium">
+                  <span className="dash-mono pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-[var(--muted)]">
                     {displayDepositCurrency}
                   </span>
                   <input
@@ -291,13 +295,13 @@ export default function AdvertiserBillingPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && canDeposit) handleDeposit();
                     }}
-                    className="w-full bg-ink-700 border border-ink-600 rounded-lg pl-14 pr-3 py-2.5 text-white text-sm placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all"
+                    className="w-full pl-14"
                     aria-label={`Custom deposit amount in ${displayDepositCurrency}`}
                     inputMode="decimal"
                     autoComplete="off"
                   />
                 </div>
-                <p className="text-ink-200 text-xs mt-1.5">
+                <p className="mt-1.5 text-xs text-[var(--muted)]">
                   Minimum deposit:{' '}
                   {formatCurrency(depositInputPolicy.minimumMinor, displayDepositCurrency)}
                 </p>
@@ -319,33 +323,21 @@ export default function AdvertiserBillingPage() {
             </Button>
 
             {depositError && (
-              <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                <p className="text-red-400 text-xs">{depositError}</p>
+              <div className="mt-3">
+                <Notice tone="bad">{depositError}</Notice>
               </div>
             )}
 
-            <div className="mt-4 flex items-center gap-2 text-ink-200 text-xs">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
-              </svg>
-              <span>
-                Securely processed by Dodo Payments. Funds are available immediately after payment.
-              </span>
-            </div>
-          </div>
+            <p className="mt-4 text-xs text-[var(--muted)]">
+              Securely processed by Dodo Payments. Funds are available immediately after payment.
+            </p>
+          </Panel>
 
           {/* Transaction history */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-ink-600/30">
-              <h2 className="text-white font-semibold">Transaction history</h2>
-            </div>
+          <Panel label="Transaction history" flush>
+            <PanelHeader title="Transaction history" />
             {data.entries.length === 0 ? (
-              <div className="text-ink-200 text-sm py-12 text-center">
+              <div className="px-[22px] py-12 text-center text-sm text-[var(--muted)]">
                 No transactions yet. Add funds to start running campaigns.
               </div>
             ) : (
@@ -355,48 +347,26 @@ export default function AdvertiserBillingPage() {
                 role="region"
                 aria-label="Billing history table, scrolls horizontally"
               >
-                <table className="w-full min-w-[720px] text-sm">
-                  <thead className="bg-ink-700/50 border-b border-ink-600/30">
+                <table className="w-full min-w-[720px]">
+                  <thead>
                     <tr>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Date</th>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Description</th>
-                      <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
-                      <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
+                      <th className="text-left">Date</th>
+                      <th className="text-left">Description</th>
+                      <th className="text-left">Type</th>
+                      <th className="text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-ink-600/20">
+                  <tbody>
                     {data.entries.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
-                        <td className="px-4 py-3 text-ink-200 text-xs">
-                          {formatRelativeTime(entry.createdAt)}
-                        </td>
-                        <td className="px-4 py-3 text-white">
-                          {entry.description || entry.entryType.replace(/_/g, ' ')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs ${
-                              entry.entryType === 'credit'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : entry.entryType === 'debit'
-                                  ? 'bg-red-500/20 text-red-400'
-                                  : entry.entryType === 'refund'
-                                    ? 'bg-amber-500/20 text-amber-400'
-                                    : 'bg-ink-600 text-ink-200'
-                            }`}
-                          >
+                      <tr key={entry.id}>
+                        <td className="text-xs">{formatRelativeTime(entry.createdAt)}</td>
+                        <td>{entry.description || entry.entryType.replace(/_/g, ' ')}</td>
+                        <td>
+                          <Pill tone={entryTone(entry.entryType)}>
                             {entry.entryType.replace(/_/g, ' ')}
-                          </span>
+                          </Pill>
                         </td>
-                        <td
-                          className={`px-4 py-3 text-right font-mono ${
-                            entry.entryType === 'credit'
-                              ? 'text-emerald-400'
-                              : entry.entryType === 'debit'
-                                ? 'text-red-400'
-                                : 'text-ink-200'
-                          }`}
-                        >
+                        <td className="dash-mono text-right">
                           {entry.entryType === 'credit' ? '+' : '−'}
                           {formatCurrency(entry.amountMinor, entry.currency)}
                         </td>
@@ -406,7 +376,7 @@ export default function AdvertiserBillingPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
     </>

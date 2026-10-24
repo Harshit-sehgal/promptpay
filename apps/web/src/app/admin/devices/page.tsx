@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
@@ -121,97 +122,90 @@ export default function AdminDevicesPage() {
   const recoveryToken = result?.recoverySupportToken ?? result?.token;
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Device recovery</h1>
-        <p className="text-surface-500 text-sm">
-          Find a developer device and issue a one-time recovery token for a lost per-device event
-          secret.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title="Device recovery"
+        lede="Find a developer device and issue a one-time recovery token for a lost per-device event secret."
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {recoveryToken && (
-        <div className="bg-emerald-50 border border-emerald-200/70 rounded-lg p-4 mb-6">
-          <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">
-            Recovery token
-          </p>
-          <code className="block bg-white border border-emerald-200/70 rounded-md px-3 py-2 text-surface-900 text-xs break-all font-mono">
+        <Notice tone="ok" title="Recovery token">
+          <code className="block rounded-xl border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs break-all text-[var(--ink)]">
             {recoveryToken}
           </code>
-          <p className="text-emerald-700 text-xs mt-2">
+          <p className="mt-2 text-xs">
             Share this with the user over a verified support channel. It is shown only once.
           </p>
-        </div>
+        </Notice>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6">
-        <section className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div>
-              <h2 className="text-surface-900 font-semibold text-[16px]">Registered devices</h2>
-              <p className="text-surface-500 text-xs mt-1">
-                Search by user email, user id, device id, fingerprint, platform, or tool type.
-              </p>
-            </div>
-            <span className="text-surface-500 text-xs whitespace-nowrap">{deviceTotal} total</span>
-          </div>
+      <div className="dash-grid dash-grid--wide-left">
+        <Panel label="Registered devices">
+          <PanelHeader
+            title="Registered devices"
+            action={
+              <span className="text-xs whitespace-nowrap text-[var(--muted)]">
+                {deviceTotal} total
+              </span>
+            }
+          />
+          <p className="mb-5 text-xs text-[var(--muted)]">
+            Search by user email, user id, device id, fingerprint, platform, or tool type.
+          </p>
 
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 mb-5">
+          <form onSubmit={handleSearch} className="mb-5 flex flex-col gap-3 sm:flex-row">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search devices..."
-              className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+              className="flex-1 px-4 py-3"
             />
-            <button
-              type="submit"
-              className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-5 py-2.5 rounded-xl text-sm transition-colors"
-            >
+            <button type="submit" className="dash-btn dash-btn--primary dash-btn--md">
               Search
             </button>
           </form>
 
           {deviceLoading ? (
-            <div className="py-12 flex justify-center">
+            <div className="flex justify-center py-12">
               <LoadingSpinner />
             </div>
           ) : devices.length === 0 ? (
-            <div className="border border-dashed border-surface-200 rounded-xl p-8 text-center">
-              <p className="text-surface-500 text-sm">No devices found.</p>
+            <div className="rounded-xl border border-dashed border-[var(--hair)] p-8 text-center">
+              <p className="text-sm text-[var(--muted)]">No devices found.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="dash-rows -mx-[22px]">
               {devices.map((device) => (
-                <div key={device.id} className="border border-surface-200/80 rounded-xl p-4">
+                <div key={device.id}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-wrap items-center gap-2">
                         <StatusBadge status={device.toolType} kind="metadata" />
-                        <p className="text-surface-900 font-medium text-sm truncate">
+                        <p className="truncate text-sm font-medium text-[var(--ink)]">
                           {device.user.email ?? device.user.name ?? device.userId}
                         </p>
-                        <span className="text-surface-400 text-xs">{device.user.status}</span>
+                        <span className="text-xs text-[var(--muted)]">{device.user.status}</span>
                       </div>
-                      <p className="text-surface-500 text-xs mt-2 font-mono break-all">
+                      <p className="dash-mono mt-2 text-xs break-all text-[var(--muted)]">
                         Device: {device.id}
                       </p>
-                      <p className="text-surface-500 text-xs mt-1 font-mono break-all">
+                      <p className="dash-mono mt-1 text-xs break-all text-[var(--muted)]">
                         User: {device.userId}
                       </p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-surface-500">
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--copy)]">
                         <span>Platform: {device.platform || 'unknown'}</span>
                         <span>Version: {device.extensionVersion || 'unknown'}</span>
                         <span>Last seen: {formatRelativeTime(device.lastSeenAt)}</span>
                         <span>{device.hasEventSecret ? 'Recoverable' : 'Legacy re-register'}</span>
                       </div>
                       {device.latestRecoveryToken && (
-                        <p className="text-amber-700 text-xs mt-2">
+                        <p className="mt-2 text-xs text-[var(--copy)]">
                           Latest token{' '}
                           {device.latestRecoveryToken.usedAt
                             ? 'used'
@@ -226,7 +220,7 @@ export default function AdminDevicesPage() {
                       type="button"
                       onClick={() => selectDevice(device)}
                       disabled={!device.hasEventSecret || device.user.role !== 'developer'}
-                      className="shrink-0 text-brand-600 hover:text-brand-500 disabled:text-surface-300 text-xs font-medium"
+                      className="dash-btn dash-btn--secondary dash-btn--sm shrink-0"
                     >
                       Use
                     </button>
@@ -237,7 +231,7 @@ export default function AdminDevicesPage() {
           )}
           {!deviceLoading && devices.length > 0 && (
             <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-surface-500">
+              <span className="text-[var(--muted)]">
                 Page {devicePage} of {Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE))}
               </span>
               <div className="flex gap-2">
@@ -245,7 +239,7 @@ export default function AdminDevicesPage() {
                   type="button"
                   onClick={() => setDevicePage((p) => Math.max(1, p - 1))}
                   disabled={devicePage <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-surface-200 text-surface-700 text-sm disabled:opacity-40"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Previous
                 </button>
@@ -257,79 +251,86 @@ export default function AdminDevicesPage() {
                     )
                   }
                   disabled={devicePage >= Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE))}
-                  className="px-3 py-1.5 rounded-lg border border-surface-200 text-surface-700 text-sm disabled:opacity-40"
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
                   Next
                 </button>
               </div>
             </div>
           )}
-        </section>
+        </Panel>
 
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm space-y-5 h-fit"
-        >
-          <div>
-            <h2 className="text-surface-900 font-semibold text-[16px] mb-1">
-              Issue recovery token
-            </h2>
-            <p className="text-surface-500 text-xs">
-              Select a device from the lookup or enter IDs manually.
-            </p>
-          </div>
-          <div>
-            <label className="text-surface-700 text-sm font-medium mb-1.5 block">Device ID</label>
-            <input
-              value={deviceId}
-              onChange={(e) => setDeviceId(e.target.value)}
-              required
-              placeholder="device uuid"
-              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-            />
-          </div>
-          <div>
-            <label className="text-surface-700 text-sm font-medium mb-1.5 block">User ID</label>
-            <input
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              required
-              placeholder="user uuid"
-              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-            />
-          </div>
-          <div>
-            <label className="text-surface-700 text-sm font-medium mb-1.5 block">Reason</label>
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              required
-              placeholder="e.g. lost device, support ticket #123"
-              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-            />
-          </div>
-          <div>
-            <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-              Expires in (minutes)
-            </label>
-            <input
-              type="number"
-              min={5}
-              max={60}
-              value={expiresInMinutes}
-              onChange={(e) => setExpiresInMinutes(Number(e.target.value))}
-              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={busy}
-            className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
-          >
-            {busy ? 'Issuing...' : 'Issue recovery token'}
-          </button>
-        </form>
+        <Panel label="Issue recovery token" className="h-fit">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <h2 className="dash-panel__title mb-1">Issue recovery token</h2>
+              <p className="text-xs text-[var(--muted)]">
+                Select a device from the lookup or enter IDs manually.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="recovery-device-id" className="mb-1.5 block text-sm font-medium">
+                Device ID
+              </label>
+              <input
+                id="recovery-device-id"
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
+                required
+                placeholder="device uuid"
+                className="w-full px-4 py-3"
+              />
+            </div>
+            <div>
+              <label htmlFor="recovery-user-id" className="mb-1.5 block text-sm font-medium">
+                User ID
+              </label>
+              <input
+                id="recovery-user-id"
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                required
+                placeholder="user uuid"
+                className="w-full px-4 py-3"
+              />
+            </div>
+            <div>
+              <label htmlFor="recovery-reason" className="mb-1.5 block text-sm font-medium">
+                Reason
+              </label>
+              <input
+                id="recovery-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                required
+                placeholder="e.g. lost device, support ticket #123"
+                className="w-full px-4 py-3"
+              />
+            </div>
+            <div>
+              <label htmlFor="recovery-expires" className="mb-1.5 block text-sm font-medium">
+                Expires in (minutes)
+              </label>
+              <input
+                id="recovery-expires"
+                type="number"
+                min={5}
+                max={60}
+                value={expiresInMinutes}
+                onChange={(e) => setExpiresInMinutes(Number(e.target.value))}
+                className="w-full px-4 py-3"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={busy}
+              className="dash-btn dash-btn--primary dash-btn--md"
+            >
+              {busy ? 'Issuing...' : 'Issue recovery token'}
+            </button>
+          </form>
+        </Panel>
       </div>
-    </div>
+    </>
   );
 }

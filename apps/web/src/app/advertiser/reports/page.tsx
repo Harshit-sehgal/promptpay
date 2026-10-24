@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LoadingSpinner, StatCard } from '@/components';
+import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Pill, Stat, type Tone } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatNumber, formatPercent } from '@/lib/format';
@@ -81,16 +82,22 @@ function MiniBar({
 }) {
   const max = Math.max(maxValue, 1);
   return (
-    <div className="flex items-end gap-[2px] h-8">
+    <div className="flex h-8 items-end gap-[2px]">
       {values.map((v, i) => (
         <div
           key={i}
-          className={`w-[6px] rounded-t-sm transition-all duration-200 ${color}`}
+          className={`w-[6px] rounded-t-sm transition-all duration-200 motion-reduce:transition-none ${color}`}
           style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? '2px' : '0' }}
         />
       ))}
     </div>
   );
+}
+
+function statusTone(status: string): Tone {
+  if (status === 'active') return 'ok';
+  if (status === 'paused') return 'warn';
+  return 'neutral';
 }
 
 // ── Component ──
@@ -199,24 +206,17 @@ export default function AdvertiserReportsPage() {
   return (
     <>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1">Reports</h1>
-        <p className="text-ink-200 text-sm">
-          Campaign performance, daily trends, and spend breakdown
-        </p>
-      </div>
+      <PageHeader title="Reports" />
 
       {/* Period selector */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-300 text-sm mr-1">Period:</span>
+      <div className="dash-bar flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-sm text-[var(--muted)]">Period:</span>
         {PRESETS.map((p) => (
           <button
             key={p.key}
             onClick={() => setPeriod(p.key)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              period === p.key
-                ? 'bg-brand-500 text-white'
-                : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
+            className={`dash-btn dash-btn--sm ${
+              period === p.key ? 'dash-btn--primary' : 'dash-btn--secondary'
             }`}
           >
             {p.label}
@@ -224,44 +224,36 @@ export default function AdvertiserReportsPage() {
         ))}
         <button
           onClick={() => setPeriod('custom')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-            period === 'custom'
-              ? 'bg-brand-500 text-white'
-              : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
+          className={`dash-btn dash-btn--sm ${
+            period === 'custom' ? 'dash-btn--primary' : 'dash-btn--secondary'
           }`}
         >
           Custom
         </button>
 
         {period === 'custom' && (
-          <div className="flex items-center gap-2 ml-2">
+          <div className="ml-2 flex items-center gap-2">
             <input
               aria-label="Start date"
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
-            <span className="text-ink-300 text-xs">to</span>
+            <span className="text-xs text-[var(--muted)]">to</span>
             <input
               aria-label="End date"
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
           </div>
         )}
       </div>
 
       {/* Campaign filter */}
-      <div className="mb-6 flex items-center gap-2">
-        <span className="text-ink-300 text-xs">Campaign:</span>
-        <select
-          value={campaignFilter}
-          onChange={(e) => setCampaignFilter(e.target.value)}
-          className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1.5 text-xs text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
-        >
+      <div className="dash-bar flex items-center gap-2">
+        <span className="text-xs text-[var(--muted)]">Campaign:</span>
+        <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)}>
           <option value="">All campaigns</option>
           {data?.rows.map((r) => (
             <option key={r.campaignId} value={r.campaignId}>
@@ -273,7 +265,7 @@ export default function AdvertiserReportsPage() {
           type="button"
           onClick={handleExportCsv}
           disabled={!dateRange}
-          className="ml-auto bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors"
+          className="dash-btn dash-btn--secondary dash-btn--sm ml-auto"
         >
           Export CSV
         </button>
@@ -282,90 +274,111 @@ export default function AdvertiserReportsPage() {
       {/* Loading & error */}
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={fetchReports} className="text-red-300 text-xs underline mt-1">
-            Retry
-          </button>
-        </div>
+        <Notice
+          tone="bad"
+          role="alert"
+          actions={
+            <button onClick={fetchReports} className="dash-btn dash-btn--secondary dash-btn--sm">
+              Retry
+            </button>
+          }
+        >
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
           {/* Summary stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard label="Impressions" value={formatNumber(displayStats!.impressions)} />
-            <StatCard label="Clicks" value={formatNumber(displayStats!.clicks)} />
-            <StatCard label="Avg CTR" value={formatPercent(displayStats!.ctr * 100)} />
-            <StatCard
-              label="Total spend"
-              value={formatCurrencyBreakdown(
-                displayStats!.spendByCurrency ?? { USD: displayStats!.spend },
-              )}
-              valueColor="text-brand-500"
-            />
-            <StatCard label="Campaigns" value={formatNumber(displayStats!.campaigns)} />
+          <div className="grid grid-cols-2 gap-5 md:grid-cols-4 lg:grid-cols-5">
+            <Panel label="Impressions">
+              <Stat label="Impressions" value={formatNumber(displayStats!.impressions)} />
+            </Panel>
+            <Panel label="Clicks">
+              <Stat label="Clicks" value={formatNumber(displayStats!.clicks)} />
+            </Panel>
+            <Panel label="Avg CTR">
+              <Stat label="Avg CTR" value={formatPercent(displayStats!.ctr * 100)} />
+            </Panel>
+            <Panel label="Total spend">
+              <Stat
+                label="Total spend"
+                value={formatCurrencyBreakdown(
+                  displayStats!.spendByCurrency ?? { USD: displayStats!.spend },
+                )}
+                chip
+              />
+            </Panel>
+            <Panel label="Campaigns">
+              <Stat label="Campaigns" value={formatNumber(displayStats!.campaigns)} />
+            </Panel>
           </div>
 
           {/* Daily trend chart */}
           {data.dailyTrend.length > 1 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <h3 className="text-white text-sm font-semibold mb-3">
+            <div className="dash-grid dash-grid--2">
+              <Panel>
+                <h3 className="mb-3 text-sm font-semibold text-[var(--ink)]">
                   Daily impressions{' '}
-                  <span className="text-ink-300 font-normal">({data.dailyTrend.length} days)</span>
+                  <span className="font-normal text-[var(--muted)]">
+                    ({data.dailyTrend.length} days)
+                  </span>
                 </h3>
-                <div className="flex items-end gap-1 h-20 mb-2">
+                <div className="mb-2 flex h-20 items-end gap-1">
                   <MiniBar
                     values={data.dailyTrend.map((d) => d.impressions)}
                     maxValue={maxDailyImpressions}
-                    color="bg-brand-500"
+                    color="bg-[var(--ink)]"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-xs">
+                <div className="flex justify-between text-xs text-[var(--muted)]">
                   <span>{formatDateShort(data.dailyTrend[0].date)}</span>
                   <span>{formatDateShort(data.dailyTrend[data.dailyTrend.length - 1].date)}</span>
                 </div>
-              </div>
-              <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-                <h3 className="text-white text-sm font-semibold mb-3">
+              </Panel>
+              <Panel>
+                <h3 className="mb-3 text-sm font-semibold text-[var(--ink)]">
                   Daily clicks{' '}
-                  <span className="text-ink-300 font-normal">({data.dailyTrend.length} days)</span>
+                  <span className="font-normal text-[var(--muted)]">
+                    ({data.dailyTrend.length} days)
+                  </span>
                 </h3>
-                <div className="flex items-end gap-1 h-20 mb-2">
+                <div className="mb-2 flex h-20 items-end gap-1">
                   <MiniBar
                     values={data.dailyTrend.map((d) => d.clicks)}
                     maxValue={maxDailyClicks}
-                    color="bg-emerald-500"
+                    color="bg-[var(--ink)]"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-xs">
+                <div className="flex justify-between text-xs text-[var(--muted)]">
                   <span>{formatDateShort(data.dailyTrend[0].date)}</span>
                   <span>{formatDateShort(data.dailyTrend[data.dailyTrend.length - 1].date)}</span>
                 </div>
-              </div>
+              </Panel>
             </div>
           )}
 
           {/* Campaign breakdown table */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-ink-600/30 flex items-center justify-between">
-              <h2 className="text-white font-semibold">Campaign breakdown</h2>
-              {data.rows.length > 0 && (
-                <span className="text-ink-300 text-xs">
-                  {data.rows.length} campaign{data.rows.length !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
+          <Panel label="Campaign breakdown" flush>
+            <PanelHeader
+              title="Campaign breakdown"
+              action={
+                data.rows.length > 0 ? (
+                  <span className="text-xs text-[var(--muted)]">
+                    {data.rows.length} campaign{data.rows.length !== 1 ? 's' : ''}
+                  </span>
+                ) : undefined
+              }
+            />
 
             {data.rows.length === 0 ? (
-              <div className="text-ink-300 text-sm py-12 text-center">
+              <div className="px-[22px] py-12 text-center text-sm text-[var(--muted)]">
                 No data for this period. Campaigns need to be active to generate reports.
               </div>
             ) : (
               <>
                 {/* Table header */}
-                <div className="hidden md:grid grid-cols-12 gap-2 px-6 py-3 bg-ink-700/30 border-b border-ink-600/20 text-ink-300 text-xs font-medium uppercase tracking-wider">
+                <div className="dash-eyebrow hidden grid-cols-12 gap-2 border-b border-[var(--hair)] px-[22px] py-3 md:grid">
                   <div className="col-span-3">Campaign</div>
                   <div className="col-span-2 text-right">Impressions</div>
                   <div className="col-span-2 text-right">Clicks</div>
@@ -381,81 +394,59 @@ export default function AdvertiserReportsPage() {
                   return (
                     <div
                       key={row.campaignId}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-2 px-6 py-4 border-b border-ink-600/10 hover:bg-ink-700/20 transition-colors"
+                      className="grid grid-cols-1 gap-2 border-b border-[var(--hair)] px-[22px] py-4 md:grid-cols-12"
                     >
                       {/* Campaign name (full width on mobile) */}
                       <div className="md:col-span-3">
-                        <p className="text-white text-sm font-medium truncate">
+                        <p className="truncate text-sm font-medium text-[var(--ink)]">
                           {row.campaignName}
                         </p>
                       </div>
 
                       {/* Metrics */}
-                      <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 gap-2 md:col-span-7 md:grid-cols-4">
                         <div>
-                          <span className="md:hidden text-ink-300 text-xs uppercase block">
-                            Impressions
-                          </span>
-                          <span className="text-white font-mono text-sm">
+                          <span className="dash-eyebrow block md:hidden">Impressions</span>
+                          <span className="dash-mono text-sm text-[var(--ink)]">
                             {formatNumber(row.impressions)}
                           </span>
-                          <div className="h-1 bg-ink-700 rounded-full mt-1 overflow-hidden md:hidden">
+                          <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--hair)] md:hidden">
                             <div
-                              className="h-full bg-brand-500 rounded-full"
+                              className="h-full rounded-full bg-[var(--ink)]"
                               style={{ width: `${impShare}%` }}
                             />
                           </div>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-300 text-xs uppercase block">
-                            Clicks
-                          </span>
-                          <span className="text-ink-200 font-mono text-sm">
+                          <span className="dash-eyebrow block md:hidden">Clicks</span>
+                          <span className="dash-mono text-sm text-[var(--ink)]">
                             {formatNumber(row.clicks)}
                           </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-300 text-xs uppercase block">
-                            CTR
-                          </span>
-                          <span
-                            className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-200'}`}
-                          >
+                          <span className="dash-eyebrow block md:hidden">CTR</span>
+                          <span className="dash-mono text-sm text-[var(--ink)]">
                             {formatPercent(row.ctr * 100)}
                           </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-300 text-xs uppercase block">
-                            Spend
-                          </span>
-                          <span className="text-white font-mono text-sm">
+                          <span className="dash-eyebrow block md:hidden">Spend</span>
+                          <span className="dash-mono text-sm text-[var(--ink)]">
                             {formatCurrency(row.spendMinor, row.currency)}
                           </span>
                         </div>
                       </div>
 
                       {/* Status */}
-                      <div className="md:col-span-2 flex items-center justify-end">
-                        <span
-                          className={`px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wider ${
-                            row.status === 'active'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : row.status === 'paused'
-                                ? 'bg-amber-500/20 text-amber-400'
-                                : row.status === 'archived'
-                                  ? 'bg-ink-600 text-ink-300'
-                                  : 'bg-ink-600 text-ink-200'
-                          }`}
-                        >
-                          {row.status}
-                        </span>
+                      <div className="flex items-center justify-end md:col-span-2">
+                        <Pill tone={statusTone(row.status)}>{row.status}</Pill>
                       </div>
 
                       {/* Impression share bar (desktop) */}
-                      <div className="md:col-span-12 -mt-2 mb-1 hidden md:block">
-                        <div className="h-1 bg-ink-700 rounded-full overflow-hidden">
+                      <div className="mb-1 -mt-2 hidden md:col-span-12 md:block">
+                        <div className="h-1 overflow-hidden rounded-full bg-[var(--hair)]">
                           <div
-                            className="h-full bg-brand-500/60 rounded-full transition-all"
+                            className="h-full rounded-full bg-[var(--ink)] transition-all motion-reduce:transition-none"
                             style={{ width: `${impShare}%` }}
                           />
                         </div>
@@ -465,21 +456,21 @@ export default function AdvertiserReportsPage() {
                 })}
 
                 {/* Totals row */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 px-6 py-4 bg-ink-700/40">
+                <div className="grid grid-cols-1 gap-2 px-[22px] py-4 md:grid-cols-12">
                   <div className="md:col-span-3">
-                    <p className="text-white text-sm font-semibold">Total</p>
+                    <p className="text-sm font-semibold text-[var(--ink)]">Total</p>
                   </div>
-                  <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
-                    <span className="text-white font-mono text-sm font-semibold">
+                  <div className="grid grid-cols-2 gap-2 md:col-span-7 md:grid-cols-4">
+                    <span className="dash-mono text-sm font-semibold text-[var(--ink)]">
                       {formatNumber(data.summary.totalImpressions)}
                     </span>
-                    <span className="text-ink-200 font-mono text-sm">
+                    <span className="dash-mono text-sm text-[var(--ink)]">
                       {formatNumber(data.summary.totalClicks)}
                     </span>
-                    <span className="text-ink-200 font-mono text-sm">
+                    <span className="dash-mono text-sm text-[var(--ink)]">
                       {formatPercent(data.summary.avgCtr * 100)}
                     </span>
-                    <span className="text-white font-mono text-sm font-semibold">
+                    <span className="dash-mono text-sm font-semibold text-[var(--ink)]">
                       {formatCurrencyBreakdown(
                         data.summary.totalSpendByCurrency ?? { USD: data.summary.totalSpendMinor },
                       )}
@@ -489,7 +480,7 @@ export default function AdvertiserReportsPage() {
                 </div>
               </>
             )}
-          </div>
+          </Panel>
         </>
       )}
     </>

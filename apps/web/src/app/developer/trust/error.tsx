@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { RouteError } from '@/components/dash';
 import * as Sentry from '@sentry/nextjs';
 
 export default function DevTrustError({
@@ -19,14 +19,8 @@ export default function DevTrustError({
   }, [error]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold text-surface-900 mb-2">Something went wrong</h2>
-        <p className="text-surface-500 text-sm mb-6">Failed to load trust information.</p>
-        <Button variant="brand" onClick={reset} rounded="xl">
-          Try again
-        </Button>
-      </div>
-    </div>
+    <RouteError title="Something went wrong" actionLabel="Try again" onRetry={reset}>
+      Failed to load trust information.
+    </RouteError>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Notice, Panel, PanelHeader, Pill } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -119,13 +120,13 @@ export function GoogleAccountLink({ initiallyLinked = false }: GoogleAccountLink
   }, [googleClientId, googleEnabled, linked]);
 
   return (
-    <section className="rounded-3xl border border-surface-200/80 bg-white p-7 shadow-sm">
-      <h2 className="text-surface-900 font-bold text-[16px] mb-2">Google sign-in</h2>
+    <Panel>
+      <PanelHeader title="Google sign-in" />
       {linked ? (
-        <p className="text-emerald-600 text-sm">Google is linked to this account.</p>
+        <Pill tone="ok">Google is linked to this account.</Pill>
       ) : (
         <>
-          <p className="text-surface-500 text-sm mb-5">
+          <p className="mb-5 text-sm text-[var(--copy)]">
             Add Google sign-in after confirming your current account password. The Google email must
             match this account.
           </p>
@@ -133,7 +134,7 @@ export function GoogleAccountLink({ initiallyLinked = false }: GoogleAccountLink
             <div>
               <label
                 htmlFor="google-link-current-password"
-                className="text-surface-700 text-sm font-medium mb-1.5 block"
+                className="mb-1.5 block text-sm font-medium"
               >
                 Current password for Google linking
               </label>
@@ -144,23 +145,31 @@ export function GoogleAccountLink({ initiallyLinked = false }: GoogleAccountLink
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 disabled={busy}
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+                className="w-full px-4 py-3"
               />
             </div>
             {googleEnabled ? (
               <div ref={buttonRef} className="min-h-[44px]" aria-label="Link Google account" />
             ) : (
-              <p className="text-surface-500 text-xs">Google linking is currently unavailable.</p>
+              <p className="text-xs text-[var(--muted)]">
+                Google linking is currently unavailable.
+              </p>
             )}
           </div>
           {error && (
-            <p role="alert" className="text-red-600 text-sm mt-4">
-              {error}
-            </p>
+            <div className="mt-4">
+              <Notice tone="bad" role="alert">
+                {error}
+              </Notice>
+            </div>
           )}
-          {success && <p className="text-emerald-600 text-sm mt-4">{success}</p>}
+          {success && (
+            <div className="mt-4">
+              <Notice tone="ok">{success}</Notice>
+            </div>
+          )}
         </>
       )}
-    </section>
+    </Panel>
   );
 }

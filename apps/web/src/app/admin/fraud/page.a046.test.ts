@@ -68,7 +68,7 @@ describe('AdminFraudPage recompute failure surfaces a visible error (A-046)', ()
 
     // The rejection must surface as a visible error message, not a silent success.
     const errorEl = await screen.findByText('Trust service unavailable');
-    expect(errorEl.className).toContain('text-red-400');
+    expect(errorEl.closest('[role="alert"]')).not.toBeNull();
 
     // And the UI actually triggered the recompute request.
     expect(vi.mocked(adminApi.recomputeTrustScore)).toHaveBeenCalledWith('user-abc123');

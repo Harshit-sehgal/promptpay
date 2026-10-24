@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, Pill, Stat, type Tone } from '@/components/dash';
 import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
@@ -78,20 +79,16 @@ type ActionState =
 
 const ACTIVE_CASE_STATUSES = new Set<RecoveryDebtCaseStatus>(['open', 'in_collections']);
 
-function caseBadgeClass(status?: RecoveryDebtCaseStatus) {
+function caseTone(status?: RecoveryDebtCaseStatus): Tone {
   switch (status) {
     case 'open':
-      return 'bg-amber-500/10 text-amber-300 border-amber-500/20';
+      return 'warn';
     case 'in_collections':
-      return 'bg-red-500/10 text-red-300 border-red-500/20';
+      return 'bad';
     case 'recovered':
-      return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20';
-    case 'written_off':
-      return 'bg-zinc-500/10 text-zinc-300 border-zinc-500/20';
-    case 'closed':
-      return 'bg-blue-500/10 text-blue-300 border-blue-500/20';
+      return 'ok';
     default:
-      return 'bg-ink-700 text-ink-200 border-ink-600';
+      return 'neutral';
   }
 }
 
@@ -184,32 +181,24 @@ export default function AdminRecoveryDebtPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Recovery debt</h1>
-        <p className="text-ink-200 text-sm">
-          Track paid-fraud recovery debt that has not been netted from future earnings.
-        </p>
-      </div>
+      <PageHeader
+        title="Recovery debt"
+        lede="Track paid-fraud recovery debt that has not been netted from future earnings."
+      />
 
-      <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <p className="text-ink-300 text-xs uppercase tracking-wider">Rows shown</p>
-            <p className="text-3xl font-bold text-white">{items.length}</p>
-          </div>
-          <div>
-            <p className="text-ink-300 text-xs uppercase tracking-wider">Total matching</p>
-            <p className="text-3xl font-bold text-white">{data?.total ?? 0}</p>
-          </div>
-          <div>
-            <p className="text-ink-300 text-xs uppercase tracking-wider">Shown outstanding</p>
-            <p className="text-2xl sm:text-3xl font-bold text-red-300 font-mono break-words">
-              {formatCurrencyBreakdown(outstandingByCurrency)}
-            </p>
-          </div>
+      <Panel label="Recovery debt summary">
+        <div className="dash-grid dash-grid--4">
+          <Stat label="Rows shown" value={items.length} />
+          <Stat label="Total matching" value={data?.total ?? 0} />
+          <Stat
+            label="Shown outstanding"
+            value={
+              <span className="break-words">{formatCurrencyBreakdown(outstandingByCurrency)}</span>
+            }
+          />
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-ink-300 text-xs uppercase tracking-wider">Min cents</span>
+              <span className="dash-eyebrow">Min cents</span>
               <input
                 value={minAmountMinor}
                 onChange={(e) => {
@@ -217,11 +206,11 @@ export default function AdminRecoveryDebtPage() {
                   setMinAmountMinor(e.target.value);
                 }}
                 inputMode="numeric"
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="mt-2 w-full px-3 py-2 text-sm"
               />
             </label>
             <label className="block">
-              <span className="text-ink-300 text-xs uppercase tracking-wider">Currency</span>
+              <span className="dash-eyebrow">Currency</span>
               <input
                 value={currency}
                 onChange={(e) => {
@@ -230,163 +219,162 @@ export default function AdminRecoveryDebtPage() {
                 }}
                 maxLength={3}
                 placeholder="ALL"
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                className="mt-2 w-full px-3 py-2 text-sm uppercase"
               />
             </label>
           </div>
         </div>
-      </div>
+      </Panel>
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {!loading && items.length === 0 ? (
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-300 text-sm">
+        <Panel label="No recovery debt">
+          <p className="py-6 text-center text-sm text-[var(--muted)]">
             No outstanding recovery debt matches these filters.
           </p>
-        </div>
+        </Panel>
       ) : (
-        <div className="space-y-3">
-          {items.map((row) => {
-            const latestCase = row.latestCase;
-            const activeCase = latestCase && ACTIVE_CASE_STATUSES.has(latestCase.status);
-            return (
-              <div
-                key={`${row.userId}:${row.currency}`}
-                className="bg-ink-800 border border-ink-600/30 rounded-xl p-5"
-              >
-                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <p className="text-white font-medium truncate">
-                        {row.user?.email || row.userId}
+        <Panel label="Recovery debt cases" flush>
+          <div className="dash-rows">
+            {items.map((row) => {
+              const latestCase = row.latestCase;
+              const activeCase = latestCase && ACTIVE_CASE_STATUSES.has(latestCase.status);
+              return (
+                <div key={`${row.userId}:${row.currency}`}>
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                    <div className="min-w-0">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <p className="truncate font-medium text-[var(--ink)]">
+                          {row.user?.email || row.userId}
+                        </p>
+                        <Pill tone={caseTone(latestCase?.status)}>
+                          <span className="capitalize">{formatStatus(latestCase?.status)}</span>
+                        </Pill>
+                        <span className="dash-mono text-xs uppercase text-[var(--muted)]">
+                          {row.currency}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--copy)]">
+                        {row.recoveryDebitEntryCount} recovery debit entries
+                        <span className="mx-2">·</span>
+                        User status {row.user?.status || 'unknown'}
+                        <span className="mx-2">·</span>
+                        Trust {formatStatus(row.user?.trustLevel)}
                       </p>
-                      <span
-                        className={`border rounded-full px-2 py-0.5 text-xs capitalize ${caseBadgeClass(latestCase?.status)}`}
+                      {latestCase && (
+                        <p className="mt-1 text-xs text-[var(--muted)]">
+                          Case {latestCase.id}
+                          {latestCase.updatedAt
+                            ? ` · updated ${formatRelativeTime(latestCase.updatedAt)}`
+                            : ''}
+                          {latestCase.externalReference ? ` · ${latestCase.externalReference}` : ''}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                      <div>
+                        <p className="dash-eyebrow">Debits</p>
+                        <p className="dash-mono text-[var(--ink)]">
+                          {formatCurrency(row.confirmedDebitMinor, row.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="dash-eyebrow">Credits</p>
+                        <p className="dash-mono text-[var(--ink)]">
+                          {formatCurrency(row.confirmedCreditMinor, row.currency)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="dash-eyebrow">Outstanding</p>
+                        <p className="dash-mono font-semibold text-[var(--ink)]">
+                          {formatCurrency(row.outstandingDebtMinor, row.currency)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                      <button
+                        onClick={() =>
+                          openAction({
+                            mode: 'open',
+                            row,
+                            status: activeCase
+                              ? (latestCase.status as 'open' | 'in_collections')
+                              : 'open',
+                          })
+                        }
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
-                        {formatStatus(latestCase?.status)}
-                      </span>
-                      <span className="text-ink-300 text-xs uppercase">{row.currency}</span>
+                        {activeCase ? 'Update case' : 'Open case'}
+                      </button>
+                      <button
+                        onClick={() => openAction({ mode: 'open', row, status: 'in_collections' })}
+                        className="dash-btn dash-btn--danger dash-btn--sm"
+                      >
+                        Collections
+                      </button>
+                      {activeCase && (
+                        <>
+                          <button
+                            onClick={() =>
+                              openAction({
+                                mode: 'resolve',
+                                row,
+                                caseId: latestCase.id,
+                                status: 'recovered',
+                              })
+                            }
+                            className="dash-btn dash-btn--primary dash-btn--sm"
+                          >
+                            Recovered
+                          </button>
+                          <button
+                            onClick={() =>
+                              openAction({
+                                mode: 'resolve',
+                                row,
+                                caseId: latestCase.id,
+                                status: 'written_off',
+                              })
+                            }
+                            className="dash-btn dash-btn--secondary dash-btn--sm"
+                          >
+                            Write off
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <p className="text-ink-300 text-xs">
-                      {row.recoveryDebitEntryCount} recovery debit entries
-                      <span className="mx-2">·</span>
-                      User status {row.user?.status || 'unknown'}
-                      <span className="mx-2">·</span>
-                      Trust {formatStatus(row.user?.trustLevel)}
-                    </p>
-                    {latestCase && (
-                      <p className="text-ink-500 text-xs mt-1">
-                        Case {latestCase.id}
-                        {latestCase.updatedAt
-                          ? ` · updated ${formatRelativeTime(latestCase.updatedAt)}`
-                          : ''}
-                        {latestCase.externalReference ? ` · ${latestCase.externalReference}` : ''}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-                    <div>
-                      <p className="text-ink-500 text-xs uppercase tracking-wider">Debits</p>
-                      <p className="text-white font-mono">
-                        {formatCurrency(row.confirmedDebitMinor, row.currency)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-ink-500 text-xs uppercase tracking-wider">Credits</p>
-                      <p className="text-white font-mono">
-                        {formatCurrency(row.confirmedCreditMinor, row.currency)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-ink-500 text-xs uppercase tracking-wider">Outstanding</p>
-                      <p className="text-red-300 font-mono font-semibold">
-                        {formatCurrency(row.outstandingDebtMinor, row.currency)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                    <button
-                      onClick={() =>
-                        openAction({
-                          mode: 'open',
-                          row,
-                          status: activeCase
-                            ? (latestCase.status as 'open' | 'in_collections')
-                            : 'open',
-                        })
-                      }
-                      className="bg-ink-700 hover:bg-ink-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {activeCase ? 'Update case' : 'Open case'}
-                    </button>
-                    <button
-                      onClick={() => openAction({ mode: 'open', row, status: 'in_collections' })}
-                      className="bg-red-500/15 hover:bg-red-500/25 text-red-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Collections
-                    </button>
-                    {activeCase && (
-                      <>
-                        <button
-                          onClick={() =>
-                            openAction({
-                              mode: 'resolve',
-                              row,
-                              caseId: latestCase.id,
-                              status: 'recovered',
-                            })
-                          }
-                          className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                        >
-                          Recovered
-                        </button>
-                        <button
-                          onClick={() =>
-                            openAction({
-                              mode: 'resolve',
-                              row,
-                              caseId: latestCase.id,
-                              status: 'written_off',
-                            })
-                          }
-                          className="bg-ink-700 hover:bg-ink-600 text-zinc-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                        >
-                          Write off
-                        </button>
-                      </>
-                    )}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </Panel>
       )}
 
       {data && data.total > data.limit && (
-        <div className="flex items-center justify-between mt-6">
+        <div className="dash-bar flex items-center justify-between">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Previous
           </button>
-          <p className="text-ink-300 text-sm">
+          <p className="text-sm text-[var(--muted)]">
             Page {page} of {totalPages}
           </p>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg"
+            className="dash-btn dash-btn--secondary dash-btn--md"
           >
             Next
           </button>
@@ -400,47 +388,48 @@ export default function AdminRecoveryDebtPage() {
           labelledBy="admin-recovery-action-title"
           className="max-w-lg"
         >
-          <h3 id="admin-recovery-action-title" className="text-white font-semibold mb-2 capitalize">
+          <h3
+            id="admin-recovery-action-title"
+            className="mb-2 font-semibold capitalize text-[var(--ink)]"
+          >
             {action.mode === 'open'
               ? `${formatStatus(action.status)} case`
               : `${formatStatus(action.status)} case`}
           </h3>
-          <p className="text-ink-300 text-sm mb-4">
+          <p className="mb-4 text-sm text-[var(--copy)]">
             {action.row.user?.email || action.row.userId} ·{' '}
             {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
           </p>
-          <label className="block mb-3">
-            <span className="text-ink-300 text-xs uppercase tracking-wider">
-              External reference
-            </span>
+          <label className="mb-3 block">
+            <span className="dash-eyebrow">External reference</span>
             <input
               value={externalReference}
               onChange={(e) => setExternalReference(e.target.value)}
               maxLength={255}
-              className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+              className="mt-2 w-full px-4 py-3"
             />
           </label>
-          <label className="block mb-5">
-            <span className="text-ink-300 text-xs uppercase tracking-wider">Note</span>
+          <label className="mb-5 block">
+            <span className="dash-eyebrow">Note</span>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               maxLength={1000}
               rows={4}
-              className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+              className="mt-2 w-full px-4 py-3"
             />
           </label>
-          <div className="flex items-center gap-3 justify-end">
+          <div className="flex items-center justify-end gap-3">
             <button
               onClick={() => setAction(null)}
-              className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Cancel
             </button>
             <button
               onClick={submitAction}
               disabled={processing}
-              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              className="dash-btn dash-btn--primary dash-btn--md"
             >
               {processing ? 'Saving...' : 'Save'}
             </button>

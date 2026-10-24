@@ -4,6 +4,7 @@ import type { AxiosResponse } from 'axios';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { AccountErasure } from '@/components/account-erasure';
+import { Notice, PageHeader, Panel, PanelHeader, Pill } from '@/components/dash';
 import { GoogleAccountLink } from '@/components/google-account-link';
 import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { NumberField } from '@/components/ui/number-field';
@@ -274,12 +275,20 @@ export default function DevSettingsPage() {
     }
   };
 
+  const switchClass = (on: boolean) =>
+    `relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-[var(--hair)] transition-colors motion-reduce:transition-none ${
+      on ? 'bg-[var(--ink)]' : 'bg-[var(--page)]'
+    }`;
+  const thumbClass = (on: boolean) =>
+    `absolute top-1 h-4 w-4 rounded-full transition-[left] motion-reduce:transition-none ${
+      on ? 'left-6 bg-[var(--on-ink)]' : 'left-1 bg-[var(--muted)]'
+    }`;
+  const fieldLabel = 'mb-1.5 block text-sm font-medium';
+  const eyebrowLabel = 'dash-eyebrow mb-1.5';
+
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Settings</h1>
-        <p className="text-surface-500 text-sm">Control ad display, quiet hours, and data export</p>
-      </div>
+    <>
+      <PageHeader title="Settings" />
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -288,28 +297,24 @@ export default function DevSettingsPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
-      {success && (
-        <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4 mb-6">
-          <p className="text-emerald-600 text-sm">Settings saved successfully.</p>
-        </div>
-      )}
+      {success && <Notice tone="ok">Settings saved successfully.</Notice>}
 
       {settings && (
-        <form onSubmit={handleSave} className="space-y-8">
+        <form onSubmit={handleSave} className="grid gap-5">
           {/* Ad preferences */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Ad preferences</h2>
+          <Panel label="Ad preferences">
+            <PanelHeader title="Ad preferences" />
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-surface-900 font-semibold text-sm">Show ads while waiting</p>
-                  <p className="text-surface-500 text-xs mt-0.5">
-                    Turn off to stop earning — no ads will appear in your IDE
+                  <p className="text-sm font-semibold text-[var(--ink)]">Show ads while waiting</p>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    Turn off to stop earning. No ads will appear in your IDE.
                   </p>
                 </div>
                 <button
@@ -317,77 +322,61 @@ export default function DevSettingsPage() {
                   role="switch"
                   aria-checked={adsEnabled}
                   onClick={() => setAdsEnabled(!adsEnabled)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    adsEnabled ? 'bg-brand-500' : 'bg-surface-200'
-                  }`}
+                  className={switchClass(adsEnabled)}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      adsEnabled ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+                  <span className={thumbClass(adsEnabled)} />
                 </button>
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-surface-900 font-semibold text-sm">Quiet mode</p>
-                  <p className="text-surface-500 text-xs mt-0.5">Suppress ads during set hours</p>
+                  <p className="text-sm font-semibold text-[var(--ink)]">Quiet mode</p>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    Suppress ads during set hours
+                  </p>
                 </div>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={quietMode}
                   onClick={() => setQuietMode(!quietMode)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    quietMode ? 'bg-brand-500' : 'bg-surface-200'
-                  }`}
+                  className={switchClass(quietMode)}
                 >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      quietMode ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
+                  <span className={thumbClass(quietMode)} />
                 </button>
               </div>
 
               {quietMode && (
                 <>
-                  <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-surface-200">
+                  <div className="grid grid-cols-2 gap-4 border-l-2 border-[var(--hair)] pl-4">
                     <div>
-                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                        Quiet start
-                      </label>
+                      <label className={fieldLabel}>Quiet start</label>
                       <input
                         type="time"
                         value={quietModeStart}
                         onChange={(e) => setQuietModeStart(e.target.value)}
-                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+                        className="w-full px-4 py-3"
                       />
                     </div>
                     <div>
-                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                        Quiet end
-                      </label>
+                      <label className={fieldLabel}>Quiet end</label>
                       <input
                         type="time"
                         value={quietModeEnd}
                         onChange={(e) => setQuietModeEnd(e.target.value)}
-                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+                        className="w-full px-4 py-3"
                       />
                     </div>
                   </div>
                   {/* A-058: quiet mode is evaluated in the developer's selected
                       timezone. Without a timezone we fall back to UTC, which is
                       rarely the developer's local wall-clock. */}
-                  <div className="pl-4 border-l-2 border-surface-200">
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Timezone
-                    </label>
+                  <div className="border-l-2 border-[var(--hair)] pl-4">
+                    <label className={fieldLabel}>Timezone</label>
                     <select
                       value={timezone}
                       onChange={(e) => setTimezone(e.target.value)}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+                      className="w-full px-4 py-3"
                     >
                       <option value="">UTC (default)</option>
                       {[...buildTimezoneOptions(COMMON_TIMEZONES)].map((tz) => (
@@ -396,7 +385,7 @@ export default function DevSettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <p className="text-surface-500 text-xs mt-1.5">
+                    <p className="mt-1.5 text-xs text-[var(--muted)]">
                       Your quiet hours are evaluated in this timezone. Detected: {detectedTimezone}
                     </p>
                   </div>
@@ -426,10 +415,8 @@ export default function DevSettingsPage() {
 
               {/* A-057: blocked category preferences persisted server-side */}
               <div>
-                <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                  Blocked categories
-                </label>
-                <p className="text-surface-500 text-xs mb-2">
+                <label className={fieldLabel}>Blocked categories</label>
+                <p className="mb-2 text-xs text-[var(--muted)]">
                   Comma-separated category slugs (e.g. gambling, crypto). Ads from these categories
                   will never appear. These preferences are stored server-side and enforced even from
                   CLI/VSCode clients.
@@ -450,97 +437,70 @@ export default function DevSettingsPage() {
                       .filter(Boolean);
                     setBlockedCategories(slugs);
                   }}
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
+                  className="w-full px-4 py-3"
                 />
                 {blockedCategories.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     {blockedCategories.map((slug) => (
-                      <span
-                        key={slug}
-                        className="bg-surface-100 border border-surface-200 rounded-md px-2.5 py-1 text-surface-600 text-xs font-medium"
-                      >
-                        {slug}
-                      </span>
+                      <Pill key={slug}>{slug}</Pill>
                     ))}
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </Panel>
 
           {/* Account info */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Account</h2>
+          <Panel label="Account">
+            <PanelHeader title="Account" />
             <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    Email
-                  </p>
-                  <p className="text-surface-900 font-medium text-sm">{settings.email}</p>
+                  <p className={eyebrowLabel}>Email</p>
+                  <p className="text-sm font-medium text-[var(--ink)]">{settings.email}</p>
                 </div>
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    Email verification
-                  </p>
+                  <p className={eyebrowLabel}>Email verification</p>
                   {emailVerified ? (
-                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Verified
-                    </span>
+                    <Pill tone="ok">Verified</Pill>
                   ) : (
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="bg-amber-50 border border-amber-200/60 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                        Not verified
-                      </span>
+                      <Pill tone="warn">Not verified</Pill>
                       <button
                         type="button"
                         onClick={handleRequestVerification}
                         disabled={verifyBusy}
-                        className="text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium text-xs"
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
                       >
                         {verifyBusy ? 'Sending…' : 'Resend verification email'}
                       </button>
                     </div>
                   )}
-                  {verifyMsg && <p className="text-surface-500 text-xs mt-2">{verifyMsg}</p>}
+                  {verifyMsg && <p className="mt-2 text-xs text-[var(--muted)]">{verifyMsg}</p>}
                 </div>
                 {settings.displayName && (
                   <div>
-                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                      Name
-                    </p>
-                    <p className="text-surface-900 font-medium text-sm">{settings.displayName}</p>
+                    <p className={eyebrowLabel}>Name</p>
+                    <p className="text-sm font-medium text-[var(--ink)]">{settings.displayName}</p>
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-surface-100 pt-4">
+              <div className="grid grid-cols-1 gap-5 border-t border-[var(--hair)] pt-4 md:grid-cols-2">
                 {settings.referralCode && (
                   <div>
-                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                      Referral code
-                    </p>
-                    <p className="text-surface-900 font-mono font-bold text-sm tracking-wider">
+                    <p className={eyebrowLabel}>Referral code</p>
+                    <p className="dash-mono text-sm tracking-wider text-[var(--ink)]">
                       {settings.referralCode}
                     </p>
                   </div>
                 )}
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    GitHub
-                  </p>
-                  {settings.githubLinked ? (
-                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Linked
-                    </span>
-                  ) : (
-                    <span className="bg-surface-100 border border-surface-200 text-surface-500 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Not linked
-                    </span>
-                  )}
+                  <p className={eyebrowLabel}>GitHub</p>
+                  {settings.githubLinked ? <Pill tone="ok">Linked</Pill> : <Pill>Not linked</Pill>}
                 </div>
               </div>
             </div>
-          </div>
+          </Panel>
 
           <GoogleAccountLink initiallyLinked={user?.googleVerified === true} />
 
@@ -558,97 +518,92 @@ export default function DevSettingsPage() {
           />
 
           {/* API keys */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-              <div>
-                <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
-                <p className="text-surface-500 text-xs mt-1">
-                  Manage read-only ledger keys for reporting integrations. Extension and CLI sign-in
-                  still use your user session.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleCreateApiKey}
-                disabled={apiKeyBusy}
-                className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
-              >
-                {apiKeyBusy ? 'Working...' : 'New ledger key'}
-              </button>
-            </div>
+          <Panel label="API keys">
+            <PanelHeader
+              title="API keys"
+              action={
+                <button
+                  type="button"
+                  onClick={handleCreateApiKey}
+                  disabled={apiKeyBusy}
+                  className="dash-btn dash-btn--primary dash-btn--sm"
+                >
+                  {apiKeyBusy ? 'Working...' : 'New ledger key'}
+                </button>
+              }
+            />
+            <p className="-mt-3 mb-4 text-xs text-[var(--muted)]">
+              Manage read-only ledger keys for reporting integrations. Extension and CLI sign-in
+              still use your user session.
+            </p>
 
             {apiKeyError && (
-              <div className="bg-red-50 border border-red-200/60 rounded-lg p-3 mb-4">
-                <p className="text-red-600 text-sm">{apiKeyError}</p>
+              <div className="mb-4">
+                <Notice tone="bad">{apiKeyError}</Notice>
               </div>
             )}
 
             {newApiKey && (
-              <div className="bg-emerald-50 border border-emerald-200/70 rounded-lg p-4 mb-5">
-                <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">
-                  New ledger API key
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 min-w-0 bg-white border border-emerald-200/70 rounded-md px-3 py-2 text-surface-900 text-xs break-all font-mono">
-                    {newApiKey}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={copyNewApiKey}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 py-2 rounded-md text-xs transition-colors shrink-0"
-                  >
-                    {copiedApiKey ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
+              <div className="mb-5">
+                <Notice tone="ok" title="New ledger API key">
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="min-w-0 flex-1 rounded-md border border-[var(--hair)] bg-[var(--page)] px-3 py-2 text-xs break-all text-[var(--ink)]">
+                      {newApiKey}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyNewApiKey}
+                      className="dash-btn dash-btn--primary dash-btn--sm"
+                    >
+                      {copiedApiKey ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </Notice>
               </div>
             )}
 
             {apiKeys.length === 0 ? (
-              <div className="border border-dashed border-surface-200 rounded-lg py-8 text-center">
-                <p className="text-surface-500 text-sm">No API keys yet.</p>
+              <div className="rounded-lg border border-dashed border-[var(--hair)] py-8 text-center">
+                <p className="text-sm text-[var(--muted)]">No API keys yet.</p>
               </div>
             ) : (
               <div
-                className="overflow-x-auto border border-surface-200/80 rounded-lg"
+                className="overflow-x-auto rounded-lg border border-[var(--hair)]"
                 tabIndex={0}
                 role="region"
                 aria-label="API keys table, scrolls horizontally"
               >
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-50/70 border-b border-surface-200/80">
+                <table>
+                  <thead>
                     <tr>
-                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Key</th>
-                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Scopes</th>
-                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Created</th>
-                      <th className="px-4 py-3 text-left text-surface-500 font-medium">
-                        Last used
-                      </th>
-                      <th className="px-4 py-3 text-right text-surface-500 font-medium">Action</th>
+                      <th>Key</th>
+                      <th>Scopes</th>
+                      <th>Created</th>
+                      <th>Last used</th>
+                      <th className="text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-surface-100">
+                  <tbody>
                     {apiKeys.map((key) => (
                       <tr key={key.id}>
-                        <td className="px-4 py-3 font-mono text-surface-900">{key.keyPrefix}...</td>
-                        <td className="px-4 py-3 text-surface-600">{key.scopes.join(', ')}</td>
-                        <td className="px-4 py-3 text-surface-500">
-                          {new Date(key.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-surface-500">
+                        <td className="dash-mono text-[var(--ink)]">{key.keyPrefix}...</td>
+                        <td>{key.scopes.join(', ')}</td>
+                        <td>{new Date(key.createdAt).toLocaleDateString()}</td>
+                        <td>
                           {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : 'Never'}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="text-right">
                           {key.isActive ? (
                             <button
                               type="button"
                               onClick={() => handleRevokeApiKey(key.id)}
                               disabled={apiKeyBusy}
-                              className="text-rose-600 hover:text-rose-700 disabled:opacity-50 font-medium text-xs transition-colors"
+                              className="dash-btn dash-btn--danger dash-btn--sm"
                             >
                               Revoke
                             </button>
                           ) : (
-                            <span className="text-surface-400 text-xs">Revoked</span>
+                            <span className="text-xs text-[var(--muted)]">Revoked</span>
                           )}
                         </td>
                       </tr>
@@ -657,15 +612,15 @@ export default function DevSettingsPage() {
                 </table>
               </div>
             )}
-            <p className="text-surface-400 text-xs mt-3 leading-relaxed">
+            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
               Ledger keys can read earnings and payout ledger data with the
-              <code className="mx-1 rounded bg-surface-100 px-1 py-0.5 font-mono text-[11px]">
+              <code className="mx-1 rounded bg-[var(--page)] px-1 py-0.5 text-[11px]">
                 x-api-key
               </code>
               header. They cannot register extension devices, change settings, export data, delete
               your account, or request payouts.
             </p>
-          </div>
+          </Panel>
 
           <AccountErasure
             role="developer"
@@ -675,29 +630,29 @@ export default function DevSettingsPage() {
           />
 
           {/* Actions */}
-          <p className="text-surface-400 text-xs leading-relaxed">
+          <p className="text-xs leading-relaxed text-[var(--muted)]">
             Export downloads a recent self-service JSON snapshot. High-volume activity sections are
-            capped and marked in <code className="font-mono">exportMeta</code>; contact support for
-            a compliance-grade full export.
+            capped and marked in <code>exportMeta</code>; contact support for a compliance-grade
+            full export.
           </p>
           <div className="flex items-center gap-4">
             <button
               type="submit"
               disabled={saving}
-              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-colors"
+              className="dash-btn dash-btn--primary dash-btn--md"
             >
               {saving ? 'Saving...' : 'Save settings'}
             </button>
             <button
               type="button"
               onClick={handleExport}
-              className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
+              className="dash-btn dash-btn--secondary dash-btn--md"
             >
               Export my data
             </button>
           </div>
         </form>
       )}
-    </div>
+    </>
   );
 }

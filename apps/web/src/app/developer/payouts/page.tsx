@@ -1,9 +1,9 @@
 'use client';
 
 import type { AxiosResponse } from 'axios';
-import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
+import { ActionLink, Notice, PageHeader, Panel, PanelHeader, Stat } from '@/components/dash';
 import { earningsAreLive, useWaitLaunchMode } from '@/components/launch-mode-banner';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
@@ -339,50 +339,41 @@ export default function DevPayoutsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <>
+      <PageHeader title="Payouts" />
+
       {isAuthenticated && !user?.emailVerified && (
-        <div className="bg-amber-50 border border-amber-200/60 rounded-3xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-amber-800 font-semibold text-sm">
-              Verify your email to request payouts
-            </p>
-            <p className="text-amber-700 text-xs mt-0.5">
-              Payouts are blocked until your email address is confirmed.
-            </p>
-            {verifyMsg && <p className="text-amber-700 text-xs mt-2">{verifyMsg}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={handleRequestVerification}
-            disabled={verifyBusy}
-            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
-          >
-            {verifyBusy ? 'Sending…' : 'Resend verification email'}
-          </button>
-        </div>
+        <Notice
+          tone="warn"
+          title="Verify your email to request payouts"
+          actions={
+            <button
+              type="button"
+              onClick={handleRequestVerification}
+              disabled={verifyBusy}
+              className="dash-btn dash-btn--primary dash-btn--sm"
+            >
+              {verifyBusy ? 'Sending…' : 'Resend verification email'}
+            </button>
+          }
+        >
+          <p>Payouts are blocked until your email address is confirmed.</p>
+          {verifyMsg && <p className="mt-2">{verifyMsg}</p>}
+        </Notice>
       )}
       {info && requestBlockedByTwoFactor && (
-        <div className="bg-amber-50 border border-amber-200/60 rounded-3xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-amber-800 font-semibold text-sm">Enable 2FA to request payouts</p>
-            <p className="text-amber-700 text-xs mt-0.5">
-              Your operator requires two-factor authentication before money can leave your account.
-            </p>
-          </div>
-          <Link
-            href="/developer/settings"
-            className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
-          >
-            Enable 2FA
-          </Link>
-        </div>
+        <Notice
+          tone="warn"
+          title="Enable 2FA to request payouts"
+          actions={
+            <ActionLink href="/developer/settings" variant="primary">
+              Enable 2FA
+            </ActionLink>
+          }
+        >
+          Your operator requires two-factor authentication before money can leave your account.
+        </Notice>
       )}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Payouts</h1>
-        <p className="text-surface-500 text-sm font-normal">
-          Available earnings, payout methods, and history
-        </p>
-      </div>
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -391,47 +382,40 @@ export default function DevPayoutsPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm font-normal">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
-      {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4 mb-6">
-          <p className="text-emerald-700 text-sm font-normal">{successMsg}</p>
-        </div>
-      )}
+      {successMsg && <Notice tone="ok">{successMsg}</Notice>}
 
       {info && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard
-              label="Available balance"
-              value={formatCurrencyBreakdown(availableBalanceByCurrency)}
-              valueColor="text-brand-600"
-              subtitle={`Minimum payout: ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`}
-              variant="light"
-            />
-            <StatCard
-              label="Active payout methods"
-              value={info.payoutAccounts.length.toString()}
-              variant="light"
-            />
-            <StatCard
-              label="Total payout requests"
-              value={requests.length.toString()}
-              variant="light"
-            />
+          <div className="dash-grid dash-grid--3">
+            <Panel label="Available balance">
+              <Stat
+                label="Available balance"
+                value={formatCurrencyBreakdown(availableBalanceByCurrency)}
+                detail={`Minimum payout: ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`}
+                chip
+              />
+            </Panel>
+            <Panel label="Active payout methods">
+              <Stat label="Active payout methods" value={info.payoutAccounts.length.toString()} />
+            </Panel>
+            <Panel label="Total payout requests">
+              <Stat label="Total payout requests" value={requests.length.toString()} />
+            </Panel>
           </div>
 
           {/* Request payout */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
+          <Panel label="Request payout">
+            <PanelHeader title="Request payout" />
 
             {!earningsLive ? (
-              <div className="bg-sky-50/40 border border-sky-100/70 rounded-xl p-5 text-sky-900 leading-relaxed text-sm font-normal">
+              <Notice tone="neutral">
                 Payout requests are unavailable while the platform is in{' '}
-                <span className="font-semibold">
+                <span className="font-semibold text-[var(--ink)]">
                   {launchMode === 'paused'
                     ? 'paused'
                     : launchMode === 'unknown'
@@ -440,36 +424,32 @@ export default function DevPayoutsPage() {
                 </span>{' '}
                 mode. No earnings accrue and nothing is payable yet. You can still register and
                 verify a payout account now so it is ready when settlement is enabled.
-              </div>
+              </Notice>
             ) : requestBlockedByTwoFactor ? (
-              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-sm font-normal">
+              <Notice tone="warn">
                 Two-factor authentication is required before requesting a payout. Enable 2FA in
                 settings, then return here.
-              </div>
+              </Notice>
             ) : !hasPayoutableBalance ? (
-              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-sm font-normal">
+              <Notice tone="warn">
                 You need at least{' '}
-                <span className="font-semibold">
+                <span className="font-semibold text-[var(--ink)]">
                   {formatCurrency(info.minimumThresholdMinor, selectedCurrency)}
                 </span>{' '}
                 in confirmed earnings before you can request a payout.
-              </div>
+              </Notice>
             ) : info.payoutAccounts.length === 0 ? (
-              <p className="text-surface-500 text-sm font-normal">
-                Add a payout method below first.
-              </p>
+              <p className="text-sm text-[var(--copy)]">Add a payout method below first.</p>
             ) : (
               <form onSubmit={handleRequestPayout} className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div>
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Payout method
-                    </label>
+                    <label className="mb-1.5 block text-sm font-medium">Payout method</label>
                     <select
                       value={selectedAccountId}
                       onChange={(e) => setSelectedAccountId(e.target.value)}
                       required
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
+                      className="w-full px-4 py-3.5 text-sm"
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
@@ -494,7 +474,7 @@ export default function DevPayoutsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                    <label className="mb-1.5 block text-sm font-medium">
                       Amount ({selectedCurrency})
                     </label>
                     <input
@@ -509,7 +489,7 @@ export default function DevPayoutsPage() {
                         info.minimumThresholdMinor,
                         selectedCurrency,
                       )}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-sm placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
+                      className="w-full px-4 py-3.5 text-sm"
                     />
                   </div>
                   {/*
@@ -520,212 +500,216 @@ export default function DevPayoutsPage() {
                     developer had never been shown.
                   */}
                   {info && (
-                    <p className="text-surface-500 text-xs mt-1.5">
+                    <p className="mt-1.5 text-xs text-[var(--muted)]">
                       Minimum {formatCurrency(info.minimumThresholdMinor, selectedCurrency)} ·
                       Available {formatCurrency(selectedAvailableMinor, selectedCurrency)}
                     </p>
                   )}
                 </div>
-                {requestError && <p className="text-red-600 text-sm font-normal">{requestError}</p>}
+                {requestError && <Notice tone="bad">{requestError}</Notice>}
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-all"
+                  className="dash-btn dash-btn--primary dash-btn--md"
                 >
                   {submitting ? 'Requesting…' : 'Request payout'}
                 </button>
               </form>
             )}
-          </div>
+          </Panel>
 
           {/* Payout methods */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-surface-900 font-bold text-[16px]">Payout methods</h2>{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMethodForm(!showMethodForm);
-                  setSuccessMsg(null);
-                }}
-                disabled={!providerReadiness || availableProviders.length === 0}
-                title={
-                  !providerReadiness
-                    ? 'Live provider readiness is unavailable'
-                    : availableProviders.length === 0
-                      ? 'No payout provider is currently ready'
-                      : undefined
-                }
-                className="text-brand-600 hover:text-brand-700 disabled:text-surface-400 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
-              >
-                {showMethodForm ? 'Cancel' : '+ Add method'}
-              </button>
-            </div>
-
-            {providerReadinessError && (
-              <div
-                role="alert"
-                className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
-              >
-                <p className="font-semibold">Payout method registration is temporarily disabled.</p>
-                <p className="mt-1 text-xs leading-5">{providerReadinessError}</p>
+          <Panel label="Payout methods" flush>
+            <PanelHeader
+              title="Payout methods"
+              action={
                 <button
                   type="button"
-                  onClick={fetchData}
-                  disabled={loading}
-                  className="mt-3 text-xs font-semibold underline disabled:opacity-50"
+                  onClick={() => {
+                    setShowMethodForm(!showMethodForm);
+                    setSuccessMsg(null);
+                  }}
+                  disabled={!providerReadiness || availableProviders.length === 0}
+                  title={
+                    !providerReadiness
+                      ? 'Live provider readiness is unavailable'
+                      : availableProviders.length === 0
+                        ? 'No payout provider is currently ready'
+                        : undefined
+                  }
+                  className="dash-btn dash-btn--secondary dash-btn--sm"
                 >
-                  Retry readiness check
+                  {showMethodForm ? 'Cancel' : '+ Add method'}
                 </button>
-              </div>
-            )}
+              }
+            />
 
-            {providerReadiness && availableProviders.length === 0 && (
-              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p className="font-semibold">No payout provider is currently ready.</p>
-                <p className="mt-1 text-xs leading-5">
-                  Existing methods remain visible, but registration stays disabled until the API
-                  confirms a provider is configured, enabled, and healthy.
-                </p>
-              </div>
-            )}
+            {(providerReadinessError ||
+              (providerReadiness && availableProviders.length === 0) ||
+              (showMethodForm && providerReadiness && availableProviders.length > 0)) && (
+              <div className="grid gap-4 border-b border-[var(--hair)] px-[22px] py-5">
+                {providerReadinessError && (
+                  <Notice
+                    tone="warn"
+                    role="alert"
+                    title="Payout method registration is temporarily disabled."
+                    actions={
+                      <button
+                        type="button"
+                        onClick={fetchData}
+                        disabled={loading}
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
+                      >
+                        Retry readiness check
+                      </button>
+                    }
+                  >
+                    {providerReadinessError}
+                  </Notice>
+                )}
 
-            {showMethodForm && providerReadiness && availableProviders.length > 0 && (
-              <form
-                onSubmit={handleAddMethod}
-                className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Provider
-                    </label>
-                    <select
-                      value={provider}
-                      onChange={(e) => {
-                        setProvider(e.target.value);
-                        setSuccessMsg(null);
-                      }}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm font-normal"
-                    >
-                      <option value="">Select provider...</option>
-                      {availableProviders.map((p) => (
-                        <option key={p.provider} value={p.provider}>
-                          {p.label}
-                        </option>
-                      ))}
-                      {unavailableProviders && unavailableProviders.length > 0 && (
-                        <>
-                          <option disabled>──────────</option>
-                          <option disabled value="">
-                            Unavailable now:
-                          </option>
-                          {unavailableProviders.map((p) => (
-                            <option key={p.provider} value={p.provider} disabled>
-                              {p.label} — {payoutProviderStatusLabel(p.status, p.available)}
+                {providerReadiness && availableProviders.length === 0 && (
+                  <Notice tone="warn" title="No payout provider is currently ready.">
+                    Existing methods remain visible, but registration stays disabled until the API
+                    confirms a provider is configured, enabled, and healthy.
+                  </Notice>
+                )}
+
+                {showMethodForm && providerReadiness && availableProviders.length > 0 && (
+                  <form
+                    onSubmit={handleAddMethod}
+                    className="space-y-4 rounded-xl border border-[var(--hair)] p-5"
+                  >
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                      <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
+                        <label className="mb-1.5 block text-sm font-medium">Provider</label>
+                        <select
+                          value={provider}
+                          onChange={(e) => {
+                            setProvider(e.target.value);
+                            setSuccessMsg(null);
+                          }}
+                          className="w-full px-4 py-3 text-sm"
+                        >
+                          <option value="">Select provider...</option>
+                          {availableProviders.map((p) => (
+                            <option key={p.provider} value={p.provider}>
+                              {p.label}
                             </option>
                           ))}
-                        </>
+                          {unavailableProviders && unavailableProviders.length > 0 && (
+                            <>
+                              <option disabled>──────────</option>
+                              <option disabled value="">
+                                Unavailable now:
+                              </option>
+                              {unavailableProviders.map((p) => (
+                                <option key={p.provider} value={p.provider} disabled>
+                                  {p.label} — {payoutProviderStatusLabel(p.status, p.available)}
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                        <p className="mt-1.5 text-xs text-[var(--muted)]">
+                          {unavailableProviders && unavailableProviders.length > 0
+                            ? `Unavailable now: ${unavailableProviders
+                                .map((entry) => entry.label)
+                                .join(', ')}.`
+                            : 'Every listed provider is confirmed ready by the live API.'}
+                        </p>
+                      </div>
+                      {provider !== 'stripe_connect' && (
+                        <div className="md:col-span-2">
+                          <label className="mb-1.5 block text-sm font-medium">
+                            {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
+                          </label>
+                          <input
+                            type="text"
+                            value={destination}
+                            onChange={(e) => setDestination(e.target.value)}
+                            required
+                            placeholder={
+                              provider === 'paypal_email' ? 'you@example.com' : 'Account ID'
+                            }
+                            autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
+                            inputMode={provider === 'paypal_email' ? 'email' : 'text'}
+                            className="w-full px-4 py-3 text-sm"
+                          />
+                        </div>
                       )}
-                    </select>
-                    <p className="text-surface-500 text-xs mt-1.5 font-normal">
-                      {unavailableProviders && unavailableProviders.length > 0
-                        ? `Unavailable now: ${unavailableProviders
-                            .map((entry) => entry.label)
-                            .join(', ')}.`
-                        : 'Every listed provider is confirmed ready by the live API.'}
-                    </p>
-                  </div>
-                  {provider !== 'stripe_connect' && (
-                    <div className="md:col-span-2">
-                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                        {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
-                      </label>
-                      <input
-                        type="text"
-                        value={destination}
-                        onChange={(e) => setDestination(e.target.value)}
-                        required
-                        placeholder={provider === 'paypal_email' ? 'you@example.com' : 'Account ID'}
-                        autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
-                        inputMode={provider === 'paypal_email' ? 'email' : 'text'}
-                        className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 transition-all font-normal"
-                      />
+                      <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
+                        <label className="mb-1.5 block text-sm font-medium">Currency</label>
+                        <select
+                          value={methodCurrency}
+                          onChange={(e) => setMethodCurrency(e.target.value)}
+                          className="w-full px-4 py-3 text-sm"
+                        >
+                          {supportedMethodCurrencies.map((code) => (
+                            <option key={code} value={code}>
+                              {code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  )}
-                  <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Currency
-                    </label>
-                    <select
-                      value={methodCurrency}
-                      onChange={(e) => setMethodCurrency(e.target.value)}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm font-normal"
+                    <button
+                      type="submit"
+                      disabled={submitting || !provider}
+                      className="dash-btn dash-btn--primary dash-btn--md"
                     >
-                      {supportedMethodCurrencies.map((code) => (
-                        <option key={code} value={code}>
-                          {code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={submitting || !provider}
-                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-all"
-                >
-                  {submitting
-                    ? provider === 'stripe_connect'
-                      ? 'Connecting...'
-                      : 'Adding...'
-                    : provider === 'stripe_connect'
-                      ? 'Connect with Stripe'
-                      : 'Add method'}
-                </button>
-              </form>
+                      {submitting
+                        ? provider === 'stripe_connect'
+                          ? 'Connecting...'
+                          : 'Adding...'
+                        : provider === 'stripe_connect'
+                          ? 'Connect with Stripe'
+                          : 'Add method'}
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
 
             {info.payoutAccounts.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-3xl font-normal">
+              <div className="py-12 text-center text-sm text-[var(--muted)]">
                 No payout methods yet. Add a currently available method to prepare for payouts.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="dash-rows">
                 {info.payoutAccounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
-                  >
+                  <div key={acc.id} className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-surface-900 font-medium capitalize text-sm">
+                      <p className="text-sm font-medium text-[var(--ink)] capitalize">
                         {acc.provider === 'paypal_email'
                           ? 'PayPal'
                           : acc.provider.replace('_', ' ')}
                       </p>
-                      <p className="text-surface-500 text-xs font-mono mt-0.5 font-normal">
+                      <p className="dash-mono mt-0.5 text-xs text-[var(--copy)]">
                         {acc.destination}
                       </p>
-                      <p className="text-surface-400 text-xs mt-0.5 font-normal">{acc.currency}</p>
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">{acc.currency}</p>
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <StatusBadge status={acc.isVerified ? 'approved' : 'pending'} />
                       {acc.initiationPayoutId ? (
-                        <span className="text-[11px] font-medium text-amber-700">
+                        <span className="text-[11px] font-medium text-[var(--copy)]">
                           Locked by payout in progress
                         </span>
                       ) : acc.isFrozen ? (
-                        <span className="text-[11px] font-medium text-amber-700">
+                        <span className="text-[11px] font-medium text-[var(--copy)]">
                           Frozen by operator
                         </span>
                       ) : removeConfirmId === acc.id ? (
                         <div className="flex flex-wrap items-center justify-end gap-2">
-                          <span className="text-[11px] text-rose-700">Remove this method?</span>
+                          <span className="text-[11px] text-[var(--copy)]">
+                            Remove this method?
+                          </span>
                           <button
                             type="button"
                             onClick={() => void handleRemoveMethod(acc.id)}
                             disabled={removingMethodId !== null}
-                            className="text-xs font-semibold text-rose-700 underline disabled:opacity-50"
+                            className="dash-btn dash-btn--danger dash-btn--sm"
                           >
                             {removingMethodId === acc.id ? 'Removing…' : 'Confirm removal'}
                           </button>
@@ -733,7 +717,7 @@ export default function DevPayoutsPage() {
                             type="button"
                             onClick={() => setRemoveConfirmId(null)}
                             disabled={removingMethodId !== null}
-                            className="text-xs text-surface-600 underline disabled:opacity-50"
+                            className="dash-btn dash-btn--ghost dash-btn--sm"
                           >
                             Keep method
                           </button>
@@ -743,7 +727,7 @@ export default function DevPayoutsPage() {
                           type="button"
                           onClick={() => setRemoveConfirmId(acc.id)}
                           disabled={removingMethodId !== null || !acc.isActive}
-                          className="text-xs font-medium text-rose-600 underline disabled:opacity-50"
+                          className="dash-btn dash-btn--ghost dash-btn--sm"
                         >
                           Remove
                         </button>
@@ -753,27 +737,24 @@ export default function DevPayoutsPage() {
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
 
           {/* Payout history */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent payout requests</h2>
+          <Panel label="Recent payout requests" flush>
+            <PanelHeader title="Recent payout requests" />
             {requests.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-3xl font-normal">
+              <div className="py-12 text-center text-sm text-[var(--muted)]">
                 No payout requests yet.
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="dash-rows">
                 {requests.map((req) => (
-                  <div
-                    key={req.id}
-                    className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
-                  >
+                  <div key={req.id} className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-surface-900 font-mono font-semibold text-sm">
+                      <p className="dash-mono text-sm text-[var(--ink)]">
                         {formatCurrency(req.requestedAmountMinor, req.currency)}
                       </p>
-                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
+                      <p className="mt-0.5 text-xs text-[var(--muted)]">
                         Requested {formatRelativeTime(req.createdAt)}
                       </p>
                     </div>
@@ -782,9 +763,9 @@ export default function DevPayoutsPage() {
                 ))}
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
-    </div>
+    </>
   );
 }

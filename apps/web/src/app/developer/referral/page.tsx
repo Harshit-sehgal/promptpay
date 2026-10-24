@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, PanelHeader, Stat } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown, formatDate } from '@/lib/format';
@@ -51,14 +52,11 @@ export default function ReferralPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Referrals</h1>
-        <p className="text-surface-500 text-sm font-normal">
-          Invite developers now; referral rewards begin only after the independently attested
-          earnings launch.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title="Referrals"
+        lede="Invite developers now; referral rewards begin only after the independently attested earnings launch."
+      />
 
       {loading && (
         <div className="flex justify-center py-12">
@@ -67,67 +65,63 @@ export default function ReferralPage() {
       )}
 
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm font-normal">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {data && (
         <>
           {/* Referral stats grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
-              <p className="text-surface-500 text-sm mb-1.5 font-medium">Your referral code</p>
+          <div className="dash-grid dash-grid--3">
+            <Panel label="Your referral code">
               {data.referralCode ? (
-                <p className="text-2xl font-mono font-semibold text-brand-500 tracking-widest">
-                  {data.referralCode}
-                </p>
+                <Stat label="Your referral code" value={data.referralCode} />
               ) : (
-                <p className="text-surface-400 text-sm font-normal">No code generated yet</p>
+                <>
+                  <p className="dash-stat__label">Your referral code</p>
+                  <p className="mt-2 text-sm text-[var(--muted)]">No code generated yet</p>
+                </>
               )}
-            </div>
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
-              <p className="text-surface-500 text-sm mb-1.5 font-medium">Total referrals</p>
-              <p className="text-3xl font-semibold text-surface-900">{data.referralCount}</p>
-            </div>
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-6 shadow-sm">
-              <p className="text-surface-500 text-sm mb-1.5 font-medium">Rewards earned</p>
-              <p className="text-3xl font-semibold text-emerald-600 font-mono">
-                {formatCurrencyBreakdown(
+            </Panel>
+            <Panel label="Total referrals">
+              <Stat label="Total referrals" value={data.referralCount} />
+            </Panel>
+            <Panel label="Rewards earned">
+              <Stat
+                label="Rewards earned"
+                value={formatCurrencyBreakdown(
                   data.rewardsEarnedByCurrency ?? { USD: data.rewardsEarnedMinor },
                 )}
-              </p>
-            </div>
+              />
+            </Panel>
           </div>
 
-          {/* Referral link + copy (No nested border boxes) */}
+          {/* Referral link + copy */}
           {data.referralLink && (
-            <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm mb-8">
-              <h2 className="text-surface-900 font-bold text-[16px] mb-4">Your referral link</h2>
+            <Panel label="Your referral link">
+              <PanelHeader title="Your referral link" />
               <div className="flex items-center gap-3">
-                <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-700 text-sm break-all font-mono">
+                <code className="min-w-0 flex-1 rounded-xl border border-[var(--hair)] bg-[var(--page)] px-4 py-3 text-sm break-all text-[var(--ink)]">
                   {data.referralLink}
                 </code>
-                <button
-                  onClick={handleCopy}
-                  className="px-5 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl shadow-sm shadow-brand-500/10 transition-colors shrink-0"
-                >
+                <button onClick={handleCopy} className="dash-btn dash-btn--primary dash-btn--md">
                   {copied ? 'Copied' : 'Copy link'}
                 </button>
               </div>
-              <p className="text-surface-500 text-xs mt-3 font-normal leading-relaxed">
+              <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
                 Share this link to grow the beta. After rewards launch, a first qualifying payout (
-                {'$10+'}) earns a <span className="text-emerald-600 font-medium">$5</span> referral
+                {'$10+'}) earns a <span className="font-medium text-[var(--ink)]">$5</span> referral
                 reward.
               </p>
-            </div>
+            </Panel>
           )}
 
           {/* Referral history */}
-          <div className="bg-white border border-surface-200/80 rounded-3xl p-7 shadow-sm overflow-hidden">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Referral history</h2>
+          <Panel label="Referral history" flush>
+            <PanelHeader title="Referral history" />
             {data.referrals.length === 0 ? (
-              <p className="text-surface-400 text-sm py-8 text-center font-normal">
+              <p className="py-8 text-center text-sm text-[var(--muted)]">
                 No referrals yet. Share your link to grow the beta.
               </p>
             ) : (
@@ -137,33 +131,31 @@ export default function ReferralPage() {
                 role="region"
                 aria-label="Referrals table, scrolls horizontally"
               >
-                <table className="w-full min-w-[680px] text-sm">
+                <table className="min-w-[680px]">
                   <thead>
-                    <tr className="bg-surface-50/50 border-b border-surface-200/80 text-surface-500 font-medium">
-                      <th className="text-left px-5 py-3.5 font-medium">Referred user</th>
-                      <th className="text-left px-5 py-3.5 font-medium">Status</th>
-                      <th className="text-left px-5 py-3.5 font-medium">Date</th>
-                      <th className="text-right px-5 py-3.5 font-medium">Reward</th>
+                    <tr>
+                      <th>Referred user</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                      <th className="text-right">Reward</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-surface-100">
+                  <tbody>
                     {data.referrals.map((r) => (
-                      <tr key={r.id} className="hover:bg-surface-50/30 transition-colors">
-                        <td className="px-5 py-3.5 font-normal text-surface-900">
-                          <p className="font-medium text-surface-900">
+                      <tr key={r.id}>
+                        <td>
+                          <p className="font-medium text-[var(--ink)]">
                             {r.referredName || r.referredEmail}
                           </p>
-                          <p className="text-surface-400 text-xs font-mono mt-0.5">
+                          <p className="dash-mono mt-0.5 text-xs text-[var(--muted)]">
                             {r.referredEmail}
                           </p>
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td>
                           <StatusBadge status={r.status} />
                         </td>
-                        <td className="px-5 py-3.5 text-surface-500 font-normal">
-                          {formatDate(r.createdAt)}
-                        </td>
-                        <td className="px-5 py-3.5 text-right text-emerald-600 font-mono font-semibold">
+                        <td>{formatDate(r.createdAt)}</td>
+                        <td className="dash-mono text-right text-[var(--ink)]">
                           {r.rewards.length > 0
                             ? formatCurrencyBreakdown(
                                 r.rewards.reduce<Record<string, bigint>>((totals, reward) => {
@@ -180,9 +172,9 @@ export default function ReferralPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Panel>
         </>
       )}
-    </div>
+    </>
   );
 }

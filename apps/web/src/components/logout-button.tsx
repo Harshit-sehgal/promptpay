@@ -49,13 +49,18 @@ export function LogoutButton({
         onClick={() => void signOut()}
         disabled={busy}
         className={`rounded px-1 py-1 text-sm font-medium transition-colors disabled:cursor-wait disabled:opacity-60 ${
-          light ? 'text-surface-500 hover:text-rose-700' : 'text-ink-300 hover:text-red-300'
+          light
+            ? 'text-[var(--ink)] underline-offset-[3px] hover:underline'
+            : 'text-ink-300 hover:text-red-300'
         }`}
       >
         {busy ? 'Signing out…' : 'Sign out'}
       </button>
       {error && (
-        <p role="alert" className="mt-2 max-w-52 text-xs leading-4 text-red-500">
+        <p
+          role="alert"
+          className={`mt-2 max-w-52 text-xs leading-4 ${light ? 'text-[var(--ink)]' : 'text-red-500'}`}
+        >
           {error}
         </p>
       )}

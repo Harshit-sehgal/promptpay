@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { Notice, PageHeader, Panel, Pill } from '@/components/dash';
 import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
@@ -27,24 +28,6 @@ const TRUST_LEVEL_SCORE: Record<string, number> = {
   restricted: 20,
   banned: 0,
 };
-
-function trustColorClass(level: string): string {
-  switch (level) {
-    case 'high_trust':
-      return 'text-emerald-400';
-    case 'normal':
-      return 'text-blue-400';
-    case 'low_trust':
-      return 'text-amber-400';
-    case 'new':
-      return 'text-ink-300';
-    case 'restricted':
-    case 'banned':
-      return 'text-red-400';
-    default:
-      return 'text-ink-300';
-  }
-}
 
 type UsersResponse = User[] | { users?: User[] };
 
@@ -115,31 +98,28 @@ export default function AdminUsersPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Users</h1>
-        <p className="text-ink-200 text-sm">Search and review account holders</p>
-      </div>
+      <PageHeader title="Users" />
 
       {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-end gap-3">
+      <div className="dash-bar flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-ink-300">Search users</span>
+          <span className="dash-eyebrow mb-1.5 block">Search users</span>
           <input
             id="admin-users-search"
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Email or name..."
-            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 text-sm"
+            className="px-4 py-2 text-sm"
           />
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-ink-300">Role</span>
+          <span className="dash-eyebrow mb-1.5 block">Role</span>
           <select
             id="admin-users-role"
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
+            className="px-4 py-2 text-sm"
           >
             <option value="">All roles</option>
             <option value="developer">Developer</option>
@@ -152,122 +132,121 @@ export default function AdminUsersPage() {
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
-      <div
-        className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden"
-        aria-busy={loading}
-      >
-        {!loading && !error && users.length === 0 ? (
-          <div className="text-ink-300 text-sm py-12 text-center">No users found.</div>
-        ) : !loading && !error ? (
-          <div
-            className="overflow-x-auto"
-            tabIndex={0}
-            role="region"
-            aria-label="Users table, scrolls horizontally"
-          >
-            <table className="w-full min-w-[820px] text-sm">
-              <thead className="bg-ink-700/50 border-b border-ink-600/30">
-                <tr>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">User</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Role</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Trust</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Flags</th>
-                  <th className="text-right px-4 py-3 text-ink-200 font-medium">Joined</th>
-                  <th className="text-right px-4 py-3 text-ink-200 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-600/20">
-                {visibleUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-white text-sm">{u.name || u.email}</p>
-                        <p className="text-ink-500 text-xs">{u.email}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={u.role} kind="metadata" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`text-xs font-medium ${
-                          u.status === 'banned'
-                            ? 'text-red-400'
-                            : u.status === 'restricted'
-                              ? 'text-amber-400'
-                              : 'text-emerald-400'
-                        }`}
-                      >
-                        {u.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`font-mono text-sm ${trustColorClass(u.trustLevel)}`}>
-                        {TRUST_LEVEL_SCORE[u.trustLevel] ?? 0}/100
-                        <span className="ml-1 text-ink-500 text-xs normal-case">
-                          ({u.trustLevel})
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.openFlags > 0 ? (
-                        <span className="text-red-400 text-xs font-medium">{u.openFlags} open</span>
-                      ) : (
-                        <span className="text-ink-500 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-ink-300 text-xs">
-                      {formatRelativeTime(u.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        {u.status === 'banned' ? (
-                          <button
-                            type="button"
-                            onClick={() => openAction(u, 'unban')}
-                            className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
-                          >
-                            Unban
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openAction(u, u.status === 'restricted' ? 'restrict' : 'ban')
-                            }
-                            className="text-amber-400 hover:text-amber-300 text-xs font-medium"
-                          >
-                            {u.status === 'restricted' ? 'Restrict' : 'Ban'}
-                          </button>
-                        )}
-                        {u.role !== 'super_admin' && u.role !== 'admin' && (
-                          <button
-                            type="button"
-                            onClick={() => openAction(u, 'erase')}
-                            className="text-red-400 hover:text-red-300 text-xs font-medium"
-                          >
-                            Erase
-                          </button>
-                        )}
-                      </div>
-                    </td>
+      <Panel label="Users" flush>
+        <div aria-busy={loading}>
+          {!loading && !error && users.length === 0 ? (
+            <div className="py-12 text-center text-sm text-[var(--muted)]">No users found.</div>
+          ) : !loading && !error ? (
+            <div
+              className="overflow-x-auto"
+              tabIndex={0}
+              role="region"
+              aria-label="Users table, scrolls horizontally"
+            >
+              <table className="w-full min-w-[820px]">
+                <thead>
+                  <tr>
+                    <th className="text-left">User</th>
+                    <th className="text-left">Role</th>
+                    <th className="text-left">Status</th>
+                    <th className="text-left">Trust</th>
+                    <th className="text-left">Flags</th>
+                    <th className="text-right">Joined</th>
+                    <th className="text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </div>
+                </thead>
+                <tbody>
+                  {visibleUsers.map((u) => (
+                    <tr key={u.id}>
+                      <td>
+                        <div>
+                          <p className="text-sm text-[var(--ink)]">{u.name || u.email}</p>
+                          <p className="text-xs text-[var(--muted)]">{u.email}</p>
+                        </div>
+                      </td>
+                      <td>
+                        <StatusBadge status={u.role} kind="metadata" />
+                      </td>
+                      <td>
+                        <Pill
+                          tone={
+                            u.status === 'banned'
+                              ? 'bad'
+                              : u.status === 'restricted'
+                                ? 'warn'
+                                : 'ok'
+                          }
+                        >
+                          {u.status}
+                        </Pill>
+                      </td>
+                      <td>
+                        <span className="dash-mono text-sm text-[var(--ink)]">
+                          {TRUST_LEVEL_SCORE[u.trustLevel] ?? 0}/100
+                          <span className="ml-1 text-xs normal-case text-[var(--muted)]">
+                            ({u.trustLevel})
+                          </span>
+                        </span>
+                      </td>
+                      <td>
+                        {u.openFlags > 0 ? (
+                          <Pill tone="bad">{u.openFlags} open</Pill>
+                        ) : (
+                          <span className="text-xs text-[var(--muted)]">—</span>
+                        )}
+                      </td>
+                      <td className="text-right text-xs text-[var(--muted)]">
+                        {formatRelativeTime(u.createdAt)}
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-2">
+                          {u.status === 'banned' ? (
+                            <button
+                              type="button"
+                              onClick={() => openAction(u, 'unban')}
+                              className="dash-btn dash-btn--ghost dash-btn--sm"
+                            >
+                              Unban
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openAction(u, u.status === 'restricted' ? 'restrict' : 'ban')
+                              }
+                              className="dash-btn dash-btn--ghost dash-btn--sm"
+                            >
+                              {u.status === 'restricted' ? 'Restrict' : 'Ban'}
+                            </button>
+                          )}
+                          {u.role !== 'super_admin' && u.role !== 'admin' && (
+                            <button
+                              type="button"
+                              onClick={() => openAction(u, 'erase')}
+                              className="dash-btn dash-btn--danger dash-btn--sm"
+                            >
+                              Erase
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </Panel>
 
       {users.length > pageSize && (
-        <div className="flex items-center justify-between mt-4 text-sm">
-          <p className="text-ink-300">
+        <div className="flex items-center justify-between text-sm">
+          <p className="text-[var(--muted)]">
             Showing {Math.min((safePage - 1) * pageSize + 1, users.length)}–
             {Math.min(safePage * pageSize, users.length)} of {users.length}
           </p>
@@ -276,18 +255,18 @@ export default function AdminUsersPage() {
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={safePage <= 1}
-              className="bg-ink-800 border border-ink-600/50 rounded-lg px-3 py-1.5 text-white text-sm disabled:opacity-40 transition-colors"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Previous
             </button>
-            <span className="text-ink-200 px-2">
+            <span className="px-2 text-[var(--copy)]">
               Page {safePage} / {totalPages}
             </span>
             <button
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={safePage >= totalPages}
-              className="bg-ink-800 border border-ink-600/50 rounded-lg px-3 py-1.5 text-white text-sm disabled:opacity-40 transition-colors"
+              className="dash-btn dash-btn--secondary dash-btn--sm"
             >
               Next
             </button>
@@ -308,7 +287,7 @@ export default function AdminUsersPage() {
           }}
           labelledBy="admin-user-action-title"
         >
-          <h2 id="admin-user-action-title" className="text-white font-semibold text-lg mb-2">
+          <h2 id="admin-user-action-title" className="mb-2 text-lg font-semibold text-[var(--ink)]">
             {actionKind === 'erase'
               ? 'Erase account'
               : actionKind === 'ban'
@@ -317,15 +296,15 @@ export default function AdminUsersPage() {
                   ? 'Unban user'
                   : 'Restrict user'}
           </h2>
-          <p className="text-ink-200 text-sm mb-4">
+          <p className="mb-4 text-sm text-[var(--copy)]">
             {actionKind === 'erase' ? (
               <>
-                This permanently anonymizes <span className="text-white">{actionUser.email}</span>{' '}
-                and cannot be undone.
+                This permanently anonymizes{' '}
+                <span className="text-[var(--ink)]">{actionUser.email}</span> and cannot be undone.
               </>
             ) : (
               <>
-                Apply this action to <span className="text-white">{actionUser.email}</span>?
+                Apply this action to <span className="text-[var(--ink)]">{actionUser.email}</span>?
               </>
             )}
           </p>
@@ -338,7 +317,7 @@ export default function AdminUsersPage() {
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder='Type "ERASE" to confirm'
-                className="w-full bg-ink-900 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:border-red-500"
+                className="mb-4 w-full px-3 py-2 text-sm"
               />
             </label>
           )}
@@ -350,7 +329,7 @@ export default function AdminUsersPage() {
                 setActionKind(null);
                 setConfirmText('');
               }}
-              className="text-ink-200 hover:text-white text-sm font-medium"
+              className="dash-btn dash-btn--ghost dash-btn--md"
             >
               Cancel
             </button>
@@ -358,10 +337,8 @@ export default function AdminUsersPage() {
               type="button"
               disabled={busy || (actionKind === 'erase' && confirmText !== 'ERASE')}
               onClick={runAction}
-              className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 ${
-                actionKind === 'erase'
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-brand-500 hover:bg-brand-600 text-white'
+              className={`dash-btn dash-btn--md ${
+                actionKind === 'erase' ? 'dash-btn--danger' : 'dash-btn--primary'
               }`}
             >
               {busy ? 'Working…' : 'Confirm'}

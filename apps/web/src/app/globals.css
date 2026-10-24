@@ -265,31 +265,6 @@ body {
 /* Shared public chrome. Public content keeps its own page structure; these
    rules only align the canvas, type, controls, and surfaces. */
 
-.app-sidebar .theme-toggle {
-  min-height: 2.25rem;
-  border: 1px solid var(--public-line-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--app-muted);
-  font-family: var(--font-ui), system-ui, sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.app-sidebar .theme-toggle:hover {
-  border-color: var(--ateva-blush-ink);
-  background: var(--public-nested);
-  color: var(--public-ink);
-}
-
-.app-sidebar .theme-toggle__icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  background: var(--ateva-blush);
-  color: var(--ateva-blush-ink);
-}
-
 /* Authentication is intentionally a hybrid: a quiet editorial frame around
    conventional, compact form content. The frame itself is styled with the
    palette system near the end of this file. */
@@ -375,264 +350,13 @@ body {
   border-radius: 1rem;
 }
 
-body:has(.auth-shell) .site-footer,
-body:has(.app-shell) .site-footer {
+body:has(.auth-shell) .site-footer {
   display: none;
 }
 
 /* Operational shells share the same tokens in both themes. The utility
    mappings let existing data-driven pages change appearance without changing
    their data flow or rewriting every working component. */
-.app-shell {
-  min-height: 100vh;
-  background: var(--app-canvas) !important;
-  color: var(--app-ink);
-  font-family: var(--font-ui), system-ui, sans-serif;
-}
-
-.app-shell main {
-  background: var(--app-canvas);
-  color: var(--app-ink);
-}
-
-.app-shell .bg-ink-900 {
-  background-color: var(--app-canvas) !important;
-}
-
-.app-shell .bg-ink-800 {
-  background-color: var(--app-surface) !important;
-}
-
-.app-shell .bg-ink-700,
-.app-shell .bg-ink-600 {
-  background-color: var(--app-nested) !important;
-}
-
-.app-shell [class~='bg-ink-700/20'],
-.app-shell [class~='bg-ink-700/30'],
-.app-shell [class~='bg-ink-700/40'],
-.app-shell [class~='bg-ink-700/50'],
-.app-shell [class~='bg-ink-900/60'] {
-  background-color: color-mix(in srgb, var(--app-nested) 58%, transparent) !important;
-}
-
-.app-shell .bg-surface-50,
-.app-shell [class~='bg-surface-50/30'],
-.app-shell [class~='bg-surface-50/50'],
-.app-shell [class~='bg-surface-50/70'] {
-  background-color: var(--app-canvas) !important;
-}
-
-.app-shell .bg-surface-100,
-.app-shell [class~='bg-surface-100/50'],
-.app-shell [class~='bg-surface-100/60'] {
-  background-color: var(--app-nested) !important;
-}
-
-.app-shell .bg-white {
-  background-color: var(--app-surface) !important;
-}
-
-.app-shell .text-white {
-  /* White is intentional on dark action buttons and nested product surfaces;
-     mapping it to the light theme ink made those controls unreadable. */
-  color: #ffffff !important;
-}
-
-.app-shell [class~='bg-surface-950'] [class~='text-surface-300'] {
-  color: #d9dadd !important;
-}
-
-.app-shell .text-ink-100,
-.app-shell .text-ink-200,
-.app-shell .text-ink-300 {
-  color: var(--app-copy) !important;
-}
-
-.app-shell .text-ink-400,
-.app-shell .text-ink-500 {
-  color: var(--app-tertiary) !important;
-}
-
-.app-shell .text-surface-950,
-.app-shell .text-surface-900,
-.app-shell .text-surface-800 {
-  color: var(--app-ink) !important;
-}
-
-.app-shell .text-surface-700,
-.app-shell .text-surface-600 {
-  color: var(--app-copy) !important;
-}
-
-.app-shell .text-surface-500,
-.app-shell .text-surface-400,
-.app-shell .text-surface-300 {
-  color: var(--app-muted) !important;
-}
-
-.app-shell .border-ink-500,
-.app-shell .border-ink-600,
-.app-shell .border-ink-700,
-.app-shell [class~='border-ink-600/10'],
-.app-shell [class~='border-ink-600/20'],
-.app-shell [class~='border-ink-600/30'],
-.app-shell [class~='border-ink-600/40'],
-.app-shell [class~='border-ink-600/50'],
-.app-shell [class~='border-ink-600/60'],
-.app-shell .border-surface-100,
-.app-shell .border-surface-200,
-.app-shell .border-surface-300 {
-  border-color: var(--app-line) !important;
-}
-
-.app-shell .border-white\/10,
-.app-shell [class~='border-white/10'],
-.app-shell [class~='border-white/12'] {
-  border-color: var(--app-line) !important;
-}
-
-.app-shell .bg-brand-500,
-.app-shell .bg-brand-600,
-.app-shell .bg-brand-700 {
-  background-color: var(--ateva-blush-ink) !important;
-  color: #ffffff !important;
-}
-
-.app-shell .bg-brand-500 .text-white,
-.app-shell .bg-brand-600 .text-white,
-.app-shell .bg-brand-700 .text-white,
-.app-shell button.bg-brand-500,
-.app-shell button.bg-brand-600,
-.app-shell button.bg-brand-700,
-.app-shell a.bg-brand-500,
-.app-shell a.bg-brand-600,
-.app-shell a.bg-brand-700 {
-  color: #ffffff !important;
-}
-
-.app-shell .text-brand-300,
-.app-shell .text-brand-400,
-.app-shell .text-brand-500,
-.app-shell .text-brand-600,
-.app-shell .text-brand-700 {
-  color: var(--ateva-blush-ink) !important;
-}
-
-.app-shell .rounded-3xl {
-  border-radius: 1.25rem;
-}
-
-.app-shell .rounded-2xl {
-  border-radius: 1rem;
-}
-
-.app-shell .rounded-xl {
-  border-radius: 0.875rem;
-}
-
-.app-shell input,
-.app-shell select,
-.app-shell textarea {
-  border-color: var(--app-line-strong);
-  background-color: var(--app-surface);
-  color: var(--app-ink);
-}
-
-.app-shell input::placeholder,
-.app-shell textarea::placeholder {
-  color: var(--app-tertiary);
-}
-
-.app-shell input:focus,
-.app-shell select:focus,
-.app-shell textarea:focus {
-  border-color: var(--ateva-blush-ink);
-  outline: 2px solid color-mix(in srgb, var(--ateva-blush-ink) 28%, transparent);
-  outline-offset: 1px;
-}
-
-.app-shell .app-sidebar {
-  border-color: var(--app-line) !important;
-  background: var(--app-surface) !important;
-}
-
-.app-sidebar__header {
-  min-height: 2.5rem;
-}
-
-.app-sidebar__menu-toggle {
-  border-color: var(--app-line-strong) !important;
-  background: transparent;
-  color: var(--app-ink) !important;
-}
-
-.app-sidebar__menu-toggle:hover {
-  background: var(--app-nested);
-}
-
-.app-sidebar__group-label {
-  color: var(--app-tertiary);
-}
-
-.app-sidebar__item {
-  color: var(--app-muted);
-}
-
-.app-sidebar__item:hover {
-  background: var(--app-nested) !important;
-  color: var(--app-ink) !important;
-}
-
-.app-sidebar__item--active {
-  border-color: var(--app-line-strong) !important;
-  background: var(--app-nested) !important;
-  box-shadow: none !important;
-  color: var(--app-ink) !important;
-}
-
-.app-sidebar__footer {
-  border-color: var(--app-line) !important;
-}
-
-html.dark .app-sidebar .theme-toggle {
-  border-color: var(--app-line-strong);
-  color: var(--app-muted);
-}
-
-html.dark .app-shell .bg-brand-500,
-html.dark .app-shell .bg-brand-600,
-html.dark .app-shell .bg-brand-700 {
-  background-color: #6b3825 !important;
-}
-
-html.dark .app-shell .text-brand-300,
-html.dark .app-shell .text-brand-400,
-html.dark .app-shell .text-brand-500,
-html.dark .app-shell .text-brand-600,
-html.dark .app-shell .text-brand-700 {
-  color: #f4c8b0 !important;
-}
-
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-200,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-300,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-400,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-500,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-emerald-600 {
-  color: #047857 !important;
-}
-
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-amber-300,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-amber-400 {
-  color: #a16207 !important;
-}
-
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-200,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-300,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-red-400,
-html:not(.dark):not([data-palette='midnight']) .app-shell .text-rose-400 {
-  color: #be123c !important;
-}
 
 @media (max-width: 767px) {
   .auth-shell {
@@ -725,49 +449,6 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   background: rgb(88 92 99);
 }
 
-.theme-toggle {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  gap: 0.5rem;
-  border: 1px solid rgb(45 59 70 / 0.16);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.72);
-  padding: 0.375rem 0.7rem 0.375rem 0.45rem;
-  color: #52616d;
-  font-family: var(--font-utility), ui-monospace, monospace;
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-transform: uppercase;
-  transition:
-    border-color 0.25s ease,
-    background-color 0.25s ease,
-    color 0.25s ease;
-}
-
-.theme-toggle:hover {
-  border-color: rgb(45 59 70 / 0.34);
-  background: #ffffff;
-  color: #1d2933;
-}
-
-.theme-toggle__icon {
-  display: grid;
-  width: 1.625rem;
-  height: 1.625rem;
-  place-items: center;
-  border-radius: 999px;
-  background: #edf1f4;
-  color: #445361;
-}
-
-.theme-toggle__icon svg {
-  width: 0.95rem;
-  height: 0.95rem;
-}
-
 /* -------------------------------------------------------------------------
    Final component contracts
 
@@ -776,90 +457,9 @@ html.dark ::-webkit-scrollbar-thumb:hover {
    notices, and metrics out of decorative capsules.
    ------------------------------------------------------------------------- */
 
-.app-shell [class~='text-white'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell button[class~='bg-brand-500'] [class~='text-white'],
-.app-shell button[class~='bg-brand-600'] [class~='text-white'],
-.app-shell a[class~='bg-brand-500'] [class~='text-white'],
-.app-shell a[class~='bg-brand-600'] [class~='text-white'] {
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.app-shell [class~='text-surface-950'],
-.app-shell [class~='text-surface-900'],
-.app-shell [class~='text-surface-800'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell [class~='text-surface-700'],
-.app-shell [class~='text-surface-600'] {
-  color: var(--ateva-copy-final) !important;
-}
-
-.app-shell [class~='text-surface-500'],
-.app-shell [class~='text-surface-400'] {
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell [class~='text-brand-300'],
-.app-shell [class~='text-brand-400'],
-.app-shell [class~='text-brand-500'],
-.app-shell [class~='text-brand-600'],
-.app-shell [class~='text-brand-700'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-stat-card__subtitle {
-  color: var(--ateva-muted-final) !important;
-}
-
 /* Operational controls use the same action/surface tokens in either theme.
    This prevents a dark utility button from becoming dark text on a dark fill,
    and keeps inverse controls readable when the shell is in dark mode. */
-.app-shell button[class~='bg-surface-900'],
-.app-shell button[class~='bg-surface-950'],
-.app-shell a[class~='bg-surface-900'],
-.app-shell a[class~='bg-surface-950'] {
-  background: var(--ateva-action-final) !important;
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.app-shell button[class~='bg-white'],
-.app-shell a[class~='bg-white'] {
-  border-color: var(--ateva-line-strong-final) !important;
-  background: var(--ateva-surface-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-form-section {
-  padding-inline: 1.5rem !important;
-}
-
-.status-badge[data-status-tone='success'] {
-  color: #3f6b51;
-}
-
-.status-badge[data-status-tone='warning'] {
-  color: #75602f;
-}
-
-.status-badge[data-status-tone='danger'] {
-  color: #8b4a42;
-}
-
-html.dark .status-badge[data-status-tone='success'] {
-  color: #9ec8aa;
-}
-
-html.dark .status-badge[data-status-tone='warning'] {
-  color: #d5bd83;
-}
-
-html.dark .status-badge[data-status-tone='danger'] {
-  color: #e0a39a;
-}
 
 .auth-mobile-note {
   display: none;
@@ -886,34 +486,6 @@ html.dark .status-badge[data-status-tone='danger'] {
   }
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--ateva-ink-final);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.status-badge__dot {
-  width: 0.35rem;
-  height: 0.35rem;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.status-badge--metadata {
-  color: var(--ateva-muted-final);
-  font-family: var(--font-utility);
-  font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .backend-status {
   border: 0 !important;
   border-radius: 0 !important;
@@ -928,28 +500,6 @@ html.dark .status-badge[data-status-tone='danger'] {
 
 .backend-status > span:first-child > span {
   background: currentColor !important;
-}
-
-.app-shell .launch-mode-banner {
-  margin-bottom: 1.5rem;
-  border-inline: 0 !important;
-  border-top: 1px solid var(--ateva-line-strong-final) !important;
-  border-bottom: 1px solid var(--ateva-line-final) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: var(--ateva-copy-final) !important;
-  padding: 0.75rem 0 !important;
-}
-
-.app-shell .launch-mode-banner p:first-child,
-.app-shell .launch-mode-banner p:nth-child(2),
-.app-shell .launch-mode-banner a {
-  color: inherit !important;
-}
-
-.app-shell .launch-mode-banner p:first-child {
-  color: var(--ateva-ink-final) !important;
-  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -992,25 +542,6 @@ body {
 :where(a, button, input, select, textarea):focus-visible {
   outline: 2px solid var(--ateva-refine-ink) !important;
   outline-offset: 3px;
-}
-.app-sidebar .theme-toggle {
-  border: 0 !important;
-  border-radius: 999px;
-  background: transparent !important;
-  color: var(--ateva-refine-muted) !important;
-  font-family: var(--font-ui);
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-.app-sidebar .theme-toggle:hover {
-  background: var(--ateva-refine-inset) !important;
-  color: var(--ateva-refine-ink) !important;
-}
-
-.app-sidebar .theme-toggle__icon {
-  background: transparent !important;
-  color: currentColor !important;
 }
 
 /* Public pages use rules and type for structure. A product surface or a real
@@ -1099,99 +630,6 @@ body {
 
 /* Application mode stays denser than the public narrative. Remove floating
    elevation, reduce radii, and keep the existing data hierarchy intact. */
-.app-shell {
-  background: var(--ateva-refine-canvas) !important;
-  color: var(--ateva-refine-ink) !important;
-  font-family: var(--font-ui);
-}
-
-.app-shell__main,
-.app-shell main {
-  background: var(--ateva-refine-canvas) !important;
-}
-
-.app-shell .app-sidebar,
-.app-shell .app-sidebar--dark,
-.app-shell .app-sidebar--light {
-  background: var(--ateva-refine-surface) !important;
-  border-color: var(--ateva-refine-line) !important;
-  color: var(--ateva-refine-ink) !important;
-}
-
-.app-shell .app-sidebar__item {
-  border-radius: 6px !important;
-  color: var(--ateva-refine-muted) !important;
-}
-
-.app-shell .app-sidebar__item:hover,
-.app-shell .app-sidebar__item--active {
-  background: var(--ateva-refine-inset) !important;
-  color: var(--ateva-refine-ink) !important;
-  box-shadow: none !important;
-}
-
-.app-shell [class~='shadow-sm'],
-.app-shell [class~='shadow-md'],
-.app-shell [class~='shadow-lg'] {
-  box-shadow: none !important;
-}
-
-.app-shell [class~='rounded-3xl'] {
-  border-radius: 14px !important;
-}
-
-.app-shell [class~='rounded-2xl'] {
-  border-radius: 12px !important;
-}
-
-.app-shell [class~='rounded-xl'] {
-  border-radius: 10px !important;
-}
-
-.app-shell [class~='bg-emerald-50'],
-.app-shell [class~='bg-emerald-50/50'],
-.app-shell [class~='bg-amber-50'],
-.app-shell [class~='bg-amber-50/50'],
-.app-shell [class~='bg-red-50'],
-.app-shell [class~='bg-red-50/50'],
-.app-shell [class~='bg-rose-50'],
-.app-shell [class~='bg-rose-50/50'],
-.app-shell [class~='bg-blue-50'],
-.app-shell [class~='bg-blue-50/50'] {
-  background: var(--ateva-refine-inset) !important;
-}
-
-.app-shell input,
-.app-shell select,
-.app-shell textarea {
-  min-height: 2.5rem;
-  border-color: var(--ateva-refine-line-strong) !important;
-  border-radius: 7px !important;
-  background: var(--ateva-refine-surface) !important;
-  color: var(--ateva-refine-ink) !important;
-  box-shadow: none !important;
-}
-
-.app-shell input::placeholder,
-.app-shell textarea::placeholder {
-  color: var(--ateva-refine-muted) !important;
-}
-
-.app-shell table {
-  border-color: var(--ateva-refine-line) !important;
-}
-
-.app-shell th {
-  color: var(--ateva-refine-muted) !important;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.app-shell td {
-  color: var(--ateva-refine-copy);
-}
 
 @keyframes ateva-wait-surface-arrive {
   from {
@@ -1275,218 +713,8 @@ body {
   box-shadow: none !important;
 }
 
-.app-sidebar .theme-toggle {
-  min-height: 2.25rem;
-  border: 0 !important;
-  border-radius: 999px;
-  background: transparent !important;
-  color: var(--ateva-muted-final) !important;
-  padding-inline: 0.25rem;
-}
-
-.app-sidebar .theme-toggle:hover {
-  background: var(--ateva-subtle-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
-.theme-toggle__icon {
-  background: transparent !important;
-  color: currentColor !important;
-}
-
 /* Operational mode: compact, tonal, and predictable. Repeated metric cards
    become ruled summary cells; real panels and tables retain their structure. */
-.app-shell {
-  background: var(--ateva-canvas-final) !important;
-  color: var(--ateva-ink-final) !important;
-  font-family: var(--font-ui);
-}
-
-.app-shell__main {
-  background: var(--ateva-canvas-final) !important;
-}
-
-.app-shell .app-sidebar,
-.app-shell .app-sidebar--dark,
-.app-shell .app-sidebar--light {
-  background: var(--ateva-surface-final) !important;
-  border-color: var(--ateva-line-final) !important;
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-sidebar__mark {
-  background: var(--ateva-action-final) !important;
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.app-shell .app-sidebar__item {
-  border-radius: 8px !important;
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell .app-sidebar__item:hover,
-.app-shell .app-sidebar__item--active {
-  background: var(--ateva-nested-final) !important;
-  color: var(--ateva-ink-final) !important;
-  box-shadow: none !important;
-}
-
-.app-shell .app-sidebar__group-label,
-.app-shell .app-sidebar__footer,
-.app-shell .app-sidebar__footer a {
-  color: var(--ateva-muted-final) !important;
-  border-color: var(--ateva-line-final) !important;
-}
-
-.app-shell [class~='bg-ink-900'] {
-  background: var(--ateva-canvas-final) !important;
-}
-
-.app-shell [class~='bg-ink-800'] {
-  background: var(--ateva-surface-final) !important;
-}
-
-.app-shell [class~='bg-ink-700'],
-.app-shell [class~='bg-ink-700/20'],
-.app-shell [class~='bg-ink-700/30'],
-.app-shell [class~='bg-ink-700/50'] {
-  background: var(--ateva-nested-final) !important;
-}
-
-.app-shell [class~='bg-ink-600'],
-.app-shell [class~='bg-ink-600/50'] {
-  background: var(--ateva-nested-final) !important;
-}
-
-.app-shell [class~='border-ink-700'],
-.app-shell [class~='border-ink-600'],
-.app-shell [class~='border-ink-600/10'],
-.app-shell [class~='border-ink-600/20'],
-.app-shell [class~='border-ink-600/30'],
-.app-shell [class~='border-ink-600/50'] {
-  border-color: var(--ateva-line-final) !important;
-}
-
-.app-shell [class~='text-ink-100'],
-.app-shell [class~='text-ink-200'],
-.app-shell [class~='text-ink-300'] {
-  color: var(--ateva-copy-final) !important;
-}
-
-.app-shell [class~='text-ink-400'],
-.app-shell [class~='text-ink-500'] {
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell [class~='bg-white']:not(button):not(a),
-.app-shell [class~='bg-surface-50'],
-.app-shell [class~='bg-surface-50/60'],
-.app-shell [class~='bg-surface-50/70'] {
-  background: var(--ateva-surface-final) !important;
-}
-
-.app-shell h1,
-.app-shell h2,
-.app-shell h3,
-.app-shell h4,
-.app-shell p,
-.app-shell label,
-.app-shell th,
-.app-shell td {
-  font-family: var(--font-ui);
-}
-
-.app-shell h1,
-.app-shell h2,
-.app-shell h3,
-.app-shell h4 {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell input,
-.app-shell select,
-.app-shell textarea {
-  border: 1px solid var(--ateva-line-strong-final) !important;
-  border-radius: 8px !important;
-  background: var(--ateva-surface-final) !important;
-  color: var(--ateva-ink-final) !important;
-  box-shadow: none !important;
-}
-
-.app-shell input::placeholder,
-.app-shell textarea::placeholder {
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell button[class~='bg-brand-500'],
-.app-shell button[class~='bg-brand-600'],
-.app-shell a[class~='bg-brand-500'],
-.app-shell a[class~='bg-brand-600'] {
-  background: var(--ateva-action-final) !important;
-  color: var(--ateva-action-ink-final) !important;
-}
-
-/* The dark brand fill (html.dark .app-shell .bg-brand-500, #6b3825) outranks
-   the rule above on background only, leaving action-ink text on brown at
-   1.8:1. Brand buttons and links keep the action pair in dark mode too. */
-html.dark .app-shell button[class~='bg-brand-500'],
-html.dark .app-shell button[class~='bg-brand-600'],
-html.dark .app-shell a[class~='bg-brand-500'],
-html.dark .app-shell a[class~='bg-brand-600'] {
-  background: var(--ateva-action-final) !important;
-}
-
-.app-shell .app-stat-card {
-  min-width: 0;
-  border: 0 !important;
-  border-top: 1px solid var(--ateva-line-final) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 1rem 0 !important;
-}
-
-.app-shell .app-stat-card p {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-stat-card p:last-child {
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell .app-form-section {
-  border: 0 !important;
-  border-top: 1px solid var(--ateva-line-final) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  padding-inline: 0 !important;
-}
-
-.app-shell .app-form-preview {
-  border: 1px solid var(--ateva-line-final) !important;
-  border-radius: 8px !important;
-  background: var(--ateva-nested-final) !important;
-}
-
-.app-shell .app-action-row {
-  border-top: 1px solid var(--ateva-line-final) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-}
-
-.app-shell .app-action-row:hover {
-  background: var(--ateva-nested-final) !important;
-}
-
-.app-shell [class~='rounded-xl'],
-.app-shell [class~='rounded-2xl'] {
-  border-radius: 12px;
-  box-shadow: none;
-}
-
-.app-shell table {
-  border-color: var(--ateva-line-final);
-}
 
 /* Authentication is the hybrid mode: one quiet frame, one restrained brand
    panel, and a conventional form—not a dashboard and not a marketing maze. */
@@ -1514,115 +742,8 @@ html.dark body {
   color: var(--public-ink);
 }
 
-.app-sidebar__mark {
-  background: var(--app-ink) !important;
-  color: var(--app-canvas) !important;
-}
-
-.app-stat-card {
-  border-radius: 1rem;
-  box-shadow: none !important;
-}
-
-.app-shell [class~='bg-brand-50'],
-.app-shell [class~='bg-brand-50/40'],
-.app-shell [class~='bg-brand-100'],
-.app-shell [class~='bg-brand-200'] {
-  background-color: color-mix(in srgb, var(--ateva-blush) 44%, var(--app-surface)) !important;
-}
-
-.app-shell [class~='border-brand-200'],
-.app-shell [class~='border-brand-500'] {
-  border-color: color-mix(in srgb, var(--ateva-blush-ink) 32%, var(--app-line)) !important;
-}
-
-.app-shell [class~='text-brand-800'],
-.app-shell [class~='text-brand-900'] {
-  color: var(--ateva-blush-ink) !important;
-}
-
-.app-shell [class~='bg-emerald-50'],
-.app-shell [class~='bg-emerald-50/60'],
-.app-shell [class~='bg-green-50'],
-.app-shell [class~='bg-green-500/10'] {
-  background-color: color-mix(in srgb, #d8f0df 56%, var(--app-surface)) !important;
-}
-
-.app-shell [class~='bg-amber-50'],
-.app-shell [class~='bg-yellow-500/10'],
-.app-shell [class~='bg-yellow-500/20'] {
-  background-color: color-mix(in srgb, #f8e4c4 46%, var(--app-surface)) !important;
-}
-
-.app-shell [class~='bg-red-500/10'],
-.app-shell [class~='bg-red-500/20'],
-.app-shell [class~='bg-rose-500/10'] {
-  background-color: color-mix(in srgb, #f5d4d7 44%, var(--app-surface)) !important;
-}
-
-html.dark .app-shell [class~='bg-brand-50'],
-html.dark .app-shell [class~='bg-brand-50/40'],
-html.dark .app-shell [class~='bg-brand-100'],
-html.dark .app-shell [class~='bg-brand-200'] {
-  background-color: #2b2523 !important;
-}
-
-html.dark .app-shell [class~='border-brand-200'],
-html.dark .app-shell [class~='border-brand-500'] {
-  border-color: rgb(244 200 176 / 0.28) !important;
-}
-
-html.dark .app-shell [class~='text-brand-800'],
-html.dark .app-shell [class~='text-brand-900'] {
-  color: #f4c8b0 !important;
-}
-
-html.dark .app-shell [class~='bg-emerald-50'],
-html.dark .app-shell [class~='bg-emerald-50/60'],
-html.dark .app-shell [class~='bg-green-50'],
-html.dark .app-shell [class~='bg-green-500/10'] {
-  background-color: #20362a !important;
-}
-
-html.dark .app-shell [class~='bg-amber-50'],
-html.dark .app-shell [class~='bg-yellow-500/10'],
-html.dark .app-shell [class~='bg-yellow-500/20'] {
-  background-color: #342a20 !important;
-}
-
-html.dark .app-shell [class~='bg-red-500/10'],
-html.dark .app-shell [class~='bg-red-500/20'],
-html.dark .app-shell [class~='bg-rose-500/10'] {
-  background-color: #3a2529 !important;
-}
-
-html.dark .app-shell [class~='text-emerald-950'],
-html.dark .app-shell [class~='text-emerald-900'],
-html.dark .app-shell [class~='text-emerald-800'] {
-  color: #c7e7d0 !important;
-}
-
-html.dark .app-shell [class~='text-amber-950'],
-html.dark .app-shell [class~='text-amber-900'],
-html.dark .app-shell [class~='text-amber-800'] {
-  color: #f2d3a7 !important;
-}
-
 /* Red text inside the shell sits on neutral surfaces (the red-50 panels above
    become the inset tone), where Tailwind red-500/600 fall below 4.5:1. */
-.app-shell [class~='text-red-500'],
-.app-shell [class~='text-red-600'],
-.app-shell [class~='text-red-700'],
-.app-shell [class~='hover:text-red-700']:hover,
-.app-shell [class~='hover:text-red-800']:hover {
-  color: var(--app-danger) !important;
-}
-
-html.dark .app-shell [class~='text-red-950'],
-html.dark .app-shell [class~='text-red-900'],
-html.dark .app-shell [class~='text-red-800'] {
-  color: #f2bfc4 !important;
-}
 
 /* Standalone public documents now share the same chrome as the other public
    routes. Keep their prose readable without importing the homepage layout. */
@@ -1764,144 +885,10 @@ html.dark .public-page main [class~='text-emerald-700'] {
    the shared application tokens so the global theme preference is real on
    developer, advertiser, and admin surfaces alike.
    ------------------------------------------------------------------------- */
-.app-shell {
-  background: var(--app-canvas) !important;
-  color: var(--app-ink);
-}
-
-.app-shell .app-sidebar {
-  border-color: var(--app-line) !important;
-  background: var(--app-surface) !important;
-  color: var(--app-ink);
-}
-
-.app-shell .app-sidebar__mark {
-  background: var(--app-ink) !important;
-  color: var(--app-canvas) !important;
-}
-
-.app-shell [class~='bg-ink-900'] {
-  background-color: var(--app-canvas) !important;
-}
-
-.app-shell [class~='bg-ink-800'] {
-  background-color: var(--app-surface) !important;
-}
-
-.app-shell [class~='bg-ink-700'],
-.app-shell [class~='bg-ink-700/20'],
-.app-shell [class~='bg-ink-700/30'],
-.app-shell [class~='bg-ink-700/50'] {
-  background-color: var(--app-nested) !important;
-}
-
-.app-shell [class~='bg-ink-600'],
-.app-shell [class~='bg-ink-600/50'] {
-  background-color: color-mix(in srgb, var(--app-nested) 72%, var(--app-surface)) !important;
-}
-
-.app-shell [class~='bg-ink-500'],
-.app-shell [class~='bg-ink-400'] {
-  background-color: var(--app-tertiary) !important;
-}
-
-.app-shell [class~='border-ink-700'],
-.app-shell [class~='border-ink-600'],
-.app-shell [class~='border-ink-600/10'],
-.app-shell [class~='border-ink-600/20'],
-.app-shell [class~='border-ink-600/30'],
-.app-shell [class~='border-ink-600/50'],
-.app-shell [class~='divide-ink-600/20'] {
-  border-color: var(--app-line) !important;
-}
-
-.app-shell [class~='text-ink-100'],
-.app-shell [class~='text-ink-200'],
-.app-shell [class~='text-ink-300'] {
-  color: var(--app-copy) !important;
-}
-
-.app-shell [class~='text-ink-400'],
-.app-shell [class~='text-ink-500'] {
-  color: var(--app-muted) !important;
-}
-
-.app-shell [class~='text-brand-300'],
-.app-shell [class~='text-brand-400'],
-.app-shell [class~='text-brand-500'],
-.app-shell [class~='text-brand-600'] {
-  color: var(--ateva-blush-ink) !important;
-}
-
-.app-shell [class~='hover:bg-ink-600']:hover,
-.app-shell [class~='hover:bg-ink-700']:hover,
-.app-shell [class~='hover:bg-ink-700/30']:hover,
-.app-shell [class~='hover:bg-ink-700/50']:hover {
-  background-color: var(--app-nested) !important;
-}
-
-.app-shell input,
-.app-shell select,
-.app-shell textarea {
-  border-color: var(--app-line-strong);
-  background-color: var(--app-nested);
-  color: var(--app-ink);
-}
-
-.app-shell input::placeholder,
-.app-shell textarea::placeholder {
-  color: var(--app-muted);
-  opacity: 1;
-}
-
-.app-shell option {
-  background: var(--app-surface);
-  color: var(--app-ink);
-}
-
-.app-shell h1,
-.app-shell h2,
-.app-shell h3,
-.app-shell h4 {
-  font-family: var(--font-ui);
-  font-synthesis: none;
-}
 
 /* Legacy dark routes use `text-white` for ordinary copy. Keep white text on
    explicit controls and the brand mark, while making headings, fields, and
    body copy readable in the light preference. */
-html:not(.dark):not([data-palette='midnight']) .app-shell h1[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h1 [class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h2[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h2 [class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h3[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h3 [class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h4[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell h4 [class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell p[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell label[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell td[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell th[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell input[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell select[class~='text-white'],
-html:not(.dark):not([data-palette='midnight']) .app-shell textarea[class~='text-white'] {
-  color: var(--app-ink) !important;
-}
-
-html:not(.dark):not([data-palette='midnight']) .app-shell .app-sidebar [class~='text-white'] {
-  color: var(--app-ink) !important;
-}
-
-html:not(.dark):not([data-palette='midnight']) .app-shell .app-sidebar__mark {
-  color: var(--app-canvas) !important;
-}
-
-html.dark .app-shell [class~='text-brand-300'],
-html.dark .app-shell [class~='text-brand-400'],
-html.dark .app-shell [class~='text-brand-500'],
-html.dark .app-shell [class~='text-brand-600'] {
-  color: #f4c8b0 !important;
-}
 
 /* Consent is global, including on authenticated routes. Give both legal
    surfaces the same tonal hierarchy as the active theme and leave enough
@@ -1932,16 +919,6 @@ html.dark [role='dialog'][aria-label='Cookie consent'] [class~='bg-surface-950']
 html.dark [role='dialog'][aria-label='Cookie consent'] [class~='text-brand-700'],
 html.dark [role='dialog'][aria-label='Cookie consent'] [class~='text-brand-800'] {
   color: #f4c8b0 !important;
-}
-
-html.dark body:has(.app-shell):has([aria-label='Consent update required']) .app-shell > main {
-  padding-top: 7rem !important;
-}
-
-@media (max-width: 639px) {
-  html.dark body:has(.app-shell):has([aria-label='Consent update required']) .app-shell > main {
-    padding-top: 6.5rem !important;
-  }
 }
 
 /* Auth content must be allowed to shrink with its frame. Google Identity
@@ -1999,8 +976,7 @@ html.dark {
 /* Type is structural: display serif for narrative statements, Inter for
    controls and reading, and the existing mono face only for evidence. */
 .public-page main,
-.auth-shell,
-.app-shell {
+.auth-shell {
   font-family: var(--font-ui);
 }
 
@@ -2012,8 +988,7 @@ html.dark {
   letter-spacing: -0.04em;
 }
 
-.public-page main :where(h3, h4),
-.app-shell :where(h1, h2, h3, h4) {
+.public-page main :where(h3, h4) {
   font-family: var(--font-ui) !important;
   font-synthesis: none;
 }
@@ -2233,94 +1208,12 @@ html.dark .auth-shell [class~='text-amber-950'] {
   color: var(--public-ink) !important;
 }
 
-.auth-shell .fill-brand-500,
-.app-shell .fill-brand-500 {
+.auth-shell .fill-brand-500 {
   fill: currentColor !important;
 }
 
 /* Last cascade guard: keep the final shared language authoritative after the
    legacy compatibility layers above it. */
-.app-sidebar .theme-toggle {
-  color: var(--ateva-copy-final) !important;
-}
-
-.app-shell [class~='text-white'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-sidebar__mark,
-.app-shell button[class~='bg-brand-500'],
-.app-shell button[class~='bg-brand-600'],
-.app-shell a[class~='bg-brand-500'],
-.app-shell a[class~='bg-brand-600'] {
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.app-shell button[class~='bg-brand-500'] [class~='text-white'],
-.app-shell button[class~='bg-brand-600'] [class~='text-white'],
-.app-shell a[class~='bg-brand-500'] [class~='text-white'],
-.app-shell a[class~='bg-brand-600'] [class~='text-white'] {
-  color: var(--ateva-action-ink-final) !important;
-}
-
-.app-shell [class~='text-surface-950'],
-.app-shell [class~='text-surface-900'],
-.app-shell [class~='text-surface-800'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell [class~='text-surface-700'],
-.app-shell [class~='text-surface-600'] {
-  color: var(--ateva-copy-final) !important;
-}
-
-.app-shell [class~='text-surface-500'],
-.app-shell [class~='text-surface-400'],
-.app-shell [class~='text-ink-400'],
-.app-shell [class~='text-ink-500'] {
-  color: var(--ateva-muted-final) !important;
-}
-
-.app-shell [class~='text-ink-100'],
-.app-shell [class~='text-ink-200'],
-.app-shell [class~='text-ink-300'] {
-  color: var(--ateva-copy-final) !important;
-}
-
-.app-shell [class~='text-brand-300'],
-.app-shell [class~='text-brand-400'],
-.app-shell [class~='text-brand-500'],
-.app-shell [class~='text-brand-600'],
-.app-shell [class~='text-brand-700'] {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-stat-card__value {
-  color: var(--ateva-ink-final) !important;
-}
-
-.app-shell .app-stat-card__subtitle {
-  color: var(--ateva-muted-final) !important;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--ateva-ink-final);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.status-badge__dot {
-  width: 0.35rem;
-  height: 0.35rem;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
-}
 
 .backend-status {
   border: 0 !important;
@@ -2332,27 +1225,6 @@ html.dark .auth-shell [class~='text-amber-950'] {
 
 .backend-status > span:first-child > span {
   background: currentColor !important;
-}
-
-.app-shell .launch-mode-banner {
-  margin-bottom: 1.5rem;
-  border-inline: 0 !important;
-  border-top: 1px solid var(--ateva-line-strong-final) !important;
-  border-bottom: 1px solid var(--ateva-line-final) !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: var(--ateva-copy-final) !important;
-  padding: 0.75rem 0 !important;
-}
-
-.app-shell .launch-mode-banner p:first-child {
-  color: var(--ateva-ink-final) !important;
-  font-weight: 600;
-}
-
-.app-shell .launch-mode-banner p:nth-child(2),
-.app-shell .launch-mode-banner a {
-  color: var(--ateva-copy-final) !important;
 }
 
 @media (max-width: 767px) {
@@ -2513,35 +1385,6 @@ body:has(.site-header):not(:has(.home-page)) main .public-advertiser-form__surfa
 
 .public-page .public-changelog-entry {
   border-bottom: 1px solid var(--ateva-line-final) !important;
-}
-
-.app-shell__main {
-  min-width: 0;
-  min-height: 100vh;
-}
-
-.app-shell input:not([type='checkbox']):not([type='radio']),
-.app-shell select {
-  min-height: 2.5rem;
-}
-
-.app-inline-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--ateva-copy-final);
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.app-inline-status__dot {
-  width: 0.35rem;
-  height: 0.35rem;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3509,15 +2352,6 @@ html[data-motion='enabled'] .home-page .ledger__panel--never:not(.is-in) .strike
    ------------------------------------------------------------------------- */
 
 /* Dashboards keep the app canvas and `.dark` until PR 2. */
-html:has(.app-shell),
-html:has(.app-shell) body {
-  background: var(--ateva-canvas-final);
-  color: var(--ateva-ink-final);
-}
-
-html.dark:has(.app-shell) body {
-  color: rgb(164 168 175);
-}
 
 /* Fixed colour fields behind every public page but the homepage (and behind
    the auth pages), rendered by motion/page-backdrop.tsx. */
@@ -3755,4 +2589,881 @@ body:has(.site-header):not(:has(.home-page)) main .font-serif,
 
 .auth-shell__mobile-brand {
   color: var(--ink);
+}
+
+/* -------------------------------------------------------------------------
+   Dashboards (the ledger)
+
+   The developer, advertiser and admin workspaces. Flat paper surfaces with
+   hairline rules, the palette colour on the rail, sentence-case labels, and
+   Geist Mono for figures. The ink clock chip from the homepage hero marks the
+   one headline figure on each overview. No blur, no colour fields, no glass:
+   these pages are read and compared, so the colour stays out from under the
+   text. Components live in src/components/dash; tables and form controls in
+   the main column get a default treatment here. Status is a tone dot or tint
+   beside ink text, never coloured text, so labels keep AA in every palette.
+   Spec: docs/superpowers/specs/2026-10-24-dashboard-redesign-design.md
+   ------------------------------------------------------------------------- */
+:root {
+  --warn: #c98a12;
+  --bad: #d64545;
+  --danger-fill: #b42318;
+  --on-danger: #ffffff;
+  --hair: color-mix(in srgb, var(--ink) 12%, transparent);
+  --rule: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+html[data-palette='midnight'] {
+  --warn: #f0b84a;
+  --bad: #ff7a7a;
+  --danger-fill: #ff9b94;
+  --on-danger: #111111;
+}
+
+.dash-shell {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--page);
+  color: var(--ink);
+}
+
+.dash-main {
+  min-width: 0;
+  flex: 1;
+  padding: 24px 16px 56px;
+}
+
+.dash-main__inner {
+  display: grid;
+  max-width: 1180px;
+  margin: 0 auto;
+  gap: 20px;
+}
+
+/* Rail: the palette colour as a solid spine, everything on it in ink */
+.dash-rail {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: var(--c1);
+  color: var(--ink);
+}
+
+.dash-rail__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.dash-rail__brand {
+  border-radius: 4px;
+  color: var(--ink);
+  font:
+    800 22px var(--font-display),
+    sans-serif;
+  letter-spacing: -0.03em;
+}
+
+.dash-rail__workspace {
+  color: var(--ink);
+  font:
+    500 14px var(--font-ui),
+    sans-serif;
+}
+
+.dash-rail__menu {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  margin-left: auto;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 18px;
+}
+
+/* Below lg the menu reveals the nav and the palette picker. Sign out and the
+   home link stay in reach with the menu closed, as in every earlier shell. */
+.dash-rail__nav {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 14px;
+}
+
+.dash-rail[data-open] .dash-rail__nav {
+  display: flex;
+}
+
+@media (max-width: 1023.98px) {
+  .dash-rail:not([data-open]) .dash-rail__foot > :not(.dash-rail__foot-links) {
+    display: none;
+  }
+}
+
+.dash-rail__group {
+  margin: 20px 12px 6px;
+  color: var(--ink);
+  font:
+    600 12.5px var(--font-ui),
+    sans-serif;
+}
+
+.dash-rail__item {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--ink);
+  font:
+    500 14.5px var(--font-ui),
+    sans-serif;
+  transition: background-color 0.15s;
+}
+
+.dash-rail__item:hover {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.dash-rail__item[aria-current='page'] {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.dash-rail__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.dash-rail__foot-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.dash-rail__back {
+  color: var(--ink);
+}
+
+.dash-rail__back:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (min-width: 1024px) {
+  .dash-shell {
+    flex-direction: row;
+  }
+
+  .dash-main {
+    padding: 48px 56px 80px;
+  }
+
+  .dash-rail {
+    position: sticky;
+    top: 0;
+    width: 240px;
+    height: 100vh;
+    flex-shrink: 0;
+    padding: 28px 16px 20px;
+  }
+
+  .dash-rail__head {
+    padding-inline: 12px;
+  }
+
+  .dash-rail__menu {
+    display: none;
+  }
+
+  .dash-rail__nav {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    margin-top: 28px;
+    overflow-y: auto;
+  }
+
+  .dash-rail__foot {
+    display: flex;
+    padding-inline: 12px;
+  }
+}
+
+/* Page header: a big title over a heavy rule, like the top of a ledger page */
+.dash-head {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-bottom: 22px;
+  border-bottom: 2px solid var(--ink);
+}
+
+@media (min-width: 1024px) {
+  .dash-head {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+.dash-title {
+  color: var(--ink);
+  font:
+    800 clamp(36px, 4.4vw, 56px) / 0.98 var(--font-display),
+    sans-serif;
+  letter-spacing: -0.045em;
+}
+
+.dash-lede {
+  max-width: 60ch;
+  margin-top: 12px;
+  color: var(--copy);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.dash-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Panels: paper with a hairline edge */
+.dash-panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--solid);
+  color: var(--copy);
+}
+
+.dash-panel--flush {
+  overflow: hidden;
+  padding: 0;
+}
+
+.dash-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dash-panel--flush .dash-panel__head {
+  margin: 0;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.dash-panel__title {
+  color: var(--ink);
+  font:
+    650 16px / 1.3 var(--font-ui),
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.dash-grid {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 768px) {
+  .dash-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dash-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .dash-grid--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dash-grid--wide-left {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+  }
+
+  /* The overview headline gets the wide first column */
+  .dash-grid--4:has(.dash-stat__value--chip) {
+    grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* A row of figures reads as one ruled strip, not a row of separate cards:
+   the gap shows the hairline behind the cells. */
+.dash-grid:has(> .dash-panel > .dash-stat) {
+  overflow: hidden;
+  gap: 1px;
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  background: var(--hair);
+}
+
+.dash-grid:has(> .dash-panel > .dash-stat) > .dash-panel {
+  border: 0;
+  border-radius: 0;
+}
+
+/* On phones a strip of plain figures sits two by two instead of one tall
+   column; strips with a headline chip keep the full width for it. */
+@media (max-width: 767px) {
+  .dash-grid--4:has(> .dash-panel > .dash-stat):not(:has(.dash-stat__value--chip)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Divided rows inside a flush panel */
+.dash-rows > * {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.dash-rows > :last-child {
+  border-bottom: 0;
+}
+
+/* Figures */
+.dash-stat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-stat__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dash-stat__label {
+  color: var(--copy);
+  font:
+    500 13.5px var(--font-ui),
+    sans-serif;
+}
+
+.dash-stat__icon {
+  display: inline-flex;
+  color: var(--copy);
+}
+
+.dash-stat__icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.dash-stat__value {
+  color: var(--ink);
+  font:
+    500 clamp(24px, 2.2vw, 30px) / 1.05 var(--font-utility),
+    monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+/* The homepage clock chip, on the one figure each overview leads with */
+.dash-stat__value--chip {
+  align-self: flex-start;
+  padding: 0.05em 0.16em;
+  border-radius: 0.1em;
+  background: var(--ink);
+  color: var(--page);
+  font-size: clamp(36px, 3.4vw, 52px);
+}
+
+.dash-stat__detail {
+  color: var(--copy);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dash-mono {
+  font-family: var(--font-utility), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status: a dot beside ink text. The dash Pill and the shared StatusBadge. */
+.dash-pill,
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+  font:
+    500 13px / 1.4 var(--font-ui),
+    sans-serif;
+  white-space: nowrap;
+}
+
+.status-badge {
+  text-transform: capitalize;
+}
+
+.status-badge--metadata {
+  font-family: var(--font-utility), monospace;
+  text-transform: none;
+}
+
+.dash-pill__dot,
+.status-badge__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--tone, var(--rule));
+}
+
+[data-tone='ok'],
+[data-status-tone='success'] {
+  --tone: var(--ok);
+}
+
+[data-tone='warn'],
+[data-status-tone='warning'] {
+  --tone: var(--warn);
+}
+
+[data-tone='bad'],
+[data-status-tone='danger'] {
+  --tone: var(--bad);
+}
+
+/* Notices: errors, holds and beta disclosures, tinted by their tone */
+.dash-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--ink)) 32%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone, var(--ink)) 8%, var(--solid));
+  color: var(--copy);
+}
+
+.dash-notice__body {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.dash-notice__title {
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.dash-notice__text {
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.dash-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Actions: links and buttons share one system */
+.dash-action,
+.dash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  font:
+    600 14px var(--font-ui),
+    sans-serif;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.dash-action--primary,
+.dash-btn--primary {
+  padding: 9px 16px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.dash-action--primary:hover,
+.dash-btn--primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ink) 86%, var(--page));
+}
+
+.dash-action--secondary,
+.dash-btn--secondary {
+  padding: 9px 16px;
+  border: 1px solid var(--rule);
+  background: var(--solid);
+  color: var(--ink);
+}
+
+.dash-action--secondary:hover,
+.dash-btn--secondary:not(:disabled):hover {
+  border-color: var(--ink);
+}
+
+.dash-action--text {
+  padding: 2px 0;
+  border-radius: 2px;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.dash-action--text:hover {
+  text-decoration-color: var(--ink);
+}
+
+.dash-btn--ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+}
+
+.dash-btn--ghost:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.dash-btn--danger {
+  border: 1px solid var(--danger-fill);
+  background: var(--danger-fill);
+  color: var(--on-danger);
+}
+
+.dash-btn--sm {
+  min-height: 32px;
+  padding-inline: 12px;
+  font-size: 13px;
+}
+
+.dash-btn--md {
+  min-height: 40px;
+  padding-inline: 16px;
+}
+
+.dash-btn--lg {
+  min-height: 46px;
+  padding-inline: 20px;
+  font-size: 15px;
+}
+
+.dash-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+:is(.dash-action, .dash-btn):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-action,
+  .dash-btn {
+    transition: none;
+  }
+}
+
+/* Toolbars: filters, search and pagination sit on a ruled line */
+.dash-bar {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--copy);
+}
+
+/* Filter toggles inside a toolbar read as tabs, the active one underlined */
+.dash-bar .dash-btn[aria-pressed] {
+  min-height: 30px;
+  padding-inline: 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--copy);
+  font-weight: 500;
+}
+
+.dash-bar .dash-btn[aria-pressed]:hover {
+  color: var(--ink);
+}
+
+.dash-bar .dash-btn[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+
+/* Defaults inside the main column: tables and form controls */
+.dash-main table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.dash-main th {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--copy);
+  font:
+    500 13px var(--font-ui),
+    sans-serif;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dash-main td {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--copy);
+  vertical-align: middle;
+}
+
+.dash-main tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.dash-main tbody tr:hover td {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.dash-main
+  :is(
+    input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']),
+    select,
+    textarea
+  ) {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--solid);
+  color: var(--ink);
+}
+
+.dash-main :is(input, select, textarea)::placeholder {
+  color: var(--muted);
+}
+
+.dash-main :is(input, select, textarea):focus-visible {
+  border-color: var(--ink);
+  outline: 2px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  outline-offset: 1px;
+}
+
+.dash-main :is(input[type='checkbox'], input[type='radio']) {
+  accent-color: var(--ink);
+}
+
+.dash-main label {
+  color: var(--ink);
+}
+
+.dash-main code {
+  font-family: var(--font-utility), monospace;
+}
+
+/* People console: signups chart, detail dialog groups and inline links */
+.people-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.people-chart__svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+  overflow: visible;
+}
+
+.people-chart__users {
+  fill: var(--ink);
+}
+
+.people-chart__waitlist {
+  fill: var(--solid);
+  stroke: var(--ink);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.people-chart__base {
+  stroke: var(--rule);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.people-chart__axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.people-chart__summary {
+  color: var(--copy);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.people-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  color: var(--copy);
+  font-size: 13px;
+}
+
+.people-chart__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.people-chart__key {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.people-chart__key--users {
+  background: var(--ink);
+}
+
+.people-chart__key--waitlist {
+  background: var(--solid);
+}
+
+.people-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.people-link:hover {
+  text-decoration-color: var(--ink);
+}
+
+.people-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.people-detail {
+  display: grid;
+  gap: 22px;
+}
+
+.people-detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.people-detail__head > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.people-group__title {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink);
+  font:
+    650 14px / 1.3 var(--font-ui),
+    sans-serif;
+}
+
+.people-dl {
+  display: grid;
+  grid-template-columns: minmax(104px, 34%) minmax(0, 1fr);
+  gap: 6px 14px;
+  font-size: 14px;
+}
+
+.people-dl dt {
+  color: var(--muted);
+}
+
+.people-dl dd {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.people-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.people-list > li:last-child {
+  border-bottom: 0;
+}
+
+.people-list__main {
+  flex: 1 1 160px;
+  overflow-wrap: anywhere;
+}
+
+.people-list__sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.people-empty {
+  color: var(--muted);
+  font-size: 14px;
 }

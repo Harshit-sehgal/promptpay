@@ -67,7 +67,7 @@ export default function ModalDialog({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -78,7 +78,7 @@ export default function ModalDialog({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`bg-ink-800 border border-ink-600/30 rounded-3xl p-6 max-w-md w-full outline-none ${className}`}
+        className={`w-full max-w-md rounded-[14px] border border-[var(--hair)] bg-[var(--solid)] p-6 text-[var(--ink)] outline-none ${className}`}
       >
         {children}
       </div>

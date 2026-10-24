@@ -42,12 +42,13 @@ export function formatCurrencyBreakdown(totalsByCurrency: Record<string, bigint 
 
 /** Format a number with commas */
 export function formatNumber(num: number): string {
-  return new Intl.NumberFormat('en-US').format(num);
+  // Same fail-soft rule as formatCurrency: a missing count renders 0, not NaN.
+  return new Intl.NumberFormat('en-US').format(Number.isFinite(num) ? num : 0);
 }
 
 /** Format a percentage */
 export function formatPercent(value: number, decimals = 1): string {
-  return `${value.toFixed(decimals)}%`;
+  return `${(Number.isFinite(value) ? value : 0).toFixed(decimals)}%`;
 }
 
 /**

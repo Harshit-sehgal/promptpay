@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
+import { RouteError } from '@/components/dash';
 import * as Sentry from '@sentry/nextjs';
 
 export default function DashboardError({
@@ -19,16 +19,8 @@ export default function DashboardError({
   }, [error]);
 
   return (
-    <div className="py-12 px-6 flex items-center justify-center bg-surface-50 rounded-3xl border border-surface-200">
-      <div className="max-w-md text-center">
-        <h2 className="text-xl font-bold text-surface-900 mb-2">Failed to load this section</h2>
-        <p className="text-surface-500 text-sm mb-6">
-          There was an error loading this dashboard view.
-        </p>
-        <Button variant="brand" size="sm" onClick={reset} rounded="xl">
-          Reload view
-        </Button>
-      </div>
-    </div>
+    <RouteError title="Failed to load this section" actionLabel="Reload view" onRetry={reset}>
+      There was an error loading this dashboard view.
+    </RouteError>
   );
 }

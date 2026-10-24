@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+import { DashboardShell } from '@/components/dash';
 import { ProtectedRoute } from '@/components/protected-route';
-import { Sidebar } from '@/components/sidebar';
 import { StepUpProvider } from '@/components/step-up-provider';
 
 const ADMIN_NAV = [
@@ -29,6 +29,7 @@ const ADMIN_NAV = [
   { label: 'Metrics', href: '/admin/metrics', section: 'Operations' },
   { label: 'Operations', href: '/admin/operations', section: 'Operations' },
   { label: 'Audit log', href: '/admin/audit', section: 'Operations' },
+  { label: 'All people', href: '/admin/people', section: 'People' },
   { label: 'Users', href: '/admin/users', section: 'People' },
   { label: 'Waitlist', href: '/admin/waitlist', section: 'People' },
   { label: 'Campaign approvals', href: '/admin/campaigns', section: 'Campaigns' },
@@ -51,16 +52,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Admin surfaces are authenticated and must never be indexed by search
           engines or appear in sitemaps. */}
         <meta name="robots" content="noindex, nofollow" />
-        <div className="app-shell app-shell--admin min-h-screen bg-ink-900 flex flex-col lg:flex-row">
-          <Sidebar brand="Admin" navItems={ADMIN_NAV} />
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="app-shell__main flex-1 min-w-0 overflow-auto p-4 sm:p-6 lg:p-8"
-          >
-            {children}
-          </main>
-        </div>
+        <DashboardShell workspace="Admin" navItems={ADMIN_NAV} modifier="admin">
+          {children}
+        </DashboardShell>
       </StepUpProvider>
     </ProtectedRoute>
   );

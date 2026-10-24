@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, Pill, type Tone } from '@/components/dash';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 
@@ -25,6 +26,10 @@ interface AuditLogResponse {
 }
 
 const PAGE_SIZE = 50;
+
+function roleTone(role: string): Tone {
+  return role === 'admin' ? 'warn' : 'neutral';
+}
 
 export default function AdminAuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -67,19 +72,16 @@ export default function AdminAuditPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Audit log</h1>
-        <p className="text-ink-200 text-sm">Append-only record of admin and system actions</p>
-      </div>
+      <PageHeader title="Audit log" lede="Append-only record of admin and system actions" />
 
-      <div className="mb-6 flex flex-wrap items-end gap-3">
+      <div className="dash-bar flex flex-wrap items-end gap-3">
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-ink-300">Actor role</span>
+          <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">Actor role</span>
           <select
             id="admin-audit-actor"
             value={actorFilter}
             onChange={(e) => setActorFilter(e.target.value)}
-            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white text-sm"
+            className="px-4 py-2 text-sm"
           >
             <option value="">All actors</option>
             <option value="admin">Admin</option>
@@ -88,7 +90,7 @@ export default function AdminAuditPage() {
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-ink-300">
+          <span className="mb-1.5 block text-xs font-medium text-[var(--muted)]">
             Action (current page)
           </span>
           <input
@@ -97,21 +99,21 @@ export default function AdminAuditPage() {
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
             placeholder="Filter by action..."
-            className="bg-ink-800 border border-ink-600/50 rounded-lg px-4 py-2 text-white placeholder:text-ink-300 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+            className="px-4 py-2 text-sm"
           />
         </label>
       </div>
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
-      <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
+      <Panel label="Audit log" flush>
         {visibleEntries.length === 0 && !loading ? (
-          <div className="text-ink-300 text-sm py-12 text-center">
+          <div className="py-12 text-center text-sm text-[var(--muted)]">
             No audit entries match the current filters. Audit log will populate as actions are
             recorded.
           </div>
@@ -122,55 +124,43 @@ export default function AdminAuditPage() {
             role="region"
             aria-label="Audit log table, scrolls horizontally"
           >
-            <table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-ink-700/50 border-b border-ink-600/30">
+            <table className="min-w-[760px]">
+              <thead>
                 <tr>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">When</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Actor</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Action</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">Target</th>
-                  <th className="text-left px-4 py-3 text-ink-200 font-medium">IP</th>
+                  <th>When</th>
+                  <th>Actor</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>IP</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-ink-600/20">
+              <tbody>
                 {visibleEntries.map((e) => (
-                  <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
-                    <td className="px-4 py-3 text-ink-200 text-xs">
-                      {new Date(e.createdAt).toLocaleString()}
+                  <tr key={e.id}>
+                    <td className="text-xs">{new Date(e.createdAt).toLocaleString()}</td>
+                    <td className="text-xs">
+                      <Pill tone={roleTone(e.actorRole)}>{e.actorRole}</Pill>
                     </td>
-                    <td className="px-4 py-3 text-xs">
-                      <span
-                        className={`px-2 py-0.5 rounded ${
-                          e.actorRole === 'admin'
-                            ? 'bg-red-500/20 text-red-400'
-                            : e.actorRole === 'system'
-                              ? 'bg-purple-500/20 text-purple-400'
-                              : 'bg-blue-500/20 text-blue-400'
-                        }`}
-                      >
-                        {e.actorRole}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-white font-mono text-xs">{e.action}</td>
-                    <td className="px-4 py-3 text-ink-300 text-xs">
+                    <td className="dash-mono text-xs text-[var(--ink)]">{e.action}</td>
+                    <td className="text-xs">
                       {e.targetType && (
                         <span>
                           {e.targetType} ·{' '}
-                          <span className="font-mono">{e.targetId?.slice(0, 8)}</span>
+                          <span className="dash-mono">{e.targetId?.slice(0, 8)}</span>
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-ink-500 text-xs font-mono">{e.ip || '—'}</td>
+                    <td className="dash-mono text-xs">{e.ip || '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Panel>
 
-      <div className="mt-4 flex items-center justify-between text-sm">
-        <span className="text-ink-300">
+      <div className="dash-bar flex items-center justify-between text-sm">
+        <span className="text-[var(--muted)]">
           {total.toLocaleString()} entries · page {page} of {totalPages}
         </span>
         <div className="flex gap-2">
@@ -178,7 +168,7 @@ export default function AdminAuditPage() {
             type="button"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1 || loading}
-            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Previous
           </button>
@@ -186,7 +176,7 @@ export default function AdminAuditPage() {
             type="button"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages || loading}
-            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+            className="dash-btn dash-btn--secondary dash-btn--sm"
           >
             Next
           </button>

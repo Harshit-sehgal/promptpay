@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { Notice, PageHeader, Panel, Stat } from '@/components/dash';
 import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
@@ -255,160 +256,155 @@ export default function AdminPayoutsPage() {
 
   return (
     <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Payout requests</h1>
-        <p className="text-ink-200 text-sm">Approve or reject pending developer payouts</p>
-      </div>
+      <PageHeader title="Payout requests" lede="Approve or reject pending developer payouts" />
 
       {/* Summary */}
-      <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-6">
+      <Panel label="Payout summary">
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-ink-300 text-xs uppercase tracking-wider">Pending payouts</p>
-            <p className="text-3xl font-bold text-white">{payouts.length}</p>
-          </div>
-          <div>
-            <p className="text-ink-300 text-xs uppercase tracking-wider">Total amount</p>
-            <p className="text-2xl sm:text-3xl font-bold text-brand-500 font-mono break-words">
-              {totalSummary}
-            </p>
-          </div>
+          <Stat label="Pending payouts" value={payouts.length} />
+          <Stat
+            label="Total amount"
+            value={<span className="break-words">{totalSummary}</span>}
+            chip
+          />
         </div>
-      </div>
+      </Panel>
 
       {loading && <LoadingSpinner />}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <Notice tone="bad" role="alert">
+          {error}
+        </Notice>
       )}
 
       {payouts.length === 0 && !loading ? (
-        <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-300 text-sm">No pending payouts. Queue clear.</p>
-        </div>
+        <Panel label="No pending payouts">
+          <p className="py-6 text-center text-sm text-[var(--muted)]">
+            No pending payouts. Queue clear.
+          </p>
+        </Panel>
       ) : (
-        <div className="space-y-3">
-          {payouts.map((p) => (
-            <div key={p.id} className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-3xl font-bold text-white font-mono">
-                    {formatCurrency(p.requestedAmountMinor, p.currency)}
-                  </p>
-                  <p className="text-ink-300 text-xs mt-1">
-                    via {p.payoutAccount.provider} — {p.payoutAccount.destination}
-                    {p.payoutAccount.isVerified === false && (
-                      <span className="ml-2 text-amber-400">· unverified</span>
-                    )}
-                    {p.payoutAccount.isFrozen && (
-                      <span className="ml-2 text-red-300 font-semibold">· frozen</span>
-                    )}
-                  </p>
-                  <p className="text-ink-500 text-xs mt-1 font-mono">
-                    Account {p.payoutAccount.id}
-                  </p>
-                  <p className="text-ink-500 text-xs mt-1 uppercase tracking-wider">
-                    {p.status.replace('_', ' ')}
-                  </p>
-                  {p.payoutAccount.isFrozen && (
-                    <p className="text-red-300 text-xs mt-2">
-                      Outbound processing is blocked until this payout account is unfrozen.
+        <Panel label="Pending payouts" flush>
+          <div className="dash-rows">
+            {payouts.map((p) => (
+              <div key={p.id}>
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="dash-mono text-3xl font-bold text-[var(--ink)]">
+                      {formatCurrency(p.requestedAmountMinor, p.currency)}
                     </p>
-                  )}
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--copy)]">
+                      <span>
+                        via {p.payoutAccount.provider} — {p.payoutAccount.destination}
+                      </span>
+                      {p.payoutAccount.isVerified === false && (
+                        <span className="font-semibold text-[var(--ink)]">· unverified</span>
+                      )}
+                      {p.payoutAccount.isFrozen && (
+                        <span className="font-semibold text-[var(--ink)]">· frozen</span>
+                      )}
+                    </p>
+                    <p className="dash-mono mt-1 text-xs text-[var(--muted)]">
+                      Account {p.payoutAccount.id}
+                    </p>
+                    <p className="dash-eyebrow mt-1">{p.status.replace('_', ' ')}</p>
+                    {p.payoutAccount.isFrozen && (
+                      <p className="mt-2 text-xs text-[var(--ink)]">
+                        Outbound processing is blocked until this payout account is unfrozen.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openAccountAction(p)}
+                      disabled={processing === p.id}
+                      className={`dash-btn dash-btn--sm ${
+                        p.payoutAccount.isFrozen ? 'dash-btn--secondary' : 'dash-btn--danger'
+                      }`}
+                    >
+                      {p.payoutAccount.isFrozen ? 'Unfreeze account' : 'Freeze account'}
+                    </button>
+                    {p.status !== 'processing' && (
+                      <button
+                        onClick={() => setRejectModalFor(p)}
+                        disabled={processing === p.id}
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
+                      >
+                        Reject
+                      </button>
+                    )}
+                    {p.payoutAccount.isVerified === false && (
+                      <button
+                        onClick={() => handleVerifyAccount(p)}
+                        disabled={processing === p.id}
+                        className="dash-btn dash-btn--primary dash-btn--sm"
+                      >
+                        {processing === p.id ? 'Working...' : 'Verify method'}
+                      </button>
+                    )}
+                    {(p.status === 'requested' || p.status === 'under_review') && (
+                      <button
+                        onClick={() => openApproveModal(p)}
+                        disabled={processing === p.id}
+                        className="dash-btn dash-btn--primary dash-btn--sm"
+                      >
+                        {processing === p.id ? 'Working...' : 'Approve'}
+                      </button>
+                    )}
+                    {p.status === 'approved' && (
+                      <button
+                        onClick={() => handleProcess(p.id)}
+                        disabled={processing === p.id || p.payoutAccount.isFrozen}
+                        title={
+                          p.payoutAccount.isFrozen
+                            ? 'Unfreeze this payout account before processing'
+                            : undefined
+                        }
+                        className="dash-btn dash-btn--primary dash-btn--sm"
+                      >
+                        {processing === p.id ? 'Working...' : 'Process'}
+                      </button>
+                    )}
+                    {p.status === 'processing' && (
+                      <button
+                        onClick={() => handleMarkPaid(p)}
+                        disabled={processing === p.id}
+                        className="dash-btn dash-btn--primary dash-btn--sm"
+                      >
+                        {processing === p.id ? 'Working...' : 'Mark paid'}
+                      </button>
+                    )}
+                    {p.status === 'processing' && (
+                      <button
+                        onClick={() => openReconcileModal(p)}
+                        disabled={processing === p.id}
+                        className="dash-btn dash-btn--secondary dash-btn--sm"
+                      >
+                        Reconcile
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openAccountAction(p)}
-                    disabled={processing === p.id}
-                    className={
-                      p.payoutAccount.isFrozen
-                        ? 'bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 text-amber-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors'
-                        : 'bg-red-500/15 hover:bg-red-500/25 disabled:opacity-50 text-red-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors'
-                    }
-                  >
-                    {p.payoutAccount.isFrozen ? 'Unfreeze account' : 'Freeze account'}
-                  </button>
-                  {p.status !== 'processing' && (
-                    <button
-                      onClick={() => setRejectModalFor(p)}
-                      disabled={processing === p.id}
-                      className="bg-ink-700 hover:bg-ink-600 text-red-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Reject
-                    </button>
-                  )}
-                  {p.payoutAccount.isVerified === false && (
-                    <button
-                      onClick={() => handleVerifyAccount(p)}
-                      disabled={processing === p.id}
-                      className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {processing === p.id ? 'Working...' : 'Verify method'}
-                    </button>
-                  )}
-                  {(p.status === 'requested' || p.status === 'under_review') && (
-                    <button
-                      onClick={() => openApproveModal(p)}
-                      disabled={processing === p.id}
-                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {processing === p.id ? 'Working...' : 'Approve'}
-                    </button>
-                  )}
-                  {p.status === 'approved' && (
-                    <button
-                      onClick={() => handleProcess(p.id)}
-                      disabled={processing === p.id || p.payoutAccount.isFrozen}
-                      title={
-                        p.payoutAccount.isFrozen
-                          ? 'Unfreeze this payout account before processing'
-                          : undefined
-                      }
-                      className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {processing === p.id ? 'Working...' : 'Process'}
-                    </button>
-                  )}
-                  {p.status === 'processing' && (
-                    <button
-                      onClick={() => handleMarkPaid(p)}
-                      disabled={processing === p.id}
-                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {processing === p.id ? 'Working...' : 'Mark paid'}
-                    </button>
-                  )}
-                  {p.status === 'processing' && (
-                    <button
-                      onClick={() => openReconcileModal(p)}
-                      disabled={processing === p.id}
-                      className="bg-ink-700 hover:bg-ink-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Reconcile
-                    </button>
-                  )}
-                </div>
-              </div>
 
-              <p className="text-ink-500 text-xs">
-                User:{' '}
-                <a
-                  href={`/admin/users?search=${encodeURIComponent(p.user?.email || p.userId)}`}
-                  className="text-brand-400 hover:text-brand-300 underline"
-                >
-                  {p.user?.email || p.user?.name || p.userId}
-                </a>
-                {p.user?.trustLevel && (
-                  <span className="ml-2">· trust {p.user.trustLevel.replace(/_/g, ' ')}</span>
-                )}
-                <span className="mx-2">·</span>
-                Requested {formatRelativeTime(p.createdAt)}
-              </p>
-            </div>
-          ))}
-        </div>
+                <p className="text-xs text-[var(--muted)]">
+                  User:{' '}
+                  <a
+                    href={`/admin/users?search=${encodeURIComponent(p.user?.email || p.userId)}`}
+                    className="text-[var(--ink)] underline"
+                  >
+                    {p.user?.email || p.user?.name || p.userId}
+                  </a>
+                  {p.user?.trustLevel && (
+                    <span className="ml-2">· trust {p.user.trustLevel.replace(/_/g, ' ')}</span>
+                  )}
+                  <span className="mx-2">·</span>
+                  Requested {formatRelativeTime(p.createdAt)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
       )}
 
       {/* Payout-account emergency freeze / unfreeze modal */}
@@ -422,22 +418,19 @@ export default function AdminPayoutsPage() {
       >
         {accountAction && (
           <>
-            <h3 id="payout-account-action-title" className="text-white font-semibold mb-2">
+            <h3 id="payout-account-action-title" className="mb-2 font-semibold text-[var(--ink)]">
               {accountAction.mode === 'freeze'
                 ? 'Freeze payout account'
                 : 'Unfreeze payout account'}
             </h3>
-            <p className="text-ink-300 text-sm mb-1">
+            <p className="mb-1 text-sm text-[var(--copy)]">
               {accountAction.payout.payoutAccount.provider} —{' '}
               {accountAction.payout.payoutAccount.destination}
             </p>
-            <p className="text-ink-500 text-xs font-mono mb-4">
+            <p className="dash-mono mb-4 text-xs text-[var(--muted)]">
               {accountAction.payout.payoutAccount.id}
             </p>
-            <label
-              htmlFor="payout-account-action-reason"
-              className="text-ink-200 text-xs block mb-1"
-            >
+            <label htmlFor="payout-account-action-reason" className="mb-1 block text-xs">
               Operator reason
             </label>
             <textarea
@@ -449,14 +442,14 @@ export default function AdminPayoutsPage() {
               maxLength={500}
               required
               autoFocus
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+              className="mb-4 w-full px-4 py-3"
             />
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={closeAccountAction}
                 disabled={processing === accountAction.payout.id}
-                className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
@@ -464,11 +457,9 @@ export default function AdminPayoutsPage() {
                 type="button"
                 onClick={handleAccountAction}
                 disabled={!accountActionReason.trim() || processing === accountAction.payout.id}
-                className={
-                  accountAction.mode === 'freeze'
-                    ? 'bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm'
-                    : 'bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-ink-950 font-medium px-4 py-2 rounded-lg text-sm'
-                }
+                className={`dash-btn dash-btn--md ${
+                  accountAction.mode === 'freeze' ? 'dash-btn--danger' : 'dash-btn--primary'
+                }`}
               >
                 {processing === accountAction.payout.id
                   ? 'Working...'
@@ -491,10 +482,10 @@ export default function AdminPayoutsPage() {
       >
         {rejectModalFor && (
           <>
-            <h3 className="text-white font-semibold mb-2">Reject payout</h3>
-            <p className="text-ink-300 text-sm mb-4">
+            <h3 className="mb-2 font-semibold text-[var(--ink)]">Reject payout</h3>
+            <p className="mb-4 text-sm text-[var(--copy)]">
               Reject{' '}
-              <span className="text-white">
+              <span className="text-[var(--ink)]">
                 {formatCurrency(rejectModalFor.requestedAmountMinor, rejectModalFor.currency)}
               </span>
               ?
@@ -502,25 +493,25 @@ export default function AdminPayoutsPage() {
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Reason — visible to developer"
+              placeholder="Reason (shown to the developer)"
               rows={3}
               required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+              className="mb-4 w-full px-4 py-3"
             />
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setRejectModalFor(null);
                   setRejectReason('');
                 }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReject}
                 disabled={!rejectReason.trim() || processing === rejectModalFor.id}
-                className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--danger dash-btn--md"
               >
                 Reject
               </button>
@@ -539,16 +530,16 @@ export default function AdminPayoutsPage() {
       >
         {approveModalFor && (
           <>
-            <h3 className="text-white font-semibold mb-2">Approve payout</h3>
-            <p className="text-ink-300 text-sm mb-4">
+            <h3 className="mb-2 font-semibold text-[var(--ink)]">Approve payout</h3>
+            <p className="mb-4 text-sm text-[var(--copy)]">
               Requested{' '}
-              <span className="text-white">
+              <span className="text-[var(--ink)]">
                 {formatCurrency(approveModalFor.requestedAmountMinor, approveModalFor.currency)}
               </span>
               . Leave the amount blank to approve the full requested amount, or enter a lower amount
               for a partial approval.
             </p>
-            <label className="text-ink-200 text-xs block mb-1">
+            <label className="mb-1 block text-xs">
               Approved amount ({approveModalFor.currency})
             </label>
             <input
@@ -561,22 +552,22 @@ export default function AdminPayoutsPage() {
               )}
               value={approveAmount}
               onChange={(e) => setApproveAmount(e.target.value)}
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
+              className="mb-4 w-full px-4 py-3"
             />
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setApproveModalFor(null);
                   setApproveAmount('');
                 }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApproveWithAmount}
                 disabled={processing === approveModalFor.id}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--primary dash-btn--md"
               >
                 {processing === approveModalFor.id ? 'Working...' : 'Approve'}
               </button>
@@ -597,26 +588,26 @@ export default function AdminPayoutsPage() {
       >
         {reconcileModalFor && (
           <>
-            <h3 className="text-white font-semibold mb-2">Manual reconciliation</h3>
-            <p className="text-ink-300 text-sm mb-4">
+            <h3 className="mb-2 font-semibold text-[var(--ink)]">Manual reconciliation</h3>
+            <p className="mb-4 text-sm text-[var(--copy)]">
               Record an external provider payment for{' '}
-              <span className="text-white">
+              <span className="text-[var(--ink)]">
                 {formatCurrency(reconcileModalFor.requestedAmountMinor, reconcileModalFor.currency)}
               </span>
               . No provider transaction id exists yet, so enter the details manually.
             </p>
-            <div className="space-y-3 mb-4">
+            <div className="mb-4 space-y-3">
               <div>
-                <label className="text-ink-200 text-xs block mb-1">Provider transaction id</label>
+                <label className="mb-1 block text-xs">Provider transaction id</label>
                 <input
                   value={reconcileProviderTxId}
                   onChange={(e) => setReconcileProviderTxId(e.target.value)}
                   placeholder="txn_..."
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
               </div>
               <div>
-                <label className="text-ink-200 text-xs block mb-1">
+                <label className="mb-1 block text-xs">
                   Paid amount ({reconcileModalFor.currency})
                 </label>
                 <input
@@ -629,20 +620,20 @@ export default function AdminPayoutsPage() {
                   )}
                   value={reconcileAmount}
                   onChange={(e) => setReconcileAmount(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
               </div>
               <div>
-                <label className="text-ink-200 text-xs block mb-1">Paid at</label>
+                <label className="mb-1 block text-xs">Paid at</label>
                 <input
                   type="datetime-local"
                   value={reconcilePaidAt}
                   onChange={(e) => setReconcilePaidAt(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
+                  className="w-full px-4 py-3"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3 justify-end">
+            <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setReconcileModalFor(null);
@@ -650,14 +641,14 @@ export default function AdminPayoutsPage() {
                   setReconcileAmount('');
                   setReconcilePaidAt('');
                 }}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--secondary dash-btn--md"
               >
                 Cancel
               </button>
               <button
                 onClick={handleReconcile}
                 disabled={processing === reconcileModalFor.id}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                className="dash-btn dash-btn--primary dash-btn--md"
               >
                 {processing === reconcileModalFor.id ? 'Working...' : 'Mark paid'}
               </button>

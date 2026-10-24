@@ -12,33 +12,17 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
 }
 
-const baseClasses =
-  'inline-flex items-center justify-center font-medium transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-600 focus-visible:outline-none disabled:opacity-60 disabled:cursor-not-allowed motion-reduce:transition-none';
-
-const roundedClasses: Record<ButtonRounded, string> = {
-  none: 'rounded-none',
-  sm: 'rounded-sm',
-  md: 'rounded-md',
-  lg: 'rounded-lg',
-  xl: 'rounded-xl',
-  full: 'rounded-full',
-};
-
+/* Every variant maps onto dash-btn in globals.css: primary and brand are the
+   ink button, secondary and outline the outlined button, ghost a text button,
+   danger the danger fill. `rounded` is kept so existing call sites compile;
+   the shape is no longer per-call. */
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-950',
-  secondary:
-    'border border-surface-900 bg-transparent text-surface-900 hover:bg-surface-100/60 active:bg-surface-200/60',
-  brand: 'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700',
-  outline:
-    'border border-surface-200 bg-white text-surface-700 hover:bg-surface-50 hover:border-surface-300 active:bg-surface-100',
-  ghost: 'text-surface-600 hover:text-surface-900 hover:bg-surface-100/60 active:bg-surface-200/60',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700 active:bg-rose-800',
-};
-
-const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-8 px-4 text-xs',
-  md: 'h-10 px-5 text-sm',
-  lg: 'h-12 px-6 text-sm',
+  primary: 'dash-btn--primary',
+  brand: 'dash-btn--primary',
+  secondary: 'dash-btn--secondary',
+  outline: 'dash-btn--secondary',
+  ghost: 'dash-btn--ghost',
+  danger: 'dash-btn--danger',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -46,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     {
       variant = 'primary',
       size = 'md',
-      rounded = 'full',
+      rounded: _rounded,
       children,
       isLoading,
       disabled,
@@ -59,7 +43,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || isLoading}
-        className={`${baseClasses} ${roundedClasses[rounded]} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+        className={`dash-btn ${variantClasses[variant]} dash-btn--${size} ${className}`.trim()}
         {...props}
       >
         {isLoading && (
