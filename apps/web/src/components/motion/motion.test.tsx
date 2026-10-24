@@ -73,6 +73,29 @@ describe('Reveal', () => {
     expect(el.classList.contains('is-in')).toBe(true);
   });
 
+  it('marks content already on screen as in before the hide state can apply', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 100,
+      bottom: 300,
+    } as DOMRect);
+    const { container } = render(<Reveal>hello</Reveal>);
+
+    expect(container.firstElementChild!.classList.contains('is-in')).toBe(true);
+    expect(document.documentElement.dataset.revealReady).toBe('true');
+    expect(observers).toHaveLength(0);
+  });
+
+  it('keeps content below the fold hidden until it intersects', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight + 50,
+      bottom: window.innerHeight + 250,
+    } as DOMRect);
+    const { container } = render(<Reveal>hello</Reveal>);
+
+    expect(container.firstElementChild!.classList.contains('is-in')).toBe(false);
+    expect(observers).toHaveLength(1);
+  });
+
   it('flags the document as reveal-ready once mounted, even under reduced motion', () => {
     expect(document.documentElement.dataset.revealReady).toBeUndefined();
     render(<Reveal>hello</Reveal>);

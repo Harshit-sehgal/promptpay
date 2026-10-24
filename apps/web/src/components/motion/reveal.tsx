@@ -1,6 +1,6 @@
 'use client';
 
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 
 type RevealProps = {
   as?: 'div' | 'p' | 'h2' | 'section';
@@ -14,7 +14,8 @@ type RevealProps = {
    The hidden state lives in CSS behind html[data-motion='enabled'] and
    html[data-reveal-ready], the flag set below once React is running, so
    without JS, before hydration or under reduced motion the content is simply
-   visible. */
+   visible. Content already on screen is marked in by the same layout effect
+   that sets the flag, before paint, so it never blinks out on load. */
 export function Reveal({ as: Tag = 'div', delayIndex = 0, className, children }: RevealProps) {
   const ref = useRef<HTMLElement | null>(null);
   const setRef = (node: HTMLElement | null) => {
@@ -22,16 +23,19 @@ export function Reveal({ as: Tag = 'div', delayIndex = 0, className, children }:
   };
   const [isIn, setIsIn] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.revealReady = 'true';
+    const node = ref.current;
+    const rect = node?.getBoundingClientRect();
     if (
       typeof IntersectionObserver === 'undefined' ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      (rect && rect.bottom > 0 && rect.top < window.innerHeight)
     ) {
+      node?.classList.add('is-in');
       setIsIn(true);
       return;
     }
-    const node = ref.current;
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
