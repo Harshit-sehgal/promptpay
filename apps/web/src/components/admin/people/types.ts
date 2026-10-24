@@ -1,6 +1,6 @@
-import type { WaitlistStatus } from '@/lib/api/services';
+import type { PeopleSubject, WaitlistStatus } from '@/lib/api/services';
 
-export type { WaitlistStatus };
+export type { PeopleSubject, WaitlistStatus };
 
 export const WAITLIST_STATUSES: WaitlistStatus[] = ['pending', 'invited', 'onboarded', 'declined'];
 
@@ -14,6 +14,7 @@ export interface PeopleQuery {
   status: string;
   country: string;
   verified: string;
+  tag: string;
   page: number;
 }
 
@@ -52,6 +53,7 @@ export interface PersonRow {
   companyName: string | null;
   deviceCount: number;
   lastSeenAt: string | null;
+  tags: string[];
 }
 
 export interface PersonDetail extends PersonRow {
@@ -88,6 +90,19 @@ export interface WaitlistRow {
   createdAt: string;
   updatedAt: string;
   registeredUserId: string | null;
+  tags: string[];
+}
+
+export interface PersonNote {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: { id: string; email: string } | null;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
 }
 
 export interface ListResponse<Row> {

@@ -11,6 +11,7 @@ import { AdminService } from './admin.service';
 import { MoneyIntegrityCronService } from './money-integrity.cron';
 import { PeopleController } from './people.controller';
 import { PeopleService } from './people.service';
+import { PeopleNotesService } from './people-notes.service';
 
 @Module({
   imports: [
@@ -22,6 +23,6 @@ import { PeopleService } from './people.service';
     AgentModule,
   ],
   controllers: [AdminController, PeopleController],
-  providers: [AdminService, MoneyIntegrityCronService, PeopleService],
+  providers: [AdminService, MoneyIntegrityCronService, PeopleService, PeopleNotesService],
 })
 export class AdminModule {}

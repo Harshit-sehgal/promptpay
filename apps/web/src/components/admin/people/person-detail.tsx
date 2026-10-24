@@ -7,6 +7,8 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 
 import { formatDateTime, userStatusTone } from './controls';
+import { NotesSection } from './notes-section';
+import { TagsEditor } from './tags-editor';
 import type { PersonDetail } from './types';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -33,9 +35,11 @@ const orDash = (value: string | null | undefined) => (value ? value : '-');
 function DetailBody({
   person,
   onOpenUser,
+  onTagsChanged,
 }: {
   person: PersonDetail;
   onOpenUser: (id: string) => void;
+  onTagsChanged?: () => void;
 }) {
   return (
     <div className="people-detail">
@@ -164,6 +168,19 @@ function DetailBody({
           <Field label="People referred">{person.referralsMade.toLocaleString()}</Field>
         </dl>
       </Group>
+
+      <Group title="Tags">
+        <TagsEditor
+          subject="users"
+          id={person.id}
+          initialTags={person.tags ?? []}
+          onChanged={onTagsChanged}
+        />
+      </Group>
+
+      <Group title="Notes">
+        <NotesSection subject="users" id={person.id} />
+      </Group>
     </div>
   );
 }
@@ -173,10 +190,13 @@ export function PersonDetailDialog({
   userId,
   onClose,
   onOpenUser,
+  onTagsChanged,
 }: {
   userId: string | null;
   onClose: () => void;
   onOpenUser: (id: string) => void;
+  /** Called after the tags save, so the table rows and tag filter can refresh. */
+  onTagsChanged?: () => void;
 }) {
   const titleId = useId();
   const [person, setPerson] = useState<PersonDetail | null>(null);
@@ -237,7 +257,7 @@ export function PersonDetailDialog({
           {error}
         </Notice>
       ) : person ? (
-        <DetailBody person={person} onOpenUser={onOpenUser} />
+        <DetailBody person={person} onOpenUser={onOpenUser} onTagsChanged={onTagsChanged} />
       ) : (
         <p className="people-empty" role="status">
           Loading details.

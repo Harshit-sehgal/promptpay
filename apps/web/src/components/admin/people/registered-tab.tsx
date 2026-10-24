@@ -9,6 +9,8 @@ import { formatRelativeTime } from '@/lib/format';
 
 import { DebouncedInput, formatDay, Pager, SelectFilter, userStatusTone } from './controls';
 import { ExportButton } from './export-button';
+import { TagFilter } from './tag-filter';
+import { TagChips } from './tags-editor';
 import { type ListResponse, PAGE_SIZE, type PeopleQuery, type PersonRow } from './types';
 
 const ROLE_OPTIONS = [
@@ -62,16 +64,20 @@ const EXPORT_COLUMNS: CsvColumn<PersonRow>[] = [
   { header: 'Devices', value: (r) => r.deviceCount },
   { header: 'Last seen', value: (r) => r.lastSeenAt },
   { header: 'Joined', value: (r) => r.createdAt },
+  { header: 'Tags', value: (r) => (r.tags ?? []).join('; ') },
 ];
 
 export function RegisteredTab({
   query,
   onQuery,
   onOpen,
+  version,
 }: {
   query: PeopleQuery;
   onQuery: (patch: Partial<PeopleQuery>) => void;
   onOpen: (id: string) => void;
+  /** Changes when tags were edited elsewhere, to reload the rows and tag choices. */
+  version: number;
 }) {
   const [data, setData] = useState<ListResponse<PersonRow> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,8 +91,9 @@ export function RegisteredTab({
       ...(query.status ? { status: query.status } : {}),
       ...(query.country ? { country: query.country } : {}),
       ...(query.verified ? { verified: query.verified as 'email' | 'unverified' } : {}),
+      ...(query.tag ? { tag: query.tag } : {}),
     }),
-    [query.q, query.role, query.status, query.country, query.verified],
+    [query.q, query.role, query.status, query.country, query.verified, query.tag],
   );
 
   useEffect(() => {
@@ -107,7 +114,7 @@ export function RegisteredTab({
     return () => {
       cancelled = true;
     };
-  }, [filters, query.page, attempt]);
+  }, [filters, query.page, attempt, version]);
 
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
@@ -139,6 +146,12 @@ export function RegisteredTab({
           value={query.verified}
           onChange={(verified) => onQuery({ verified })}
           options={VERIFIED_OPTIONS}
+        />
+        <TagFilter
+          subject="users"
+          value={query.tag}
+          version={version}
+          onChange={(tag) => onQuery({ tag })}
         />
         <DebouncedInput
           label="Country"
@@ -218,6 +231,7 @@ export function RegisteredTab({
                         {row.name && row.companyName ? ', ' : null}
                         {row.companyName}
                       </p>
+                      <TagChips tags={row.tags ?? []} />
                     </td>
                     <td className="capitalize">{row.role.replace(/_/g, ' ')}</td>
                     <td>

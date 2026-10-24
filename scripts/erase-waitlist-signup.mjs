@@ -15,7 +15,8 @@
  * ------
  * - Emails are stored normalized (lowercase) at write time, so a plain
  *   `findUnique` by email is exact.
- * - Deletes the row(s) and scrubs `audit_logs` rows with
+ * - Deletes the row(s), the People CRM notes and tags about them, and scrubs
+ *   `audit_logs` rows with
  *   targetType='advertiser_waitlist' and targetId in the deleted ids in ONE
  *   transaction — a partial erasure (row gone, audit left) would defeat the
  *   purpose.
@@ -80,15 +81,28 @@ async function main() {
       const deleted = await tx.advertiserWaitlist.deleteMany({
         where: { email: normalized },
       });
+      // Admin CRM notes/tags on this signup can hold personal data and have no
+      // foreign key (polymorphic subjectId), so they go with the row.
+      const notes = await tx.personNote.deleteMany({
+        where: { subjectType: 'waitlist', subjectId: existing.id },
+      });
+      const tags = await tx.personTag.deleteMany({
+        where: { subjectType: 'waitlist', subjectId: existing.id },
+      });
       const scrubbed = await tx.auditLog.updateMany({
         where: { targetType: 'advertiser_waitlist', targetId: existing.id },
         data: { ipHash: null, afterSnap: Prisma.DbNull, beforeSnap: Prisma.DbNull },
       });
-      return { deleted: deleted.count, scrubbed: scrubbed.count };
+      return {
+        deleted: deleted.count,
+        scrubbed: scrubbed.count,
+        notes: notes.count,
+        tags: tags.count,
+      };
     });
 
     console.log(
-      `Erased waitlist signup ${normalized}: ${result.deleted} row deleted, ${result.scrubbed} audit entr${result.scrubbed === 1 ? 'y' : 'ies'} scrubbed.`,
+      `Erased waitlist signup ${normalized}: ${result.deleted} row deleted, ${result.scrubbed} audit entr${result.scrubbed === 1 ? 'y' : 'ies'} scrubbed, ${result.notes} note(s) and ${result.tags} tag(s) deleted.`,
     );
   } finally {
     await prisma.$disconnect();

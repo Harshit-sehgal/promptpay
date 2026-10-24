@@ -3467,3 +3467,120 @@ html[data-palette='midnight'] {
   color: var(--muted);
   font-size: 14px;
 }
+
+/* People console: tag chips, tag editor and notes */
+.people-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  list-style: none;
+}
+
+.people-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 7px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.people-tag:has(.people-tag__remove) {
+  padding-right: 0;
+}
+
+.people-tag__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.people-tag__remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.people-tag__remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.people-tags-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.people-tags-editor .people-tags {
+  margin-top: 0;
+}
+
+.people-tags-editor__row {
+  display: flex;
+  gap: 8px;
+}
+
+.people-field-error {
+  padding-left: 10px;
+  border-left: 3px solid var(--bad);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.people-notes {
+  display: grid;
+  gap: 12px;
+}
+
+.people-notes__list > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.people-notes__list > li:first-child {
+  padding-top: 0;
+}
+
+.people-note__body {
+  color: var(--ink);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.people-note__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.people-note__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.people-notes__submit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}

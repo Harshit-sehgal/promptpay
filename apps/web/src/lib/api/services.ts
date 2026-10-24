@@ -129,6 +129,7 @@ export interface PeopleUsersParams extends PeoplePaging {
   status?: string;
   country?: string;
   verified?: 'email' | 'unverified';
+  tag?: string;
   from?: string;
   to?: string;
 }
@@ -137,7 +138,11 @@ export interface PeopleWaitlistParams extends PeoplePaging {
   search?: string;
   status?: WaitlistStatus;
   country?: string;
+  tag?: string;
 }
+
+/** The two kinds of person a note or tag can belong to. */
+export type PeopleSubject = 'users' | 'waitlist';
 
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
@@ -154,6 +159,14 @@ export const adminApi = {
     api.get('/admin/people/waitlist', { params }),
   setWaitlistStatus: (id: string, status: WaitlistStatus) =>
     api.post(`/admin/people/waitlist/${id}/status`, { status }),
+  getPeopleTags: (subject: PeopleSubject) => api.get('/admin/people/tags', { params: { subject } }),
+  getPersonNotes: (subject: PeopleSubject, id: string) =>
+    api.get(`/admin/people/${subject}/${id}/notes`),
+  addPersonNote: (subject: PeopleSubject, id: string, body: string) =>
+    api.post(`/admin/people/${subject}/${id}/notes`, { body }),
+  deletePersonNote: (noteId: string) => api.delete(`/admin/people/notes/${noteId}`),
+  setPersonTags: (subject: PeopleSubject, id: string, tags: string[]) =>
+    api.put(`/admin/people/${subject}/${id}/tags`, { tags }),
   exportPeople: (kind: 'users' | 'waitlist', params?: PeopleUsersParams | PeopleWaitlistParams) =>
     api.get('/admin/people/export', { params: { ...params, kind } }),
   setUserStatus: (id: string, status: string) => api.post(`/admin/users/${id}/status`, { status }),

@@ -342,17 +342,17 @@ Auth: admin or super_admin JWT. Response: registered-user and waitlist counts (t
 
 ### GET /admin/people/users
 
-Query: search, role, status, country, verified (`email` or `unverified`), from, to, page, limit (max 100). Each key must appear once.
+Query: search, role, status, country, verified (`email` or `unverified`), from, to, tag, page, limit (max 100). Each key must appear once. `tag` is a single tag; a tag carried by more than 10 000 people is refused with 400.
 
-Response: paginated people rows with verification flags, two-factor, advertiser company, device count and last seen. Never returns secrets or pseudonyms.
+Response: paginated people rows with verification flags, two-factor, advertiser company, device count, last seen and `tags` (sorted). Tags for a page come from one batched query. Never returns secrets or pseudonyms.
 
 ### GET /admin/people/users/:id
 
-Response: full person detail including advertiser profile, consents, devices and referrals.
+Response: full person detail including advertiser profile, consents, devices, referrals and `tags`.
 
 ### GET /admin/people/waitlist
 
-Query: search, status, country, page, limit. Response: paginated advertiser waitlist rows, each with `registeredUserId` when that email has an account.
+Query: search, status, country, tag, page, limit. Response: paginated advertiser waitlist rows, each with `tags` and `registeredUserId` when that email has an account.
 
 ### POST /admin/people/waitlist/:id/status
 
@@ -360,7 +360,27 @@ Request: `{ "status": "pending" | "invited" | "onboarded" | "declined" }`. Requi
 
 ### GET /admin/people/export
 
-Query: kind (`users` or `waitlist`) plus that list's filters. Response: `{ rows, truncated }`, at most 10 000 rows. Throttled to 10 a minute and strictly audit-logged as `admin_exported_people` (filters recorded, free-text search reduced to a flag).
+Query: kind (`users` or `waitlist`) plus that list's filters (including `tag`). Response: `{ rows, truncated }`, at most 10 000 rows, each with `tags`. Throttled to 10 a minute and strictly audit-logged as `admin_exported_people` (filters recorded, free-text search reduced to a flag).
+
+### GET /admin/people/tags
+
+Query: `subject` (`users` or `waitlist`, required; 400 otherwise). Response: `[{ "tag": "vip", "count": 3 }]`, most used first then by tag, at most 200.
+
+### GET /admin/people/:subject/:id/notes
+
+`:subject` is `users` or `waitlist` (400 otherwise); `:id` is a UUID of an existing person (404 otherwise). Response: `[{ id, body, createdAt, author: { id, email } | null }]`, newest first, at most 100. `author` is null once the authoring admin is hard-deleted.
+
+### POST /admin/people/:subject/:id/notes
+
+Request: `{ "body": "..." }`, trimmed, 1 to 2000 characters, no other keys. Response: the created note (same shape as above). Requires recent two-factor in production. Audit-logged as `admin_added_person_note` with `{ subjectType, noteId }`; the body is never audited.
+
+### DELETE /admin/people/notes/:noteId
+
+Response: `{ "deleted": true }`; 404 if the note does not exist. Requires recent two-factor in production. Audit-logged as `admin_deleted_person_note`.
+
+### PUT /admin/people/:subject/:id/tags
+
+Request: `{ "tags": ["vip", "warm"] }`. Each tag is trimmed and lowercased and must match `^[a-z0-9][a-z0-9-]{0,31}$`; duplicates collapse; at most 10 per person (400 otherwise). Replaces the whole set in one transaction. Response: `{ "tags": [...] }` sorted. Requires recent two-factor in production. A change is audit-logged as `admin_set_person_tags` with before and after tag lists. Notes and tags are deleted with the person on account erasure and by `scripts/erase-waitlist-signup.mjs`.
 
 ### GET /admin/advertisers
 

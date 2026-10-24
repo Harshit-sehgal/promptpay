@@ -19,6 +19,11 @@ vi.mock('@/lib/api/services', () => ({
     getPeopleWaitlist: vi.fn(),
     setWaitlistStatus: vi.fn(),
     exportPeople: vi.fn(),
+    getPeopleTags: vi.fn(),
+    getPersonNotes: vi.fn(),
+    addPersonNote: vi.fn(),
+    deletePersonNote: vi.fn(),
+    setPersonTags: vi.fn(),
   },
 }));
 
@@ -60,6 +65,7 @@ const userRow = {
   companyName: null,
   deviceCount: 2,
   lastSeenAt: '2026-10-24T10:00:00.000Z',
+  tags: ['vip', 'beta-tester'],
 };
 
 const userDetail = {
@@ -101,6 +107,7 @@ const waitRow = {
   createdAt: '2026-10-10T10:00:00.000Z',
   updatedAt: '2026-10-10T10:00:00.000Z',
   registeredUserId: null as string | null,
+  tags: ['press'],
 };
 
 const list = (rows: unknown[], total = rows.length) =>
@@ -112,6 +119,13 @@ beforeEach(() => {
   vi.mocked(adminApi.getPeopleUsers).mockResolvedValue(list([userRow]));
   vi.mocked(adminApi.getPeopleWaitlist).mockResolvedValue(list([waitRow]));
   vi.mocked(adminApi.getPeopleUser).mockResolvedValue({ data: userDetail } as never);
+  vi.mocked(adminApi.getPeopleTags).mockResolvedValue({
+    data: [
+      { tag: 'vip', count: 4 },
+      { tag: 'press', count: 2 },
+    ],
+  } as never);
+  vi.mocked(adminApi.getPersonNotes).mockResolvedValue({ data: [] } as never);
   window.history.replaceState(null, '', '/admin/people');
 });
 
@@ -164,6 +178,8 @@ describe('AdminPeoplePage', () => {
       'Consents',
       'Devices (2)',
       'Referrals',
+      'Tags',
+      'Notes',
     ]) {
       expect(within(dialog).getByRole('heading', { name: heading })).toBeTruthy();
     }
@@ -302,6 +318,8 @@ describe('Export', () => {
     });
     expect(text).toContain('"\'=1+1"');
     expect(text).toContain('"dev@example.com"');
+    expect(text).toContain('"Tags"');
+    expect(text).toContain('"vip; beta-tester"');
   });
 
   it('warns when the export was truncated', async () => {
@@ -319,6 +337,77 @@ describe('Export', () => {
   });
 });
 
+describe('Tags and notes in the lists', () => {
+  it('shows tag chips under the person and filters by tag', async () => {
+    render(<AdminPeoplePage />);
+    await screen.findByText('Dev Person');
+    const chips = screen.getByRole('list', { name: 'Tags' });
+    expect(within(chips).getByText('vip')).toBeTruthy();
+    expect(within(chips).getByText('beta-tester')).toBeTruthy();
+
+    await waitFor(() => expect(adminApi.getPeopleTags).toHaveBeenCalledWith('users'));
+    const select = screen.getByLabelText('Tag') as HTMLSelectElement;
+    await waitFor(() => expect(within(select).getByText('vip (4)')).toBeTruthy());
+    expect(within(select).getByText('Any tag')).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: 'vip' } });
+
+    await waitFor(() =>
+      expect(adminApi.getPeopleUsers).toHaveBeenLastCalledWith({
+        tag: 'vip',
+        page: 1,
+        limit: 25,
+      }),
+    );
+    await waitFor(() => expect(window.location.search).toBe('?tag=vip'));
+  });
+
+  it('reads the tag filter from the URL on the waitlist tab', async () => {
+    search = 'tab=waitlist&tag=press';
+    render(<AdminPeoplePage />);
+    await screen.findByText('sponsor@example.com');
+    expect(adminApi.getPeopleWaitlist).toHaveBeenCalledWith({ tag: 'press', page: 1, limit: 25 });
+    expect(adminApi.getPeopleTags).toHaveBeenCalledWith('waitlist');
+  });
+
+  it('opens the waitlist notes dialog from the row', async () => {
+    search = 'tab=waitlist';
+    vi.mocked(adminApi.getPersonNotes).mockResolvedValue({
+      data: [
+        {
+          id: 'n-1',
+          body: 'Asked about pricing',
+          createdAt: '2026-10-11T10:00:00.000Z',
+          author: { id: 'a-1', email: 'admin@ateva.test' },
+        },
+      ],
+    } as never);
+    render(<AdminPeoplePage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Notes for sponsor@example.com' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'sponsor@example.com' })).toBeTruthy();
+    expect(within(dialog).getByText('Example Co')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Remove tag press' })).toBeTruthy();
+    expect(await within(dialog).findByText('Asked about pricing')).toBeTruthy();
+    expect(adminApi.getPersonNotes).toHaveBeenCalledWith('waitlist', 'w-1');
+  });
+
+  it('reloads the rows and tag choices after the tags change in the dialog', async () => {
+    vi.mocked(adminApi.setPersonTags).mockResolvedValue({ data: { tags: ['vip'] } } as never);
+    render(<AdminPeoplePage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Dev Person' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Remove tag beta-tester' }));
+
+    await waitFor(() =>
+      expect(adminApi.setPersonTags).toHaveBeenCalledWith('users', 'u-1', ['vip']),
+    );
+    await waitFor(() => expect(adminApi.getPeopleUsers).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(adminApi.getPeopleTags).toHaveBeenCalledTimes(2));
+  });
+});
+
 describe('URL query', () => {
   it('round-trips the view and ignores unknown values', () => {
     const query = parseQuery(
@@ -331,9 +420,15 @@ describe('URL query', () => {
       status: 'invited',
       country: 'IN',
       verified: '',
+      tag: '',
       page: 3,
     });
     expect(serialiseQuery(query)).toBe('tab=waitlist&q=acme&status=invited&country=IN&page=3');
+    const tagged = parseQuery(new URLSearchParams('tag=vip&page=2'));
+    expect(tagged.tag).toBe('vip');
+    expect(serialiseQuery(tagged)).toBe('tag=vip&page=2');
+    expect(parseQuery(new URLSearchParams('tag=Not%20A%20Tag')).tag).toBe('');
+    expect(parseQuery(new URLSearchParams('tag=-bad')).tag).toBe('');
     expect(
       parseQuery(new URLSearchParams('role=root&page=-2&country=USA&status=pending')).role,
     ).toBe('');

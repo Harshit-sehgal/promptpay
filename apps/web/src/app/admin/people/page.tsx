@@ -59,6 +59,9 @@ function PeopleView() {
   );
   const switchTab = (tab: PeopleTab) => setQuery({ ...EMPTY_QUERY, tab });
   const refreshSummary = useCallback(() => setSummaryAttempt((n) => n + 1), []);
+  // Bumped after a tag edit so the rows and the tag filter reload.
+  const [tagVersion, setTagVersion] = useState(0);
+  const tagsChanged = useCallback(() => setTagVersion((n) => n + 1), []);
   const closeDetail = useCallback(() => setOpenUserId(null), []);
 
   const users = summary?.users;
@@ -159,7 +162,12 @@ function PeopleView() {
       </div>
 
       {query.tab === 'registered' ? (
-        <RegisteredTab query={query} onQuery={patchQuery} onOpen={setOpenUserId} />
+        <RegisteredTab
+          query={query}
+          onQuery={patchQuery}
+          onOpen={setOpenUserId}
+          version={tagVersion}
+        />
       ) : (
         <WaitlistTab
           query={query}
@@ -167,10 +175,17 @@ function PeopleView() {
           onQuery={patchQuery}
           onOpen={setOpenUserId}
           onStatusChanged={refreshSummary}
+          version={tagVersion}
+          onTagsChanged={tagsChanged}
         />
       )}
 
-      <PersonDetailDialog userId={openUserId} onClose={closeDetail} onOpenUser={setOpenUserId} />
+      <PersonDetailDialog
+        userId={openUserId}
+        onClose={closeDetail}
+        onOpenUser={setOpenUserId}
+        onTagsChanged={tagsChanged}
+      />
     </>
   );
 }

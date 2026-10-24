@@ -109,6 +109,7 @@ export {
   LedgerStatus,
   PayoutProvider,
   PayoutStatus,
+  PersonSubject,
   Prisma,
   PrismaClient,
   RecoveryDebtCaseStatus,

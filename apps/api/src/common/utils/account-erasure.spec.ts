@@ -46,6 +46,8 @@ function makePrisma() {
     adImpression: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     adClick: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     auditLog: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    personNote: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    personTag: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
   };
   const prisma = {
     $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
@@ -165,8 +167,23 @@ describe('eraseAccountIdentity', () => {
       where: { userId: 'user-1' },
       data: { ipHash: null },
     });
+    // CRM notes and tags about the person are deleted in the same transaction.
+    expect(tx.personNote.deleteMany).toHaveBeenCalledWith({
+      where: { subjectType: 'user', subjectId: 'user-1' },
+    });
+    expect(tx.personTag.deleteMany).toHaveBeenCalledWith({
+      where: { subjectType: 'user', subjectId: 'user-1' },
+    });
     // Advisory lock + device pseudonymization + payout erasure + consent metadata minimization.
     expect(tx.$executeRaw).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not delete CRM notes or tags when the preflight blocks erasure', async () => {
+    const { prisma, tx } = makePrisma();
+    tx.payoutRequest.findFirst.mockResolvedValue({ id: 'payout-1', status: 'processing' } as never);
+    await expect(eraseAccountIdentity(prisma, 'user-1')).rejects.toThrow(ConflictException);
+    expect(tx.personNote.deleteMany).not.toHaveBeenCalled();
+    expect(tx.personTag.deleteMany).not.toHaveBeenCalled();
   });
 
   it('forfeits sub-threshold earnings when forfeitBalance=true', async () => {

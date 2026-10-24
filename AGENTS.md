@@ -40,8 +40,21 @@ endpoints in `docs/04-api-specification.md`). The API (`apps/api/src/admin/peopl
 uses explicit selects that never include secrets or pseudonyms, rejects
 repeated query keys with 400, gates the waitlist status write behind
 `AdminMfaStepUpGuard`, writes it conditionally on the status it read, and
-strictly audits CSV exports (10 a minute, 10 000 rows max). No migration was
-added: notes and tags are deferred because they need a table.
+strictly audits CSV exports (10 a minute, 10 000 rows max).
+
+Notes, tags and the signup index followed the same day (migration
+`20261025000000_people_notes_tags`, 101 migrations): `person_notes` and
+`person_tags` keyed by a polymorphic `subjectType` + `subjectId` (no foreign
+key, so `eraseAccountIdentity` and `scripts/erase-waitlist-signup.mjs` delete a
+subject's notes and tags in their own transaction), plus `createdAt` indexes on
+`users` and `advertiser_waitlist` for the newest-first lists. The endpoints live
+in `PeopleController` with writes in `PeopleNotesService` (audit rows never carry
+the note body; tag replacement is one transaction under a per-person advisory
+lock). List, detail and export rows carry `tags` from one batched query per page,
+and the `tag` filter resolves to person ids first and refuses (400) a tag on
+more than 10 000 people rather than truncating. Verified by the admin, common,
+developer and advertiser specs plus an HTTP routing spec; the waitlist erasure
+script test needs a database and was not run here.
 
 Also: the cookie banner can be declined for the session when the consent
 version cannot be loaded (and that decline withdraws an earlier acceptance),
@@ -211,9 +224,10 @@ The repository-safe Waves 1–5 foundation from ADR-0008 is now implemented in
 shadow mode. The work is additive and does not change existing wait,
 impression, billing, reward, payout, attestation, or ledger authorization.
 
-- **100 migrations.** This is the current on-disk migration count after the
-  additive adaptive-attention migration; older dated snapshots below retain
-  the counts that were true when they were written.
+- **101 migrations.** This is the current on-disk migration count after the
+  additive People notes/tags migration (the adaptive-attention migration had
+  brought it to 100); older dated snapshots below retain the counts that were
+  true when they were written.
 
 - Versioned protocol and Prisma contracts cover policy versions, immutable
   session assignments, privacy-safe canonical facts, experiments/outcomes,

@@ -321,11 +321,13 @@ model User {
   sandboxCreditAccounts      SandboxCreditAccount[]
   sandboxPayoutSimulations   SandboxPayoutSimulation[]
   sandboxDepositSimulations  SandboxDepositSimulation[]
+  personNotesAuthored        PersonNote[]               @relation("PersonNoteAuthor")
 
   @@unique([githubId])
   // The `email` @unique (above) already serves equality/like scans on
   // email; a separate @@index duplicates storage and write cost.
   @@index([role, status])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -2072,5 +2074,43 @@ model AdvertiserWaitlist {
   updatedAt DateTime                 @updatedAt @map("updated_at")
 
   @@index([status, createdAt])
+  // The People CRM lists signups newest first across all statuses; the
+  // index above leads with `status`.
+  @@index([createdAt])
   @@map("advertiser_waitlist")
+}
+
+// ── People CRM: admin notes and tags on registered users and waitlist entries ──
+// `subjectId` points at User.id or AdvertiserWaitlist.id depending on
+// `subjectType`, so there is no foreign key (two targets). Every erasure path
+// deletes the subject's notes and tags in the same transaction (notes can hold
+// personal data).
+enum PersonSubject {
+  user
+  waitlist
+}
+
+model PersonNote {
+  id          String        @id @default(uuid())
+  subjectType PersonSubject
+  subjectId   String
+  authorId    String?
+  author      User?         @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body        String        @db.VarChar(2000)
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+
+  @@index([subjectType, subjectId, createdAt])
+  @@index([authorId])
+  @@map("person_notes")
+}
+
+model PersonTag {
+  subjectType PersonSubject
+  subjectId   String
+  tag         String        @db.VarChar(32)
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+
+  @@id([subjectType, subjectId, tag])
+  @@index([tag])
+  @@map("person_tags")
 }

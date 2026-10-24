@@ -42,7 +42,16 @@ test('erase-waitlist-signup deletes the row and scrubs the audit trail', async (
     },
   });
 
+  await prisma.personNote.create({
+    data: { subjectType: 'waitlist', subjectId: row.id, body: 'called, wants a demo' },
+  });
+  await prisma.personTag.create({
+    data: { subjectType: 'waitlist', subjectId: row.id, tag: 'warm' },
+  });
+
   t.after(async () => {
+    await prisma.personNote.deleteMany({ where: { subjectId: row.id } });
+    await prisma.personTag.deleteMany({ where: { subjectId: row.id } });
     await prisma.auditLog.deleteMany({ where: { targetType: 'advertiser_waitlist' } });
     await prisma.advertiserWaitlist.deleteMany({ where: { email } });
     await prisma.$disconnect();
@@ -53,6 +62,9 @@ test('erase-waitlist-signup deletes the row and scrubs the audit trail', async (
     encoding: 'utf8',
   });
   assert.match(out, /1 row deleted, 1 audit entr/);
+  assert.match(out, /1 note\(s\) and 1 tag\(s\) deleted/);
+  assert.equal(await prisma.personNote.count({ where: { subjectId: row.id } }), 0, 'notes deleted');
+  assert.equal(await prisma.personTag.count({ where: { subjectId: row.id } }), 0, 'tags deleted');
 
   assert.equal(await prisma.advertiserWaitlist.count({ where: { email } }), 0, 'row deleted');
   const audit = await prisma.auditLog.findFirst({

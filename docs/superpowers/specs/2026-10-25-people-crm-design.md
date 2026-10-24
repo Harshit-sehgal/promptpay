@@ -199,3 +199,73 @@ most 10 000 rows.
 
 Notes and tags (need a migration), email sending to invitees, bulk status
 changes.
+
+## Revision 2026-10-25: notes, tags and the signup index
+
+The deferred items are now in scope. One additive migration
+(`20261025000000_people_notes_tags`).
+
+### Schema (packages/db)
+
+```prisma
+enum PersonSubject {
+  user
+  waitlist
+}
+
+model PersonNote {
+  id          String        @id @default(uuid())
+  subjectType PersonSubject
+  subjectId   String        // User.id or AdvertiserWaitlist.id; no FK (two targets)
+  authorId    String?
+  author      User?         @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body        String        @db.VarChar(2000)
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+
+  @@index([subjectType, subjectId, createdAt])
+  @@index([authorId])
+  @@map("person_notes")
+}
+
+model PersonTag {
+  subjectType PersonSubject
+  subjectId   String
+  tag         String        @db.VarChar(32)
+  createdAt   DateTime      @default(now()) @db.Timestamptz
+
+  @@id([subjectType, subjectId, tag])
+  @@index([tag])
+  @@map("person_tags")
+}
+```
+
+`User` gains `@@index([createdAt])` and the back-relation
+`personNotesAuthored PersonNote[] @relation("PersonNoteAuthor")`.
+`AdvertiserWaitlist` gains `@@index([createdAt])` (its existing index leads
+with `status`).
+
+Because `subjectId` has no foreign key, every erasure path deletes the
+subject's notes and tags in the same transaction: admin user erasure, self
+account deletion (developer and advertiser), and
+`scripts/erase-waitlist-signup.mjs`. Notes can hold personal data.
+
+### API additions (same controller, same guards; writes are step-up gated)
+
+`:subject` is `users` or `waitlist`; `:id` is a UUID; the subject must exist
+(404 otherwise).
+
+- `GET /admin/people/:subject/:id/notes` → `[{ id, body, createdAt, author: { id, email } | null }]`, newest first, max 100.
+- `POST /admin/people/:subject/:id/notes` body `{ body }` (trimmed, 1 to 2000 chars) → the note. Audit `admin_added_person_note` with `{ subjectType, noteId }`, never the body.
+- `DELETE /admin/people/notes/:noteId` → `{ deleted: true }`; 404 if missing. Audit `admin_deleted_person_note`.
+- `PUT /admin/people/:subject/:id/tags` body `{ tags: string[] }` → `{ tags }` sorted. Each tag is lowercased and trimmed, must match `^[a-z0-9][a-z0-9-]{0,31}$`; at most 10 per subject; duplicates collapse. Replaces the set in one transaction. Audit `admin_set_person_tags` with before/after tag lists.
+- `GET /admin/people/tags?subject=users|waitlist` → `[{ tag, count }]` sorted by count desc then tag, max 200.
+- List rows (users and waitlist) and export rows gain `tags: string[]` (sorted). List and export queries accept `tag` (single value; rows having that tag).
+- User detail gains `tags: string[]`.
+
+### Web additions
+
+- Detail dialog (registered user): a Tags editor (chips with remove buttons, a text input that adds on Enter or comma, validation message, saves via PUT) and a Notes section (list newest first with author, time and a Delete button with confirm; a textarea and Add note button).
+- Waitlist rows get a "Notes" button opening a waitlist detail dialog with email, company, country, status, source, signup time, the same Tags editor and Notes section.
+- Both tables show tags as small chips under the person/email; both toolbars get a Tag filter select fed by `GET /admin/people/tags`; `tag` lives in the URL query.
+- CSV exports include a Tags column (tags joined with `; `).
+- A 403 from a write shows the API message (the step-up rule asks for a recent two-factor sign-in).

@@ -207,6 +207,14 @@ function eraseAccountIdentityOnce(
         WHERE "userId" = ${userId}
       `;
 
+      // Admin CRM notes and tags about this person can hold free-form personal
+      // data and carry no foreign key (subjectId is polymorphic), so they are
+      // deleted here with the rest of the erasure. Notes this user AUTHORED as
+      // an admin are not touched: they are about other people, and the
+      // retained user row is already de-identified.
+      await tx.personNote.deleteMany({ where: { subjectType: 'user', subjectId: userId } });
+      await tx.personTag.deleteMany({ where: { subjectType: 'user', subjectId: userId } });
+
       const auditIdentities = [userId, ...(advertiser ? [advertiser.id] : [])];
       // Retain actor/action/target/time as de-identified forensic facts, but
       // remove IP pseudonyms and arbitrary snapshots that can contain old
