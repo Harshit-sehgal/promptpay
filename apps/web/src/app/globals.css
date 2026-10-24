@@ -9418,10 +9418,16 @@ body:has(.site-header):not(:has(.home-page)) main {
   color: var(--ink);
 }
 
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-white'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/70'],
-body:has(.site-header):not(:has(.home-page)) main [class~='bg-surface-50/60'] {
+/* The /contact support directory (.public-support__*) is rules and columns,
+   not tiles, so it stays out of the glass treatment. */
+body:has(.site-header):not(:has(.home-page))
+  main
+  :is(
+    [class~='bg-white'],
+    [class~='bg-surface-50'],
+    [class~='bg-surface-50/70'],
+    [class~='bg-surface-50/60']
+  ):not(.public-support__item, .public-support__links) {
   border-color: var(--glass-edge) !important;
   background-color: var(--glass) !important;
   backdrop-filter: blur(22px) saturate(1.4);
@@ -9439,7 +9445,7 @@ body:has(.site-header):not(:has(.home-page))
     [class~='bg-surface-50'],
     [class~='bg-surface-50/70'],
     [class~='bg-surface-50/60']
-  ):is([class~='border'], [class~='border-2']) {
+  ):not(.public-support__item, .public-support__links):is([class~='border'], [class~='border-2']) {
   border: 1px solid var(--glass-edge) !important;
 }
 
@@ -9450,7 +9456,10 @@ body:has(.site-header):not(:has(.home-page))
     [class~='bg-surface-50'],
     [class~='bg-surface-50/70'],
     [class~='bg-surface-50/60']
-  ):is([class~='rounded-lg'], [class~='rounded-xl']),
+  ):not(.public-support__item, .public-support__links):is(
+    [class~='rounded-lg'],
+    [class~='rounded-xl']
+  ),
 body:has(.site-header):not(:has(.home-page))
   main
   :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):is(
@@ -9467,7 +9476,10 @@ body:has(.site-header):not(:has(.home-page))
     [class~='bg-surface-50'],
     [class~='bg-surface-50/70'],
     [class~='bg-surface-50/60']
-  ):is([class~='rounded-2xl'], [class~='rounded-3xl']),
+  ):not(.public-support__item, .public-support__links):is(
+    [class~='rounded-2xl'],
+    [class~='rounded-3xl']
+  ),
 body:has(.site-header):not(:has(.home-page))
   main
   :is([class~='bg-surface-900'], [class~='bg-surface-950'], [class~='bg-brand-500']):is(
