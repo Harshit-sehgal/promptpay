@@ -29,12 +29,17 @@ export function SponsorsSection() {
             <strong>Tidewater CI</strong>
             2,000 free build minutes a month for open-source repos.
             <div className="home-card__row">
-              <span>Sponsored · on screen 5.2s</span>
+              <span>Sponsored</span>
+              <span>on screen 5.2s</span>
             </div>
           </Reveal>
           <Reveal className="home-card slots__empty" delayIndex={2}>
             <strong>Your product</strong>
             One line, one link, one clear label.
+            <div className="home-card__row">
+              <span>Sponsored</span>
+              <span>—</span>
+            </div>
           </Reveal>
         </div>
       </div>

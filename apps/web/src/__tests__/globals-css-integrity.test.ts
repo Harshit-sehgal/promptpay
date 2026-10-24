@@ -83,13 +83,8 @@ describe('globals.css integrity', () => {
     expect(header).toMatch(/backdrop-blur-xl/);
   });
 
-  it('keeps dark-mode planner values readable in its light input controls', () => {
-    expect(css).toMatch(
-      /html\[data-landing-theme='dark'\][\s\S]*\.landing-page \.landing-planner input\s*\{\s*color: #1d2933 !important;/,
-    );
-    expect(css).toMatch(
-      /html\[data-landing-theme='dark'\][\s\S]*\.landing-planner \.bg-white\s*\{\s*background-color: #ffffff !important;/,
-    );
+  it('no landing-era selectors remain', () => {
+    expect(css).not.toMatch(/\.landing-|data-landing-theme/);
   });
 
   it('keeps the final component language quiet and two-tone', () => {
