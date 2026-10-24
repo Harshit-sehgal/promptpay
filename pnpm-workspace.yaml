@@ -6,8 +6,8 @@ packages:
 overrides:
   # Security floors for transitive Next/Sentry and AJV dependency paths.
   # Keep these explicit until the direct packages raise their own lower bounds.
-  fast-uri: 3.1.8
-  multer: 2.4.0
+  fast-uri: 3.1.9
+  multer: 2.5.0
   postcss: 8.5.23
   find-my-way: 9.7.0
   valibot: 1.4.2
@@ -38,7 +38,17 @@ overrides:
   # - source-map-js >=1.2.2 (GHSA-68fv-2mgg-jv7q)
   # - proxy-addr >=2.0.8 (GHSA-jqcg-44mw-7w3h)
   # Drop each once the direct parents raise their own lower bounds.
-  'next@^16.0.0': 16.3.8
+  'next@^16.0.0': 16.4.1
+  # 2026-10-24 advisory wave (breaks `pnpm audit --prod` and Trivy on main and
+  # open PRs).
+  # - next >=16.4.1: GHSA-2464-fhr4-w9xw / GHSA-673q-mjm6-r5xr (critical, RCE)
+  #   and CVE-2026-94482 (high, App Router DoS); floor above raised to match.
+  # - fast-uri >=3.1.9 and multer >=2.5.0: floors at the top raised.
+  # - body-parser >=2.4.0 (CVE-2026-111181, DoS) and follow-redirects >=1.16.1
+  #   (CVE-2026-111755 / CVE-2026-111756, header leaks).
+  # Drop each once the direct parents raise their own lower bounds.
+  body-parser: 2.4.0
+  follow-redirects: 1.16.1
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
   # @sentry/server-utils 10.73.0 shipped a broken dist layout: its webpack
