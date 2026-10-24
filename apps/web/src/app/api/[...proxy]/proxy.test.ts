@@ -13,6 +13,8 @@ describe('proxy allowlist (A-006)', () => {
     expect(isProxyPathAllowed('/advertiser/campaigns')).toBe(true);
     expect(isProxyPathAllowed('/admin/users')).toBe(true);
     expect(isProxyPathAllowed('/admin/waitlist')).toBe(true);
+    expect(isProxyPathAllowed('/admin/people/summary')).toBe(true);
+    expect(isProxyPathAllowed('/admin/people/waitlist/abc/status')).toBe(true);
     expect(isProxyPathAllowed('/admin/devices')).toBe(true);
     expect(isProxyPathAllowed('/payout/providers')).toBe(true);
     expect(isProxyPathAllowed('/payout/stripe-connect/onboarding')).toBe(true);

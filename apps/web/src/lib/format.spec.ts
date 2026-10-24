@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { bigintRatioPercent, formatCurrency, formatRelativeTime } from './format';
+import {
+  bigintRatioPercent,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  formatRelativeTime,
+} from './format';
 
 describe('formatCurrency', () => {
   it('renders bigint minor units above Number.MAX_SAFE_INTEGER exactly', () => {
@@ -66,5 +72,15 @@ describe('formatRelativeTime direction and validity', () => {
     // Absence of information must not render as a confident claim about now.
     expect(formatRelativeTime('not-a-date')).toBe('—');
     expect(formatRelativeTime(new Date('nonsense'))).toBe('—');
+  });
+});
+
+describe('formatNumber and formatPercent', () => {
+  it('render a missing or non-finite value as zero instead of NaN', () => {
+    expect(formatNumber(undefined as unknown as number)).toBe('0');
+    expect(formatNumber(Number.NaN)).toBe('0');
+    expect(formatNumber(1284)).toBe('1,284');
+    expect(formatPercent(undefined as unknown as number, 2)).toBe('0.00%');
+    expect(formatPercent(2.86, 2)).toBe('2.86%');
   });
 });

@@ -29,6 +29,7 @@ const ADMIN_NAV = [
   { label: 'Metrics', href: '/admin/metrics', section: 'Operations' },
   { label: 'Operations', href: '/admin/operations', section: 'Operations' },
   { label: 'Audit log', href: '/admin/audit', section: 'Operations' },
+  { label: 'People', href: '/admin/people', section: 'People' },
   { label: 'Users', href: '/admin/users', section: 'People' },
   { label: 'Waitlist', href: '/admin/waitlist', section: 'People' },
   { label: 'Campaign approvals', href: '/admin/campaigns', section: 'Campaigns' },

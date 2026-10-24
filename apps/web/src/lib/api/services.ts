@@ -116,6 +116,29 @@ export const advertiserApi = {
     api.post('/advertiser/deposit-session', { amountMinor, currency }),
 };
 
+export type WaitlistStatus = 'pending' | 'invited' | 'onboarded' | 'declined';
+
+interface PeoplePaging {
+  page?: number;
+  limit?: number;
+}
+
+export interface PeopleUsersParams extends PeoplePaging {
+  search?: string;
+  role?: string;
+  status?: string;
+  country?: string;
+  verified?: 'email' | 'unverified';
+  from?: string;
+  to?: string;
+}
+
+export interface PeopleWaitlistParams extends PeoplePaging {
+  search?: string;
+  status?: WaitlistStatus;
+  country?: string;
+}
+
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
   getUsers: (params?: Record<string, unknown>) => api.get('/admin/users', { params }),
@@ -124,6 +147,15 @@ export const adminApi = {
     page?: number;
     limit?: number;
   }) => api.get('/admin/waitlist', { params }),
+  getPeopleSummary: () => api.get('/admin/people/summary'),
+  getPeopleUsers: (params?: PeopleUsersParams) => api.get('/admin/people/users', { params }),
+  getPeopleUser: (id: string) => api.get(`/admin/people/users/${id}`),
+  getPeopleWaitlist: (params?: PeopleWaitlistParams) =>
+    api.get('/admin/people/waitlist', { params }),
+  setWaitlistStatus: (id: string, status: WaitlistStatus) =>
+    api.post(`/admin/people/waitlist/${id}/status`, { status }),
+  exportPeople: (kind: 'users' | 'waitlist', params?: PeopleUsersParams | PeopleWaitlistParams) =>
+    api.get('/admin/people/export', { params: { ...params, kind } }),
   setUserStatus: (id: string, status: string) => api.post(`/admin/users/${id}/status`, { status }),
   eraseUser: (id: string) => api.post(`/admin/users/${id}/erase`),
   getPendingCampaigns: (params?: Record<string, unknown>) =>

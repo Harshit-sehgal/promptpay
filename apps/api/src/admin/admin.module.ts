@@ -9,6 +9,8 @@ import { RuntimeConfigModule } from '../runtime-config/runtime-config.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { MoneyIntegrityCronService } from './money-integrity.cron';
+import { PeopleController } from './people.controller';
+import { PeopleService } from './people.service';
 
 @Module({
   imports: [
@@ -19,7 +21,7 @@ import { MoneyIntegrityCronService } from './money-integrity.cron';
     RuntimeConfigModule,
     AgentModule,
   ],
-  controllers: [AdminController],
-  providers: [AdminService, MoneyIntegrityCronService],
+  controllers: [AdminController, PeopleController],
+  providers: [AdminService, MoneyIntegrityCronService, PeopleService],
 })
 export class AdminModule {}

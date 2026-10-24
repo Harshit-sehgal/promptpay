@@ -100,6 +100,7 @@ export const ALLOWED_PATH_PREFIXES = [
   '/admin/metrics',
   '/admin/users',
   '/admin/waitlist',
+  '/admin/people',
   '/admin/campaigns',
   '/admin/devices',
   '/admin/payouts',

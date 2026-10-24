@@ -44,8 +44,8 @@ const CLI_RUN = 'ateva run -- <your AI command>';
 function CodeLine({ children }: { children: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg bg-[var(--ink)] px-3 py-2">
-      <code className="overflow-x-auto text-xs whitespace-nowrap text-[var(--on-ink)]">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--hair)] bg-[var(--page)] px-3 py-2">
+      <code className="dash-mono overflow-x-auto text-xs whitespace-nowrap text-[var(--ink)]">
         {children}
       </code>
       <button
@@ -59,7 +59,7 @@ function CodeLine({ children }: { children: string }) {
             () => undefined,
           );
         }}
-        className="shrink-0 rounded border border-[var(--on-ink)] px-2 py-0.5 text-[11px] font-medium text-[var(--on-ink)] transition-opacity hover:opacity-80"
+        className="dash-btn dash-btn--secondary dash-btn--sm shrink-0"
         aria-label={`Copy: ${children}`}
       >
         {copied ? 'Copied' : 'Copy'}
@@ -128,7 +128,7 @@ export function DeveloperGetStarted() {
       </p>
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
-        <div className="rounded-xl border border-[var(--hair)] p-4">
+        <div className="min-w-0 rounded-xl border border-[var(--hair)] p-4">
           <h3 className="text-sm font-semibold text-[var(--ink)]">VS Code extension</h3>
           <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
             Detects wait states in VS Code, Cursor, Windsurf, and Cline.
@@ -152,7 +152,7 @@ export function DeveloperGetStarted() {
           )}
         </div>
 
-        <div className="rounded-xl border border-[var(--hair)] p-4">
+        <div className="min-w-0 rounded-xl border border-[var(--hair)] p-4">
           <h3 className="text-sm font-semibold text-[var(--ink)]">Command-line tool</h3>
           <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
             Supervises any terminal AI tool: Claude Code, Aider, Codex CLI.
