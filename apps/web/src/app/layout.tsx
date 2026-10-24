@@ -36,13 +36,7 @@ export const metadata: Metadata = {
   title: 'Ateva — delivery verification for AI-agent apps',
   description:
     'Ateva gives integrated AI-agent apps a clearly labelled sponsor surface during eligible waits and verifies delivery. Private beta; rewards and campaign billing remain disabled.',
-  keywords: [
-    'AI wait time',
-    'developer earnings',
-    'developer ads',
-    'privacy-first ads',
-    'paypal payouts',
-  ],
+  keywords: ['AI wait time', 'developer ads', 'privacy-first ads'],
   openGraph: {
     type: 'website',
     siteName: 'Ateva',

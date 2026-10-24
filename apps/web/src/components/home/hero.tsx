@@ -2,7 +2,6 @@
 
 import { type CSSProperties, Fragment, useEffect, useState } from 'react';
 import { type ColorField, ColorFields } from '@/components/motion/color-fields';
-import { Reveal } from '@/components/motion/reveal';
 
 import { clockFrame, SSR_CLOSE_SECOND, SSR_HERO_SECOND } from './clock';
 import { HomeAction } from './home-action';
@@ -88,7 +87,7 @@ export function Hero() {
             <HomeAction placement="hero" />
           </div>
         </div>
-        <Reveal className="hero-stage" delayIndex={3}>
+        <div className="hero-stage">
           <div className="agent glass">
             <b>claude</b> › fix the flaky checkout test
             <br />
@@ -111,7 +110,7 @@ export function Hero() {
               <span aria-hidden="true">✕</span>
             </div>
           </div>
-        </Reveal>
+        </div>
       </div>
     </section>
   );

@@ -31,7 +31,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
               Account access
             </p>
             <p className="mt-5 max-w-md text-balance font-serif text-[52px] font-normal leading-[1.02] tracking-[-0.03em]">
-              A clear path into <em className="italic">your Ateva workspace.</em>
+              A clear path into your Ateva workspace.
             </p>
 
             <div className="auth-shell__aside-artifact mt-10 border-t pt-5">

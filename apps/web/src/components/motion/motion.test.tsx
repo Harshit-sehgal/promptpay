@@ -48,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  delete document.documentElement.dataset.revealReady;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -70,6 +71,17 @@ describe('Reveal', () => {
 
     report(false);
     expect(el.classList.contains('is-in')).toBe(true);
+  });
+
+  it('flags the document as reveal-ready once mounted, even under reduced motion', () => {
+    expect(document.documentElement.dataset.revealReady).toBeUndefined();
+    render(<Reveal>hello</Reveal>);
+    expect(document.documentElement.dataset.revealReady).toBe('true');
+
+    delete document.documentElement.dataset.revealReady;
+    stubMotion(true);
+    render(<Reveal>again</Reveal>);
+    expect(document.documentElement.dataset.revealReady).toBe('true');
   });
 
   it('renders the requested tag, class and stagger index', () => {

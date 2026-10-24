@@ -2689,6 +2689,12 @@ body:has(.site-header):not(:has(.home-page)) main .public-advertiser-form__surfa
     width: auto;
     transform-origin: top center;
   }
+
+  /* The auth toolbar sits 16px (shell) + 1px (frame border) + 16px (toolbar
+     inset) down, so its trigger ends at 71px: the menu follows 10px below. */
+  .auth-shell .palette-picker__menu {
+    top: 81px;
+  }
 }
 
 /* Public header: an inset sticky bar, transparent at the top of the page and a
@@ -2828,8 +2834,9 @@ body:has(.site-header):not(:has(.home-page)) main .public-advertiser-form__surfa
 }
 
 /* Scroll reveal. The hidden state needs html[data-motion='enabled'] (set by the
-   pre-paint bootstrap when reduced motion is not preferred), so without JS or
-   under reduced motion the content stays visible. */
+   pre-paint bootstrap when reduced motion is not preferred) and
+   html[data-reveal-ready] (set by Reveal once React is running), so without JS,
+   before hydration or under reduced motion the content stays visible. */
 html[data-motion='enabled'] .reveal {
   transition:
     opacity 0.6s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -2837,7 +2844,7 @@ html[data-motion='enabled'] .reveal {
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 
-html[data-motion='enabled'] .reveal:not(.is-in) {
+html[data-motion='enabled'][data-reveal-ready] .reveal:not(.is-in) {
   opacity: 0;
   transform: translateY(28px);
 }
@@ -3078,7 +3085,8 @@ html[data-motion='enabled'] .home-page .hero-word {
 }
 
 html[data-motion='enabled'] .home-page .hero-lede,
-html[data-motion='enabled'] .home-page .hero-actions {
+html[data-motion='enabled'] .home-page .hero-actions,
+html[data-motion='enabled'] .home-page .hero-stage {
   opacity: 0;
   transform: translateY(16px);
   animation: home-rise 0.6s var(--home-ease) forwards;
@@ -3090,6 +3098,10 @@ html[data-motion='enabled'] .home-page .hero-lede {
 
 html[data-motion='enabled'] .home-page .hero-actions {
   animation-delay: 0.5s;
+}
+
+html[data-motion='enabled'] .home-page .hero-stage {
+  animation-delay: 0.3s;
 }
 
 .home-page .hero-sub {
@@ -3708,7 +3720,10 @@ body:has(.site-header):not(:has(.home-page)) main .font-serif,
 }
 
 /* Auth: the frame is one glass panel over the backdrop; the brand aside is a
-   solid surface in the palette ink. */
+   solid surface in the palette ink. The glass is the frame's ::before layer,
+   never a filter on the frame itself: the palette picker lives inside it, and
+   a backdrop-filter ancestor would become the containing block for its fixed
+   phone menu. isolation keeps the layer behind the frame's content. */
 .auth-shell {
   background: transparent;
   color: var(--ink);
@@ -3716,10 +3731,19 @@ body:has(.site-header):not(:has(.home-page)) main .font-serif,
 
 .auth-shell__frame {
   position: relative;
+  isolation: isolate;
   border: 1px solid var(--glass-edge);
   border-radius: 22px !important;
-  background: var(--glass);
   box-shadow: var(--glass-shadow);
+}
+
+.auth-shell__frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass);
   backdrop-filter: blur(22px) saturate(1.4);
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
 }

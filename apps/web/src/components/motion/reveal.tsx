@@ -11,8 +11,10 @@ type RevealProps = {
 };
 
 /* Fades and lifts its children in once, the first time they scroll into view.
-   The hidden state lives in CSS behind html[data-motion='enabled'], so without
-   JS or under reduced motion the content is simply visible. */
+   The hidden state lives in CSS behind html[data-motion='enabled'] and
+   html[data-reveal-ready], the flag set below once React is running, so
+   without JS, before hydration or under reduced motion the content is simply
+   visible. */
 export function Reveal({ as: Tag = 'div', delayIndex = 0, className, children }: RevealProps) {
   const ref = useRef<HTMLElement | null>(null);
   const setRef = (node: HTMLElement | null) => {
@@ -21,6 +23,7 @@ export function Reveal({ as: Tag = 'div', delayIndex = 0, className, children }:
   const [isIn, setIsIn] = useState(false);
 
   useEffect(() => {
+    document.documentElement.dataset.revealReady = 'true';
     if (
       typeof IntersectionObserver === 'undefined' ||
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
