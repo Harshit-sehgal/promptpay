@@ -130,7 +130,7 @@ describe('AdminPeoplePage', () => {
     expect(screen.getByText('50')).toBeTruthy();
     expect(screen.getByText(/8 registrations and 2 waitlist signups/)).toBeTruthy();
     expect(adminApi.getPeopleUsers).toHaveBeenCalledWith({ page: 1, limit: 25 });
-    expect(screen.getByText('Email, GitHub')).toBeTruthy();
+    expect(screen.getByText('Email · GitHub')).toBeTruthy();
   });
 
   it('passes filters to the API and returns to page one', async () => {
@@ -169,7 +169,7 @@ describe('AdminPeoplePage', () => {
     }
     expect(within(dialog).getByText('Acme Ads')).toBeTruthy();
     expect(within(dialog).getByText('bill@acme.test')).toBeTruthy();
-    expect(within(dialog).getByText('analytics')).toBeTruthy();
+    expect(within(dialog).getByText('Analytics')).toBeTruthy();
     expect(within(dialog).getByText('vscode')).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'friend@example.com' })).toBeTruthy();
     expect(within(dialog).getByText('4')).toBeTruthy();

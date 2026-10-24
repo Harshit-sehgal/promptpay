@@ -43,7 +43,7 @@ export function verifiedLabel(row: PersonRow): string {
     row.googleVerified && 'Google',
     row.githubVerified && 'GitHub',
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : 'None';
+  return parts.length > 0 ? parts.join(' · ') : 'None';
 }
 
 const EXPORT_COLUMNS: CsvColumn<PersonRow>[] = [
@@ -200,7 +200,7 @@ export function RegisteredTab({
                   <th>Status</th>
                   <th>Country</th>
                   <th>Verified</th>
-                  <th>Two-factor</th>
+                  <th>2FA</th>
                   <th>Devices</th>
                   <th>Last seen</th>
                   <th>Joined</th>
@@ -209,7 +209,7 @@ export function RegisteredTab({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td>
+                    <td className="max-w-[280px] break-words">
                       <button type="button" className="people-link" onClick={() => onOpen(row.id)}>
                         {row.name || row.email}
                       </button>
@@ -219,15 +219,15 @@ export function RegisteredTab({
                         {row.companyName}
                       </p>
                     </td>
-                    <td>{row.role}</td>
+                    <td className="capitalize">{row.role.replace(/_/g, ' ')}</td>
                     <td>
-                      <Pill tone={userStatusTone(row.status)}>{row.status}</Pill>
+                      <Pill tone={userStatusTone(row.status)}>{row.status.replace(/_/g, ' ')}</Pill>
                     </td>
                     <td>{row.country || '-'}</td>
-                    <td>{verifiedLabel(row)}</td>
+                    <td className="whitespace-nowrap">{verifiedLabel(row)}</td>
                     <td>{row.twoFactorEnabled ? 'On' : 'Off'}</td>
-                    <td className="dash-mono">{row.deviceCount}</td>
-                    <td className="text-xs">
+                    <td className="tabular-nums">{row.deviceCount}</td>
+                    <td className="text-xs whitespace-nowrap">
                       {row.lastSeenAt ? (
                         <time
                           dateTime={row.lastSeenAt}
@@ -239,7 +239,7 @@ export function RegisteredTab({
                         '-'
                       )}
                     </td>
-                    <td className="text-xs">
+                    <td className="text-xs whitespace-nowrap">
                       <time dateTime={row.createdAt}>{formatDay(row.createdAt)}</time>
                     </td>
                   </tr>

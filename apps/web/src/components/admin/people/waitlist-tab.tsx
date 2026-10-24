@@ -214,7 +214,7 @@ export function WaitlistTab({
             aria-label="Waitlist table, scrolls horizontally"
             style={{ opacity: loading ? 0.6 : 1 }}
           >
-            <table className="min-w-[900px]">
+            <table className="min-w-[820px]">
               <thead>
                 <tr>
                   <th>Email</th>
@@ -222,7 +222,6 @@ export function WaitlistTab({
                   <th>Country</th>
                   <th>Status</th>
                   <th>Account</th>
-                  <th>Consent</th>
                   <th>Source</th>
                   <th>Joined</th>
                 </tr>
@@ -261,12 +260,15 @@ export function WaitlistTab({
                           Registered
                         </button>
                       ) : (
-                        <span className="text-[var(--muted)]">Not registered</span>
+                        <span className="whitespace-nowrap text-[var(--muted)]">
+                          Not registered
+                        </span>
                       )}
                     </td>
-                    <td>{row.consent ? 'Granted' : 'No'}</td>
-                    <td className="text-xs">{row.source}</td>
-                    <td className="text-xs">
+                    <td className="text-xs whitespace-nowrap">
+                      {label(row.source.replace(/_/g, ' '))}
+                    </td>
+                    <td className="text-xs whitespace-nowrap">
                       <time
                         dateTime={row.createdAt}
                         title={new Date(row.createdAt).toLocaleString()}

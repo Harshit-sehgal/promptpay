@@ -2973,6 +2973,14 @@ html[data-palette='midnight'] {
   border-radius: 0;
 }
 
+/* On phones a strip of plain figures sits two by two instead of one tall
+   column; strips with a headline chip keep the full width for it. */
+@media (max-width: 767px) {
+  .dash-grid--4:has(> .dash-panel > .dash-stat):not(:has(.dash-stat__value--chip)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Divided rows inside a flush panel */
 .dash-rows > * {
   padding: 16px 22px;

@@ -46,7 +46,7 @@ function DetailBody({
           <Field label="User ID">
             <span className="dash-mono">{person.id}</span>
           </Field>
-          <Field label="Role">{person.role}</Field>
+          <Field label="Role">{humanize(person.role)}</Field>
           <Field label="Country">{orDash(person.country)}</Field>
           <Field label="Referral code">
             <span className="dash-mono">{orDash(person.referralCode)}</span>
@@ -70,7 +70,7 @@ function DetailBody({
           <Field label="Status">
             <Pill tone={userStatusTone(person.status)}>{person.status}</Pill>
           </Field>
-          <Field label="Trust level">{person.trustLevel}</Field>
+          <Field label="Trust level">{humanize(person.trustLevel)}</Field>
           <Field label="Open fraud flags">{person.openFlags.toLocaleString()}</Field>
           <Field label="Last seen">{formatDateTime(person.lastSeenAt)}</Field>
         </dl>
@@ -82,7 +82,11 @@ function DetailBody({
             <Field label="Company">{orDash(person.advertiser.companyName)}</Field>
             <Field label="Billing email">{orDash(person.advertiser.billingEmail)}</Field>
             <Field label="Website">{orDash(person.advertiser.websiteUrl)}</Field>
-            <Field label="Trust status">{orDash(person.advertiser.trustStatus)}</Field>
+            <Field label="Trust status">
+              {person.advertiser.trustStatus
+                ? humanize(person.advertiser.trustStatus)
+                : orDash(null)}
+            </Field>
           </dl>
         ) : (
           <p className="people-empty">No advertiser profile.</p>
@@ -97,7 +101,7 @@ function DetailBody({
             {person.consents.map((consent, index) => (
               <li key={`${consent.purpose}-${consent.createdAt}-${index}`}>
                 <span className="people-list__main">
-                  {consent.purpose}
+                  {humanize(consent.purpose)}
                   <span className="people-list__sub"> v{consent.version}</span>
                 </span>
                 <span>{consent.granted ? 'Granted' : 'Not granted'}</span>
@@ -241,4 +245,9 @@ export function PersonDetailDialog({
       )}
     </ModalDialog>
   );
+}
+
+function humanize(value: string): string {
+  const text = value.replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
