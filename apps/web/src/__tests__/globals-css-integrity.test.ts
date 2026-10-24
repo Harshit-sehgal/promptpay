@@ -100,8 +100,9 @@ describe('globals.css integrity', () => {
   });
 
   it('keeps the final component language quiet and two-tone', () => {
-    expect(css).toMatch(/--ateva-canvas-final:\s*#ffffff/);
-    expect(css).toMatch(/--ateva-action-final:\s*#17191c/);
+    // The final layer reads the plain dashboard tokens (dashboard-tokens.test.ts).
+    expect(css).toMatch(/--ateva-canvas-final:\s*var\(--app-canvas\)/);
+    expect(css).toMatch(/--ateva-action-final:\s*var\(--app-ink\)/);
     expect(css).toMatch(/\.status-badge\s*\{/);
     expect(css).toMatch(/\.status-badge__dot\s*\{/);
     expect(css).toMatch(/\.app-stat-card__value\s*\{/);
