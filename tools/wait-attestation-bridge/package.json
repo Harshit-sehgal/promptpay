@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "dotenv": "^17.4.2",
-    "jose": "^6.2.12"
+    "jose": "^6.2.13"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
