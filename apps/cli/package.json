@@ -33,7 +33,7 @@
     "@ateva/agent-protocol": "workspace:*",
     "@ateva/eslint-config": "workspace:*",
     "@ateva/shared": "workspace:*",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.2",
     "vitest": "^4.1.12"
