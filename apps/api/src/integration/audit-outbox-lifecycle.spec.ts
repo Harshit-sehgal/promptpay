@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { noDatabase } from '../test-support/database';
 
 /**
  * DB-backed lifecycle test for the durable audit outbox.
@@ -16,7 +17,7 @@ import { PrismaService } from '../config/prisma.service';
  *      durably published AFTER the transaction commits, so a downstream
  *      publisher failure cannot lose a committed audit record.
  */
-describe('Audit outbox lifecycle (durable post-commit publishing)', () => {
+describe.skipIf(noDatabase)('Audit outbox lifecycle (durable post-commit publishing)', () => {
   let prisma: PrismaService;
   let audit: AuditService;
 

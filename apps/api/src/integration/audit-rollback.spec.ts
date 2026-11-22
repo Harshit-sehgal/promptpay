@@ -2,8 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { noDatabase } from '../test-support/database';
 
-describe('Audit rollback (mandatory financial events)', () => {
+describe.skipIf(noDatabase)('Audit rollback (mandatory financial events)', () => {
   let prisma: PrismaService;
   let audit: AuditService;
 
