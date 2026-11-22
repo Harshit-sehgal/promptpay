@@ -13,8 +13,8 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:unit && pnpm run test:integration",
-    "test:unit": "vitest run --pool=forks --no-file-parallelism --maxWorkers=1 --maxConcurrency=1 --exclude 'src/integration/**/*.spec.ts'",
-    "test:integration": "node ../../scripts/check-integration-consent.mjs && for spec in src/integration/*.spec.ts; do DATABASE_URL=\"${TEST_DATABASE_URL:-postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public}\" pnpm --filter @ateva/db exec prisma migrate reset --force && pnpm exec vitest run \"$spec\" --pool=forks --no-file-parallelism --maxWorkers=1 --maxConcurrency=1 || exit $?; done",
+    "test:unit": "vitest run --pool=forks --no-file-parallelism --maxWorkers=1 --maxConcurrency=1 --exclude 'src/integration/**/*.spec.ts' --exclude 'src/auth/auth-logout.spec.ts' --exclude 'src/auth/auth-refresh.spec.ts'",
+    "test:integration": "node ../../scripts/check-integration-consent.mjs && for spec in src/integration/*.spec.ts src/auth/auth-logout.spec.ts src/auth/auth-refresh.spec.ts; do ATEVA_INTEGRATION=1 DATABASE_URL=\"${TEST_DATABASE_URL:-postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public}\" pnpm --filter @ateva/db exec prisma migrate reset --force && pnpm exec vitest run \"$spec\" --pool=forks --no-file-parallelism --maxWorkers=1 --maxConcurrency=1 || exit $?; done",
     "test:watch": "vitest",
     "test:cov": "vitest run --pool=forks --no-file-parallelism --maxWorkers=1 --maxConcurrency=1 --coverage"
   },

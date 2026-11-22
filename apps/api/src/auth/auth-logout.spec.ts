@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
 import { FraudService } from '../fraud/fraud.service';
+import { noDatabase } from '../test-support/database';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './__fixtures__/test-keys';
 import { TEST_JWT_PRIVATE_KEY_2, TEST_JWT_PUBLIC_KEY_2 } from './__fixtures__/test-keys-2';
 import { AuthService } from './auth.service';
@@ -19,7 +20,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 const EMAIL = 'logout-test@ateva.com';
 const PASSWORD = 'Password123!';
 
-describe('Auth logout contracts (P0.3)', () => {
+describe.skipIf(noDatabase)('Auth logout contracts (P0.3)', () => {
   let prisma: PrismaService;
   let auth: AuthService;
   let jwt: JwtService;
